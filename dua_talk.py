@@ -120,8 +120,7 @@ class DuaTalkApp(rumps.App):
         if shift_pressed and ctrl_pressed:
             # Clear the keys to prevent repeat triggers
             self.pressed_keys.clear()
-            # Schedule toggle on main thread to avoid threading issues with rumps
-            rumps.Timer(0.01, lambda _: self.toggle_recording()).start()
+            self.toggle_recording()
 
     def on_release(self, key):
         """Handle key release events."""
@@ -161,18 +160,15 @@ class DuaTalkApp(rumps.App):
     def stop_recording(self):
         """Stop recording and process audio."""
         self.stop_event.set()
+        self.recording_thread.join()
         self.recording = False
 
         # Update UI
         self.title = self.ICON_PROCESSING
         self.record_menu_item.title = "Start Recording"
 
-        # Process in background thread (includes waiting for recording to finish)
-        def process_in_background():
-            self.recording_thread.join()  # Wait for recording to finish
-            self.process_audio()
-
-        threading.Thread(target=process_in_background, daemon=True).start()
+        # Process in background thread
+        threading.Thread(target=self.process_audio, daemon=True).start()
 
     def record_audio(self, stop_event, data_queue):
         """Captures audio data from the user's microphone."""
