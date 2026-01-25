@@ -1,288 +1,156 @@
-## Build your own voice assistant and run it locally: Whisper + Ollama + ChatterBox
+# Local Dictation Tool
 
-> Original article: https://blog.duy-huynh.com/build-your-own-voice-assistant-and-run-it-locally/
->
-> **Updated May 2025**: Now using [Chatterbox TTS](https://github.com/resemble-ai/chatterbox), a state-of-the-art open-source TTS model from Resemble AI!
->
-> The original implementation using Bark has been preserved in the `archive-2025-05-29` branch for reference.
+A minimal, fully offline dictation tool that transcribes speech to clipboard using a global hotkey. A local alternative to Wispr Flow.
 
-[![BuyMeACoffee](https://raw.githubusercontent.com/pachadotdev/buymeacoffee-badges/main/bmc-yellow.svg)](https://www.buymeacoffee.com/vndee)
+## Features
 
+- **Fully Offline**: Uses Whisper for speech-to-text, no cloud services required
+- **Global Hotkey**: Toggle recording with Left Shift + Left Control from anywhere
+- **Audio Feedback**: Distinct beeps for start, stop, and ready states
+- **Clipboard Integration**: Transcription automatically copied to clipboard
+- **Optional LLM Cleanup**: Clean up transcription using Ollama (remove fillers, fix punctuation)
 
-After my latest post about how to build your own RAG and run it locally. Today, we're taking it a step further by not only implementing the conversational abilities of large language models but also adding listening and speaking capabilities. The idea is straightforward: we are going to create a voice assistant reminiscent of Jarvis or Friday from the iconic Iron Man movies, which can operate offline on your computer.
+## Architecture
 
-**New Features with ChatterBox:**
-- 🎯 **Voice Cloning**: Clone any voice with just a short audio sample
-- 🎭 **Emotion Control**: Adjust emotional expressiveness of responses
-- 🚀 **Better Performance**: 0.5B parameter model with faster inference
-- 💧 **Watermarked Audio**: Built-in neural watermarking for authenticity
-
-### Techstack
-First, you should set up a virtual Python environment. You have several options for this, including pyenv, virtualenv, poetry, and others that serve a similar purpose. Personally, I'll use Poetry for this tutorial due to my personal preferences. Here are several crucial libraries you'll need to install:
-
-- **rich**: For a visually appealing console output.
-- **openai-whisper**: A robust tool for speech-to-text conversion.
-- **chatterbox-tts**: State-of-the-art text-to-speech synthesis with voice cloning and emotion control.
-- **langchain**: A straightforward library for interfacing with Large Language Models (LLMs).
-- **sounddevice**, **pyaudio**, and **speechrecognition**: Essential for audio recording and playback.
-
-For a detailed list of dependencies, refer to the link here.
-
-The most critical component here is the Large Language Model (LLM) backend, for which we will use Ollama. Ollama is widely recognized as a popular tool for running and serving LLMs offline. If Ollama is new to you, I recommend checking out my previous article on offline RAG: "Build Your Own RAG and Run It Locally: Langchain + Ollama + Streamlit". Basically, you just need to download the Ollama application, pull your preferred model, and run it.
-
-### Architecture
-Okay, if everything has been set up, let's proceed to the next step. Below is the overall architecture of our application, which fundamentally comprises 3 main components:
-
-- **Speech Recognition**: Utilizing OpenAI's Whisper, we convert spoken language into text. Whisper's training on diverse datasets ensures its proficiency across various languages and dialects.
-- **Conversational Chain**: For the conversational capabilities, we'll employ the Langchain interface for the Llama-2 model (or any other model), which is served using Ollama. This setup promises a seamless and engaging conversational flow.
-- **Speech Synthesizer**: The transformation of text to speech is achieved through Chatterbox TTS, a state-of-the-art model from Resemble AI, renowned for its lifelike speech production and voice cloning capabilities.
-
-The workflow is straightforward: record speech, transcribe to text, generate a response using an LLM, and vocalize the response using ChatterBox.
-
-```mermaid
-flowchart TD
-    A[🎤 User Speech Input] --> B[Speech Recognition<br/>OpenAI Whisper]
-    B --> C[📝 Text Transcription]
-    C --> D[Conversational Chain<br/>Langchain + Ollama<br/>Gemma3 / Llama-4 / Other LLMs]
-    D --> E[🤖 Generated Response]
-    E --> F[Speech Synthesizer<br/>Chatterbox TTS]
-    F --> G[🔊 Audio Output]
-    G --> H[👤 User Hears Response]
-
-    style A fill:#e1f5fe
-    style B fill:#f3e5f5
-    style C fill:#e8f5e8
-    style D fill:#fff3e0
-    style E fill:#e8f5e8
-    style F fill:#f3e5f5
-    style G fill:#e1f5fe
-    style H fill:#fce4ec
+```
+Left Shift + Left Control (start) → [beep] → Recording...
+Left Shift + Left Control (stop)  → [beep] → Whisper STT → (optional LLM cleanup) → Clipboard → [double beep]
 ```
 
-### Installation
+## Installation
 
-**⚠️ Important**: We strongly recommend using [uv](https://docs.astral.sh/uv/) for dependency management instead of pip with `requirements.txt`. The `requirements.txt` file was generated by `uv pip freeze` and contains pinned versions that may not install correctly across different systems.
-
-#### Option 1: Using uv (Recommended)
+### Using uv (Recommended)
 
 ```bash
 # Install uv if you haven't already
 curl -LsSf https://astral.sh/uv/install.sh | sh
 # or on macOS: brew install uv
-# or on Windows: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 
 # Clone the repository
 git clone https://github.com/vndee/local-talking-llm.git
 cd local-talking-llm
+git checkout feature/dictation-tool
 
-# Install dependencies using uv (recommended)
+# Install dependencies
 uv sync
 
 # Activate the virtual environment
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Download NLTK data (for sentence tokenization)
-python -c "import nltk; nltk.download('punkt_tab')"
 ```
 
-#### Option 2: Using pip (Alternative)
-
-If you prefer to use pip, install directly from pyproject.toml:
+### Using pip
 
 ```bash
-# Clone the repository
 git clone https://github.com/vndee/local-talking-llm.git
 cd local-talking-llm
+git checkout feature/dictation-tool
 
-# Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install from pyproject.toml (NOT requirements.txt)
+source venv/bin/activate
 pip install -e .
-
-# Download NLTK data
-python -c "import nltk; nltk.download('punkt')"
 ```
 
-#### Install and Setup Ollama
+## macOS Permissions
+
+On macOS, you need to grant Accessibility permissions for the global hotkey to work:
+
+1. Go to **System Preferences → Privacy & Security → Accessibility**
+2. Add your terminal application (Terminal.app, iTerm, or your IDE)
+3. Restart the dictation tool
+
+## Usage
+
+### Basic Usage
 
 ```bash
-# Install and start Ollama
-# Follow instructions at https://ollama.ai
-ollama pull gemma3  # or any other model you prefer
+python dictation.py
 ```
 
-### Usage
+Press **Left Shift + Left Control** to start recording, speak, then press the same hotkey again to stop. Your transcription will be copied to the clipboard.
 
-#### Basic Usage
+### Audio Feedback
+
+- **Start recording**: High-pitched beep (600 Hz)
+- **Stop recording**: Lower beep (400 Hz) - processing
+- **Clipboard ready**: Double beep (800 Hz) - ready to paste
+
+### With LLM Cleanup
+
+Enable LLM cleanup to remove filler words and fix punctuation (requires [Ollama](https://ollama.ai)):
+
 ```bash
-python app.py
-```
+# Install Ollama and pull a model
+ollama pull gemma3
 
-#### With Voice Cloning
-Record a 10-30 second audio sample of the voice you want to clone, then:
-```bash
-python app.py --voice path/to/voice_sample.wav
-```
-
-#### With Custom Settings
-```bash
-# Adjust emotion and pacing
-python app.py --exaggeration 0.7 --cfg-weight 0.3
-
-# Use a different LLM model
-python app.py --model codellama
-
-# Save generated voice samples
-python app.py --save-voice
+# Run with cleanup enabled
+python dictation.py --cleanup
 ```
 
 ### Configuration Options
 
-- `--voice`: Path to audio file for voice cloning
-- `--exaggeration`: Emotion intensity (0.0-1.0, default: 0.5)
-  - Lower values (0.3-0.4): Calmer, more neutral delivery
-  - Higher values (0.7-0.9): More expressive and emotional
-- `--cfg-weight`: Controls pacing and delivery style (0.0-1.0, default: 0.5)
-  - Lower values: Faster, more dynamic speech
-  - Higher values: Slower, more deliberate speech
-- `--model`: Ollama model to use (default: llama2)
-- `--save-voice`: Save generated audio responses to `voices/` directory
-
-### Implementation Details
-
-#### TextToSpeechService with ChatterBox
-The new TextToSpeechService leverages ChatterBox's advanced features:
-
-```python
-from chatterbox.tts import ChatterboxTTS
-
-class TextToSpeechService:
-    def __init__(self, device: str = "cuda" if torch.cuda.is_available() else "cpu"):
-        self.device = device
-        self.model = ChatterboxTTS.from_pretrained(device=device)
-        self.sample_rate = self.model.sr
-
-    def synthesize(self, text: str, audio_prompt_path: str = None,
-                  exaggeration: float = 0.5, cfg_weight: float = 0.5):
-        wav = self.model.generate(
-            text,
-            audio_prompt_path=audio_prompt_path,
-            exaggeration=exaggeration,
-            cfg_weight=cfg_weight
-        )
-        return self.sample_rate, wav.squeeze().cpu().numpy()
+```bash
+python dictation.py --help
 ```
 
-Key improvements over the previous Bark implementation:
-- **Voice Cloning**: Pass an audio file to clone any voice
-- **Emotion Control**: Adjust expressiveness with the `exaggeration` parameter
-- **Better Quality**: ChatterBox produces more natural-sounding speech
-- **Faster Inference**: Smaller model size (0.5B vs Bark's larger models)
+- `--cleanup`: Use LLM to clean transcription (remove fillers, fix punctuation)
+- `--model`: Ollama model for cleanup (default: gemma3)
+- `--whisper-model`: Whisper model size (default: base.en)
 
-#### Dynamic Emotion Analysis
-The app now includes automatic emotion detection to make responses more expressive:
+### Whisper Model Options
 
-```python
-def analyze_emotion(text: str) -> float:
-    emotional_keywords = ['amazing', 'terrible', 'love', 'hate', 'excited',
-                         'sad', 'happy', 'angry', '!', '?!']
-    emotion_score = 0.5
-    for keyword in emotional_keywords:
-        if keyword in text.lower():
-            emotion_score += 0.1
-    return min(0.9, max(0.3, emotion_score))
+| Model | Size | Speed | Accuracy |
+|-------|------|-------|----------|
+| `tiny.en` | 39M | Fastest | Good |
+| `base.en` | 74M | Fast | Better (default) |
+| `small.en` | 244M | Medium | Great |
+| `medium.en` | 769M | Slow | Excellent |
+
+```bash
+# Use a smaller model for faster transcription
+python dictation.py --whisper-model tiny.en
+
+# Use a larger model for better accuracy
+python dictation.py --whisper-model small.en
 ```
 
-### Tips for Best Results
+## Workflow Example
 
-1. **Voice Cloning**:
-   - Use a clear 10-30 second audio sample
-   - Ensure the sample has minimal background noise
-   - The voice should speak naturally in the sample
+1. Start the dictation tool: `python dictation.py`
+2. Open any text field (email, document, chat)
+3. Press **Left Shift + Left Control** → hear start beep
+4. Speak your text
+5. Press **Left Shift + Left Control** → hear stop beep
+6. Wait for double beep (transcription ready)
+7. Press **Cmd+V** (Mac) or **Ctrl+V** (Windows/Linux) to paste
 
-2. **Emotion Control**:
-   - For general conversation: `exaggeration=0.5, cfg_weight=0.5`
-   - For dramatic/expressive speech: `exaggeration=0.7+, cfg_weight=0.3`
-   - For calm/professional tone: `exaggeration=0.3, cfg_weight=0.7`
+## Troubleshooting
 
-3. **Performance**:
-   - Use CUDA if available for faster inference
-   - The first generation might be slower due to model loading
-   - Consider using smaller Whisper models ("tiny.en" or "base.en") for faster transcription
+### Hotkey not working on macOS
 
-### Scaling to Production
+Make sure you've granted Accessibility permissions to your terminal. The app needs to listen for global keyboard events.
 
-For those aiming to elevate this application to a production-ready status, consider:
+### Microphone not detected
 
-- **Performance Optimization**:
-  - Use optimized inference engines (ONNX, TensorRT)
-  - Implement model quantization for faster inference
-  - Add caching for frequently used phrases
+Check that your microphone is:
+- Connected and powered on
+- Selected as the default input device in system settings
+- Not being used exclusively by another application
 
-- **Enhanced Features**:
-  - Multi-speaker support with voice profiles
-  - Real-time voice conversion
-  - Integration with more LLM providers
-  - Web interface with real-time streaming
+### LLM cleanup not working
 
-- **Voice Database**:
-  - Create a library of voice samples
-  - Implement voice selection UI
-  - Add voice mixing capabilities
+Ensure Ollama is running and the model is available:
 
-- **API Service**:
-  - RESTful API for TTS requests
-  - WebSocket support for real-time communication
-  - Rate limiting and authentication
+```bash
+ollama list  # Check available models
+ollama pull gemma3  # Pull the model if missing
+```
 
-### Troubleshooting
+## Original Voice Assistant
 
-#### Dependency Installation Issues
+This tool is a fork of the full voice assistant. The original implementation with LLM conversation and ChatterBox TTS is preserved in the `main` branch.
 
-**Problem**: `requirements.txt` installation fails with errors like:
-- `ERROR: Could not find a version that satisfies the requirement cPython==0.0.6`
-- `ModuleNotFoundError: No module named 'distutils'`
-- Various version conflicts
+## Resources
 
-**Solution**: The `requirements.txt` file was generated by `uv pip freeze` and contains exact versions that may not work across different systems. Use one of these alternatives:
-
-1. **Use uv (Recommended)**:
-   ```bash
-   uv sync
-   ```
-
-2. **Use pip with pyproject.toml**:
-   ```bash
-   pip install -e .
-   ```
-
-3. **Manual installation of core packages**:
-   ```bash
-   pip install chatterbox-tts langchain-ollama openai-whisper sounddevice rich nltk
-   ```
-
-#### Runtime Issues
-
-- **CUDA out of memory**: Use CPU mode or reduce model precision
-- **Microphone not working**: Check system permissions and device settings
-- **Slow inference**: Ensure you're using GPU if available, consider using smaller models
-- **Voice cloning quality**: Use higher quality audio samples with clear speech
-- **Import errors**: Make sure you activated the virtual environment before running the app
-
-### Conclusion
-
-With the integration of ChatterBox, we've significantly enhanced our local voice assistant. The addition of voice cloning and emotion control opens up new possibilities for creating personalized and expressive AI assistants. Whether you're building a personal Jarvis, creating content, or developing voice-enabled applications, this updated stack provides a powerful foundation.
-
-The combination of Whisper's robust speech recognition, Ollama's flexible LLM serving, and ChatterBox's advanced TTS capabilities creates a fully-featured voice assistant that runs entirely offline. No cloud services, no API keys, just pure local AI power!
-
-### Resources
-
-- [ChatterBox GitHub](https://github.com/resemble-ai/chatterbox)
-- [Ollama](https://ollama.ai)
-- [Whisper](https://github.com/openai/whisper)
-- [Original Blog Post](https://blog.duy-huynh.com/build-your-own-voice-assistant-and-run-it-locally/)
-
----
-
+- [Whisper](https://github.com/openai/whisper) - OpenAI's speech recognition model
+- [Ollama](https://ollama.ai) - Run LLMs locally
+- [pynput](https://pynput.readthedocs.io/) - Global hotkey detection
