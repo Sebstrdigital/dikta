@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Local Dictation Tool is a minimal, fully offline dictation application that transcribes speech to clipboard using a global hotkey. It's a local alternative to Wispr Flow, using Whisper for speech-to-text.
+Dua Talk is a minimal, fully offline dictation application that transcribes speech to clipboard using a global hotkey. It uses Whisper for speech-to-text and runs as a macOS menu bar app.
 
 ## Development Commands
 
@@ -16,14 +16,14 @@ source .venv/bin/activate
 # Alternative: pip install
 pip install -e .
 
-# Run the dictation tool
-python dictation.py
+# Run the app
+python dua_talk.py
 
 # Run with LLM cleanup (requires Ollama)
-python dictation.py --cleanup
+python dua_talk.py --cleanup
 
 # Run with different Whisper model
-python dictation.py --whisper-model small.en
+python dua_talk.py --whisper-model small.en
 ```
 
 ## Prerequisites
@@ -45,19 +45,19 @@ Hotkey (Shift+Ctrl) → Recording → Whisper STT → (optional LLM cleanup) →
 
 ### Key Components
 
-- **dictation.py**: Main application with global hotkey listener
+- **dua_talk.py**: Main application with menu bar and global hotkey
+  - Menu bar integration via `rumps`
   - Global hotkey detection via `pynput`
   - Audio recording via `sounddevice`
   - Speech-to-text via Whisper
   - Optional text cleanup via Ollama
-  - Clipboard integration via `pyperclip`
+  - Clipboard integration via `pbcopy`
   - Audio feedback (beeps) for user feedback
 
 ### Audio Feedback
 
-- **600 Hz beep**: Recording started
-- **400 Hz beep**: Recording stopped (processing)
-- **800 Hz double beep**: Clipboard ready
+- **350 Hz beep**: Recording started
+- **280 Hz beep**: Recording stopped, clipboard ready
 
 ## CLI Arguments
 
@@ -88,16 +88,16 @@ python setup.py py2app -A
 python setup.py py2app
 ```
 
-The built app will be at `dist/Dictation.app`.
+The built app will be at `dist/Dua Talk.app`.
 
 ### Running the App
 
 ```bash
 # Open the built app
-open dist/Dictation.app
+open "dist/Dua Talk.app"
 
 # Or run directly for development
-python dictation.py
+python dua_talk.py
 ```
 
 ### Menu Bar Features
@@ -113,4 +113,4 @@ The app requires these permissions:
 - **Microphone**: For recording audio (System Preferences → Privacy & Security → Microphone)
 - **Accessibility**: For global hotkey detection (System Preferences → Privacy & Security → Accessibility)
 
-Add Terminal/IDE during development, or Dictation.app after building.
+Add Terminal/IDE during development, or Dua Talk.app after building.

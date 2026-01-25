@@ -1,5 +1,5 @@
 """
-py2app build configuration for Dictation menu bar app.
+py2app build configuration for Dua Talk menu bar app.
 
 Prerequisites:
     pip install py2app
@@ -11,24 +11,24 @@ Build commands:
     Production (standalone):
         python setup.py py2app
 
-The built app will be in dist/Dictation.app
+The built app will be in dist/Dua Talk.app
 """
 
 from setuptools import setup
 
-APP = ['dictation.py']
+APP = ['dua_talk.py']
 
 OPTIONS = {
     'argv_emulation': False,
     'plist': {
-        'CFBundleName': 'Dictation',
-        'CFBundleDisplayName': 'Dictation',
-        'CFBundleIdentifier': 'com.local.dictation',
+        'CFBundleName': 'Dua Talk',
+        'CFBundleDisplayName': 'Dua Talk',
+        'CFBundleIdentifier': 'com.local.dua-talk',
         'CFBundleVersion': '0.2.0',
         'CFBundleShortVersionString': '0.2.0',
         'LSUIElement': True,  # Menu bar only, no Dock icon
-        'NSMicrophoneUsageDescription': 'Dictation needs microphone access for speech-to-text.',
-        'NSAppleEventsUsageDescription': 'Dictation needs accessibility access for global hotkeys.',
+        'NSMicrophoneUsageDescription': 'Dua Talk needs microphone access for speech-to-text.',
+        'NSAppleEventsUsageDescription': 'Dua Talk needs accessibility access for global hotkeys.',
     },
     'packages': [
         'whisper',
@@ -52,7 +52,7 @@ OPTIONS = {
 }
 
 setup(
-    name='Dictation',
+    name='Dua Talk',
     app=APP,
     options={'py2app': OPTIONS},
 )

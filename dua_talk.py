@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Local Dictation Tool - A Wispr Flow alternative that runs entirely offline.
+Dua Talk - Offline dictation tool.
 
 Uses Whisper for speech-to-text and copies transcription to clipboard.
 Toggle recording with Left Shift + Left Control or via menu bar.
@@ -21,8 +21,8 @@ from queue import Queue
 from pynput import keyboard
 
 
-class DictationApp(rumps.App):
-    """Menu bar dictation application."""
+class DuaTalkApp(rumps.App):
+    """Dua Talk menu bar application."""
 
     # State icons
     ICON_IDLE = "🎤"
@@ -30,7 +30,7 @@ class DictationApp(rumps.App):
     ICON_PROCESSING = "⏳"
 
     def __init__(self, whisper_model="base.en", cleanup=False, llm_model="gemma3"):
-        super().__init__("Dictation", icon=None, title=self.ICON_IDLE, quit_button=None)
+        super().__init__("Dua Talk", icon=None, title=self.ICON_IDLE, quit_button=None)
 
         # Configuration
         self.whisper_model_name = whisper_model
@@ -80,7 +80,7 @@ class DictationApp(rumps.App):
         self.stt_model = whisper.load_model(self.whisper_model_name)
         self.title = self.ICON_IDLE
         rumps.notification(
-            "Dictation",
+            "Dua Talk",
             "Ready",
             f"Whisper model ({self.whisper_model_name}) loaded. Use Shift+Ctrl to record."
         )
@@ -133,7 +133,7 @@ class DictationApp(rumps.App):
     def toggle_recording(self):
         """Toggle recording state."""
         if self.stt_model is None:
-            rumps.notification("Dictation", "Not Ready", "Whisper model still loading...")
+            rumps.notification("Dua Talk", "Not Ready", "Whisper model still loading...")
             return
 
         if not self.recording:
@@ -200,9 +200,9 @@ class DictationApp(rumps.App):
 
                 self.output_text(text)
             else:
-                rumps.notification("Dictation", "No Speech", "No speech detected in recording.")
+                rumps.notification("Dua Talk", "No Speech", "No speech detected in recording.")
         else:
-            rumps.notification("Dictation", "Error", "No audio recorded. Check microphone.")
+            rumps.notification("Dua Talk", "Error", "No audio recorded. Check microphone.")
 
         # Reset UI
         self.title = self.ICON_IDLE
@@ -244,7 +244,7 @@ class DictationApp(rumps.App):
         preview = text[:50] + "..." if len(text) > 50 else text
         self.copy_to_clipboard(text)
         self.beep_off()
-        rumps.notification("Dictation", "Ready", f"{preview} (Cmd+V)")
+        rumps.notification("Dua Talk", "Ready", f"{preview} (Cmd+V)")
 
     def toggle_cleanup(self, _):
         """Toggle LLM cleanup feature."""
@@ -259,13 +259,13 @@ class DictationApp(rumps.App):
 
 def main():
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description="Local Dictation Tool - Menu Bar App")
+    parser = argparse.ArgumentParser(description="Dua Talk - Offline Dictation")
     parser.add_argument("--cleanup", action="store_true", help="Enable LLM cleanup by default")
     parser.add_argument("--model", default="gemma3", help="Ollama model for cleanup (default: gemma3)")
     parser.add_argument("--whisper-model", default="base.en", help="Whisper model size (default: base.en)")
     args = parser.parse_args()
 
-    app = DictationApp(
+    app = DuaTalkApp(
         whisper_model=args.whisper_model,
         cleanup=args.cleanup,
         llm_model=args.model
