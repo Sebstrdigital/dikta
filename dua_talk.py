@@ -12,7 +12,6 @@ import time
 import threading
 import subprocess
 import sys
-import os
 import numpy as np
 import whisper
 import sounddevice as sd
@@ -22,29 +21,16 @@ from queue import Queue
 from pynput import keyboard
 
 
-def get_resource_path(filename):
-    """Get path to resource file, works both in dev and bundled app."""
-    # When running as bundled app
-    if getattr(sys, 'frozen', False):
-        return os.path.join(os.path.dirname(sys.executable), '..', 'Resources', filename)
-    # When running in development
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
-
-
 class DuaTalkApp(rumps.App):
     """Dua Talk menu bar application."""
 
-    # State indicators (used as title when recording/processing)
-    ICON_RECORDING = "REC"
-    ICON_PROCESSING = "..."
+    # State icons (emoji fallback)
+    ICON_IDLE = "🎤"
+    ICON_RECORDING = "🔴"
+    ICON_PROCESSING = "⏳"
 
     def __init__(self, whisper_model="base.en", cleanup=False, llm_model="gemma3"):
-        # Get icon path
-        icon_path = get_resource_path('menubar_icon.png')
-        if not os.path.exists(icon_path):
-            icon_path = None
-
-        super().__init__("Dua Talk", icon=icon_path, title=None, quit_button=None)
+        super().__init__("Dua Talk", icon=None, title=self.ICON_IDLE, quit_button=None)
 
         # Configuration
         self.whisper_model_name = whisper_model
@@ -92,7 +78,7 @@ class DuaTalkApp(rumps.App):
         """Load Whisper model in background."""
         self.title = self.ICON_PROCESSING
         self.stt_model = whisper.load_model(self.whisper_model_name)
-        self.title = None  # Show icon only
+        self.title = self.ICON_IDLE
         rumps.notification(
             "Dua Talk",
             "Ready",
@@ -134,7 +120,8 @@ class DuaTalkApp(rumps.App):
         if shift_pressed and ctrl_pressed:
             # Clear the keys to prevent repeat triggers
             self.pressed_keys.clear()
-            self.toggle_recording()
+            # Schedule toggle on main thread to avoid threading issues with rumps
+            rumps.Timer(0.01, lambda _: self.toggle_recording()).start()
 
     def on_release(self, key):
         """Handle key release events."""
@@ -174,15 +161,18 @@ class DuaTalkApp(rumps.App):
     def stop_recording(self):
         """Stop recording and process audio."""
         self.stop_event.set()
-        self.recording_thread.join()
         self.recording = False
 
         # Update UI
         self.title = self.ICON_PROCESSING
         self.record_menu_item.title = "Start Recording"
 
-        # Process in background thread
-        threading.Thread(target=self.process_audio, daemon=True).start()
+        # Process in background thread (includes waiting for recording to finish)
+        def process_in_background():
+            self.recording_thread.join()  # Wait for recording to finish
+            self.process_audio()
+
+        threading.Thread(target=process_in_background, daemon=True).start()
 
     def record_audio(self, stop_event, data_queue):
         """Captures audio data from the user's microphone."""
@@ -219,7 +209,7 @@ class DuaTalkApp(rumps.App):
             rumps.notification("Dua Talk", "Error", "No audio recorded. Check microphone.")
 
         # Reset UI
-        self.title = None  # Show icon only
+        self.title = self.ICON_IDLE
 
     def transcribe(self, audio_np):
         """Transcribe audio using Whisper."""
