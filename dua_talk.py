@@ -12,6 +12,7 @@ import time
 import threading
 import subprocess
 import sys
+import os
 import numpy as np
 import whisper
 import sounddevice as sd
@@ -21,16 +22,29 @@ from queue import Queue
 from pynput import keyboard
 
 
+def get_resource_path(filename):
+    """Get path to resource file, works both in dev and bundled app."""
+    # When running as bundled app
+    if getattr(sys, 'frozen', False):
+        return os.path.join(os.path.dirname(sys.executable), '..', 'Resources', filename)
+    # When running in development
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
+
+
 class DuaTalkApp(rumps.App):
     """Dua Talk menu bar application."""
 
-    # State icons
-    ICON_IDLE = "🎤"
-    ICON_RECORDING = "🔴"
-    ICON_PROCESSING = "⏳"
+    # State indicators (used as title when recording/processing)
+    ICON_RECORDING = "REC"
+    ICON_PROCESSING = "..."
 
     def __init__(self, whisper_model="base.en", cleanup=False, llm_model="gemma3"):
-        super().__init__("Dua Talk", icon=None, title=self.ICON_IDLE, quit_button=None)
+        # Get icon path
+        icon_path = get_resource_path('menubar_icon.png')
+        if not os.path.exists(icon_path):
+            icon_path = None
+
+        super().__init__("Dua Talk", icon=icon_path, title=None, quit_button=None)
 
         # Configuration
         self.whisper_model_name = whisper_model
@@ -78,7 +92,7 @@ class DuaTalkApp(rumps.App):
         """Load Whisper model in background."""
         self.title = self.ICON_PROCESSING
         self.stt_model = whisper.load_model(self.whisper_model_name)
-        self.title = self.ICON_IDLE
+        self.title = None  # Show icon only
         rumps.notification(
             "Dua Talk",
             "Ready",
@@ -205,7 +219,7 @@ class DuaTalkApp(rumps.App):
             rumps.notification("Dua Talk", "Error", "No audio recorded. Check microphone.")
 
         # Reset UI
-        self.title = self.ICON_IDLE
+        self.title = None  # Show icon only
 
     def transcribe(self, audio_np):
         """Transcribe audio using Whisper."""

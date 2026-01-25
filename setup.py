@@ -20,9 +20,11 @@ APP = ['dua_talk.py']
 
 OPTIONS = {
     'argv_emulation': False,
+    'iconfile': 'icon.icns',
     'plist': {
         'CFBundleName': 'Dua Talk',
         'CFBundleDisplayName': 'Dua Talk',
+        'CFBundleIconFile': 'icon',
         'CFBundleIdentifier': 'com.local.dua-talk',
         'CFBundleVersion': '0.2.0',
         'CFBundleShortVersionString': '0.2.0',
@@ -51,8 +53,13 @@ OPTIONS = {
     ],
 }
 
+DATA_FILES = [
+    ('', ['menubar_icon.png']),  # Menu bar icon
+]
+
 setup(
     name='Dua Talk',
     app=APP,
+    data_files=DATA_FILES,
     options={'py2app': OPTIONS},
 )
