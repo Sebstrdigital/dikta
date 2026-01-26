@@ -27,6 +27,38 @@ from pynput import keyboard
 from pynput.keyboard import Key, KeyCode, Controller
 
 
+class OutputMode:
+    """Available output modes for dictation formatting."""
+    RAW = "raw"
+    GENERAL = "general"
+    CODE_PROMPT = "code_prompt"
+
+
+MODE_PROMPTS = {
+    OutputMode.RAW: None,  # Skip LLM entirely
+
+    OutputMode.GENERAL: """Clean up this dictation for general use.
+- Remove filler words (um, uh, like, you know, so, basically)
+- Fix punctuation and capitalization
+- Keep the natural conversational flow
+- Output ONLY the cleaned text, nothing else.""",
+
+    OutputMode.CODE_PROMPT: """Format this as a clear prompt for an AI coding assistant.
+- Use imperative language ("Implement...", "Create...", "Fix...", "Add...")
+- Structure with numbered steps if multiple tasks mentioned
+- Wrap code references, file names, and technical terms in backticks
+- Be specific and unambiguous
+- Remove verbal fillers and hesitations
+- Output ONLY the formatted prompt, nothing else.""",
+}
+
+MODE_DISPLAY_NAMES = {
+    OutputMode.RAW: "Raw",
+    OutputMode.GENERAL: "General",
+    OutputMode.CODE_PROMPT: "Code Prompt",
+}
+
+
 class ConfigManager:
     """Manages persistent configuration for Dua Talk."""
 
@@ -34,14 +66,14 @@ class ConfigManager:
     CONFIG_FILE = CONFIG_DIR / "config.json"
 
     DEFAULT_CONFIG = {
-        "version": 1,
+        "version": 2,
         "hotkeys": {
             "toggle": {"modifiers": ["shift", "ctrl"], "key": None},
             "push_to_talk": {"modifiers": ["cmd", "shift"], "key": None}
         },
         "active_mode": "toggle",
         "history": [],
-        "cleanup_enabled": False,
+        "output_mode": "general",  # raw, general, or code_prompt
         "whisper_model": "base.en",
         "llm_model": "gemma3"
     }
@@ -57,6 +89,10 @@ class ConfigManager:
             if self.CONFIG_FILE.exists():
                 with open(self.CONFIG_FILE, "r") as f:
                     config = json.load(f)
+                # Migrate old cleanup_enabled to output_mode
+                if "cleanup_enabled" in config and "output_mode" not in config:
+                    config["output_mode"] = "general" if config["cleanup_enabled"] else "raw"
+                    del config["cleanup_enabled"]
                 # Merge with defaults for any missing keys
                 for key, value in self.DEFAULT_CONFIG.items():
                     if key not in config:
@@ -75,11 +111,12 @@ class ConfigManager:
         except IOError as e:
             print(f"Failed to save config: {e}")
 
-    def add_history_item(self, text):
+    def add_history_item(self, text, output_mode=None):
         """Add a dictation to history (max 5 items)."""
         item = {
             "text": text,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "output_mode": output_mode or self.get_output_mode()
         }
         self.config["history"].insert(0, item)
         self.config["history"] = self.config["history"][:self.HISTORY_LIMIT]
@@ -107,13 +144,13 @@ class ConfigManager:
         self.config["active_mode"] = mode
         self.save()
 
-    def get_cleanup_enabled(self):
-        """Get cleanup enabled state."""
-        return self.config.get("cleanup_enabled", False)
+    def get_output_mode(self):
+        """Get the current output mode."""
+        return self.config.get("output_mode", "general")
 
-    def set_cleanup_enabled(self, enabled):
-        """Set cleanup enabled state."""
-        self.config["cleanup_enabled"] = enabled
+    def set_output_mode(self, mode):
+        """Set the output mode."""
+        self.config["output_mode"] = mode
         self.save()
 
 
@@ -141,15 +178,14 @@ class DuaTalkApp(rumps.App):
         Key.alt: "alt", Key.alt_l: "alt", Key.alt_r: "alt",
     }
 
-    def __init__(self, whisper_model="base.en", cleanup=False, llm_model="gemma3"):
+    def __init__(self, whisper_model="base.en", llm_model="gemma3"):
         super().__init__("Dua Talk", icon=None, title=self.ICON_IDLE, quit_button=None)
 
         # Load configuration
         self.config_manager = ConfigManager()
 
-        # Configuration (CLI args override saved config)
+        # Configuration
         self.whisper_model_name = whisper_model
-        self.cleanup_enabled = cleanup or self.config_manager.get_cleanup_enabled()
         self.llm_model = llm_model
 
         # Recording state
@@ -196,11 +232,10 @@ class DuaTalkApp(rumps.App):
         self.history_menu = rumps.MenuItem("History")
         self._update_history_menu()
 
-        # Cleanup toggle
-        self.cleanup_menu_item = rumps.MenuItem(
-            f"Cleanup: {'On' if self.cleanup_enabled else 'Off'}",
-            callback=self.toggle_cleanup
-        )
+        # Output mode submenu
+        current_mode = self.config_manager.get_output_mode()
+        self.mode_menu = rumps.MenuItem(f"Mode: {MODE_DISPLAY_NAMES.get(current_mode, 'General')}")
+        self._build_mode_menu()
 
         # Settings submenu
         self.settings_menu = rumps.MenuItem("Settings")
@@ -212,7 +247,7 @@ class DuaTalkApp(rumps.App):
             None,  # Separator
             self.history_menu,
             None,  # Separator
-            self.cleanup_menu_item,
+            self.mode_menu,
             self.settings_menu,
             None,  # Separator
             rumps.MenuItem("Quit", callback=self.quit_app),
@@ -257,6 +292,52 @@ class DuaTalkApp(rumps.App):
             self.set_ptt_hotkey_item,
         ])
 
+    def _build_mode_menu(self):
+        """Build the output mode submenu."""
+        # Only clear if menu has been initialized
+        if self.mode_menu._menu is not None:
+            self.mode_menu.clear()
+
+        current_mode = self.config_manager.get_output_mode()
+        items = []
+
+        for mode, display_name in MODE_DISPLAY_NAMES.items():
+            checkmark = " ✓" if mode == current_mode else ""
+            item = rumps.MenuItem(
+                f"{display_name}{checkmark}",
+                callback=self._make_mode_callback(mode)
+            )
+            items.append(item)
+
+        self.mode_menu.update(items)
+
+    def _make_mode_callback(self, mode):
+        """Create a callback for selecting an output mode."""
+        def callback(_):
+            # Check Ollama for enhanced modes
+            if mode != OutputMode.RAW and not self._check_ollama_available():
+                rumps.notification(
+                    "Dua Talk",
+                    "Ollama Required",
+                    "Enhanced modes require Ollama. Install from ollama.com and run: ollama pull gemma3"
+                )
+                return
+
+            self.config_manager.set_output_mode(mode)
+            self._build_mode_menu()
+            self._update_mode_menu_title()
+            rumps.notification(
+                "Dua Talk",
+                "Mode Changed",
+                f"Now using {MODE_DISPLAY_NAMES[mode]} mode"
+            )
+        return callback
+
+    def _update_mode_menu_title(self):
+        """Update the mode menu title to show current mode."""
+        mode = self.config_manager.get_output_mode()
+        self.mode_menu.title = f"Mode: {MODE_DISPLAY_NAMES.get(mode, 'General')}"
+
     def _format_hotkey(self, hotkey_config):
         """Format hotkey config for display."""
         parts = []
@@ -281,6 +362,10 @@ class DuaTalkApp(rumps.App):
 
     def _start_hotkey_recording(self, mode):
         """Start recording a new hotkey."""
+        if self.recording_hotkey_for:
+            return  # Already recording
+        # Clear any lingering key state from menu interaction
+        self.pressed_keys.clear()
         self.recording_hotkey_for = mode
         self.recorded_modifiers = set()
         self.recorded_key = None
@@ -408,6 +493,15 @@ class DuaTalkApp(rumps.App):
     def beep_off(self):
         """Subtle tone when recording stops/ready."""
         self.beep(frequency=280, duration=0.12)
+
+    def _check_ollama_available(self):
+        """Check if Ollama is running and accessible."""
+        try:
+            import ollama
+            ollama.list()  # Quick check - throws if Ollama not running
+            return True
+        except Exception:
+            return False
 
     def _is_hotkey_pressed(self, hotkey_config):
         """Check if a hotkey combination is currently pressed."""
@@ -555,10 +649,8 @@ class DuaTalkApp(rumps.App):
             text = self.transcribe(audio_np)
 
             if text:
-                # Optional LLM cleanup
-                if self.cleanup_enabled:
-                    text = self.cleanup_with_llm(text)
-
+                # Apply mode-specific formatting
+                text = self.format_with_mode(text)
                 self.output_text(text)
             else:
                 rumps.notification("Dua Talk", "No Speech", "No speech detected in recording.")
@@ -573,18 +665,25 @@ class DuaTalkApp(rumps.App):
         result = self.stt_model.transcribe(audio_np, fp16=False)
         return result["text"].strip()
 
-    def cleanup_with_llm(self, text):
-        """Use Ollama to clean up transcription."""
+    def format_with_mode(self, text):
+        """Apply mode-specific LLM formatting."""
+        mode = self.config_manager.get_output_mode()
+
+        # Raw mode: no processing
+        if mode == OutputMode.RAW:
+            return text
+
+        prompt_template = MODE_PROMPTS.get(mode)
+        if not prompt_template:
+            return text
+
         try:
             import ollama
-            prompt = (
-                "Clean up this dictation. Remove filler words (um, uh, like, you know), "
-                "fix punctuation and capitalization. Output ONLY the cleaned text, nothing else:\n\n"
-                f"{text}"
-            )
-            response = ollama.generate(model=self.llm_model, prompt=prompt)
+            full_prompt = f"{prompt_template}\n\n{text}"
+            response = ollama.generate(model=self.llm_model, prompt=full_prompt)
             return response['response'].strip()
         except Exception:
+            # Ollama unavailable - return raw text
             return text
 
     def copy_to_clipboard(self, text):
@@ -614,12 +713,6 @@ class DuaTalkApp(rumps.App):
         self.beep_off()
         rumps.notification("Dua Talk", "Pasted", preview)
 
-    def toggle_cleanup(self, _):
-        """Toggle LLM cleanup feature."""
-        self.cleanup_enabled = not self.cleanup_enabled
-        self.cleanup_menu_item.title = f"Cleanup: {'On' if self.cleanup_enabled else 'Off'}"
-        self.config_manager.set_cleanup_enabled(self.cleanup_enabled)
-
     def quit_app(self, _):
         """Quit the application."""
         self.keyboard_listener.stop()
@@ -629,14 +722,12 @@ class DuaTalkApp(rumps.App):
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Dua Talk - Offline Dictation")
-    parser.add_argument("--cleanup", action="store_true", help="Enable LLM cleanup by default")
-    parser.add_argument("--model", default="gemma3", help="Ollama model for cleanup (default: gemma3)")
+    parser.add_argument("--model", default="gemma3", help="Ollama model for LLM formatting (default: gemma3)")
     parser.add_argument("--whisper-model", default="base.en", help="Whisper model size (default: base.en)")
     args = parser.parse_args()
 
     app = DuaTalkApp(
         whisper_model=args.whisper_model,
-        cleanup=args.cleanup,
         llm_model=args.model
     )
     app.run()

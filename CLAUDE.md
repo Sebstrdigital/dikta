@@ -19,18 +19,15 @@ pip install -e .
 # Run the app
 python dua_talk.py
 
-# Run with LLM cleanup (requires Ollama)
-python dua_talk.py --cleanup
-
 # Run with different Whisper model
 python dua_talk.py --whisper-model small.en
 ```
 
 ## Prerequisites
 
-For basic dictation, no external services are required.
+For basic dictation (Raw mode), no external services are required.
 
-For LLM cleanup feature, Ollama must be running locally:
+For enhanced output modes (General, Code Prompt), Ollama must be running locally:
 ```bash
 ollama pull gemma3
 ```
@@ -40,18 +37,19 @@ ollama pull gemma3
 The application follows a simple pipeline:
 
 ```
-Hotkey → Recording → Whisper STT → (optional LLM cleanup) → Auto-paste + History
+Hotkey → Recording → Whisper STT → Output Mode Formatting → Auto-paste + History
 ```
 
 ### Key Components
 
 - **dua_talk.py**: Main application with menu bar and global hotkey
   - `ConfigManager`: Persistent settings stored in `~/Library/Application Support/Dua Talk/config.json`
+  - `OutputMode`: Defines available output modes (Raw, General, Code Prompt)
   - Menu bar integration via `rumps`
   - Global hotkey detection via `pynput`
   - Audio recording via `sounddevice`
   - Speech-to-text via Whisper
-  - Optional text cleanup via Ollama
+  - Mode-specific text formatting via Ollama (optional)
   - Auto-paste via simulated Cmd+V (preserves original clipboard)
   - History menu with last 5 dictations
 
@@ -62,8 +60,7 @@ Hotkey → Recording → Whisper STT → (optional LLM cleanup) → Auto-paste +
 
 ## CLI Arguments
 
-- `--cleanup`: Use LLM to clean transcription (remove fillers, fix punctuation)
-- `--model`: Ollama model for cleanup (default: gemma3)
+- `--model`: Ollama model for LLM formatting (default: gemma3)
 - `--whisper-model`: Whisper model size (default: base.en)
 
 ## Hotkey Modes
@@ -82,6 +79,30 @@ Default hotkeys:
 
 Hotkeys can be customized via Settings menu.
 
+## Output Modes
+
+The app supports three output modes for dictation formatting:
+
+| Mode | Requires Ollama | Description |
+|------|-----------------|-------------|
+| **Raw** | No | Verbatim Whisper transcription (default fallback) |
+| **General** | Yes (gemma3) | Clean up fillers, fix punctuation, natural prose |
+| **Code Prompt** | Yes (gemma3) | Structured prompts for AI coding assistants |
+
+**Default behavior:**
+- If Ollama available: defaults to **General** mode
+- If Ollama unavailable: shows notification and falls back to **Raw** mode
+
+### Example Transformations
+
+**General Mode:**
+- Raw: "um so I was thinking that we should probably you know schedule a meeting"
+- Output: "I was thinking we should schedule a meeting."
+
+**Code Prompt Mode:**
+- Raw: "um so I need you to create a function that uh validates email addresses"
+- Output: "Create a function that validates email addresses..."
+
 ## Menu Structure
 
 ```
@@ -92,7 +113,10 @@ Hotkeys can be customized via Settings menu.
 │   ├── "Last dictation preview..."
 │   └── (up to 5 items)
 ├── ────
-├── Cleanup: Off
+├── Mode: General >
+│   ├── Raw
+│   ├── General ✓
+│   └── Code Prompt
 ├── Settings >
 │   ├── Toggle Mode ✓
 │   ├── Push-to-Talk Mode
@@ -109,14 +133,20 @@ Settings are persisted in `~/Library/Application Support/Dua Talk/config.json`:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "hotkeys": {
     "toggle": {"modifiers": ["shift", "ctrl"], "key": null},
     "push_to_talk": {"modifiers": ["cmd", "shift"], "key": null}
   },
   "active_mode": "toggle",
-  "history": [],
-  "cleanup_enabled": false,
+  "output_mode": "general",
+  "history": [
+    {
+      "text": "Hello world",
+      "timestamp": "2024-01-15T10:30:00Z",
+      "output_mode": "general"
+    }
+  ],
   "whisper_model": "base.en",
   "llm_model": "gemma3"
 }
@@ -160,7 +190,7 @@ python dua_talk.py
 ### Menu Bar Features
 
 - **Icon states**: 🎤 (idle), 🔴 (recording), ⏳ (processing)
-- **Menu**: Start/Stop Recording, History, Settings, Toggle Cleanup, Quit
+- **Menu**: Start/Stop Recording, History, Output Mode, Settings, Quit
 - **Hotkey**: Configurable via Settings menu
 - **Notifications**: macOS notifications for status updates
 
