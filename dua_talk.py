@@ -432,20 +432,8 @@ class DuaTalkApp(rumps.App):
         return callback
 
     def _paste_text(self, text):
-        """Paste text at cursor position, preserving clipboard."""
-        # Save current clipboard
-        try:
-            result = subprocess.run(
-                ["pbpaste"],
-                capture_output=True,
-                text=True,
-                env={"LANG": "en_US.UTF-8"}
-            )
-            original_clipboard = result.stdout
-        except Exception:
-            original_clipboard = ""
-
-        # Copy new text to clipboard
+        """Paste text at cursor position (leaves dictation in clipboard)."""
+        # Copy text to clipboard
         self.copy_to_clipboard(text)
         time.sleep(0.05)
 
@@ -455,14 +443,6 @@ class DuaTalkApp(rumps.App):
                 self.kb_controller.tap('v')
         except Exception as e:
             rumps.notification("Dua Talk", "Paste Failed", f"Could not simulate paste: {e}")
-            return
-
-        # Restore original clipboard after delay
-        def restore_clipboard():
-            time.sleep(0.2)
-            self.copy_to_clipboard(original_clipboard)
-
-        threading.Thread(target=restore_clipboard, daemon=True).start()
 
     def load_model(self):
         """Load Whisper model in background."""
