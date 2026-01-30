@@ -33,9 +33,10 @@ final class LLMService {
     /// - Parameters:
     ///   - text: Raw transcribed text
     ///   - mode: Output mode with prompt
+    ///   - language: Language for the prompt
     /// - Returns: Formatted text
-    func format(text: String, mode: OutputMode) async throws -> String {
-        guard let prompt = mode.prompt else {
+    func format(text: String, mode: OutputMode, language: Language = .english) async throws -> String {
+        guard let prompt = mode.prompt(for: language) else {
             // Raw mode, return as-is
             return text
         }

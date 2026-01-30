@@ -22,6 +22,12 @@ struct MenuBarView: View {
             // Output mode submenu
             ModeMenu(viewModel: viewModel)
 
+            // Language submenu
+            LanguageMenu(viewModel: viewModel)
+
+            // Model submenu
+            ModelMenu(viewModel: viewModel)
+
             // Settings submenu
             SettingsMenu(viewModel: viewModel)
 
@@ -70,6 +76,58 @@ struct ModeMenu: View {
                     HStack {
                         Text(mode.displayName)
                         if viewModel.configService.outputMode == mode {
+                            Spacer()
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Language submenu
+struct LanguageMenu: View {
+    @ObservedObject var viewModel: MenuBarViewModel
+
+    var body: some View {
+        Menu("Language: \(viewModel.configService.language.displayName)") {
+            ForEach(Language.allCases, id: \.self) { language in
+                Button(action: {
+                    viewModel.setLanguage(language)
+                }) {
+                    HStack {
+                        Text(language.displayName)
+                        if viewModel.configService.language == language {
+                            Spacer()
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Whisper model submenu
+struct ModelMenu: View {
+    @ObservedObject var viewModel: MenuBarViewModel
+
+    private var currentModel: WhisperModel {
+        WhisperModel(rawValue: viewModel.configService.whisperModel) ?? .base
+    }
+
+    var body: some View {
+        Menu("Model: \(currentModel.displayName)") {
+            ForEach(WhisperModel.allCases, id: \.self) { model in
+                Button(action: {
+                    viewModel.setWhisperModel(model)
+                }) {
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(model.displayName)
+                        }
+                        if currentModel == model {
                             Spacer()
                             Image(systemName: "checkmark")
                         }

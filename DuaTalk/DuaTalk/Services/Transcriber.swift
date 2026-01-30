@@ -43,9 +43,11 @@ final class Transcriber: ObservableObject {
     }
 
     /// Transcribe audio samples
-    /// - Parameter audioSamples: Float32 audio samples at 16kHz
+    /// - Parameters:
+    ///   - audioSamples: Float32 audio samples at 16kHz
+    ///   - language: Language code for transcription
     /// - Returns: Transcribed text
-    func transcribe(_ audioSamples: [Float]) async throws -> String {
+    func transcribe(_ audioSamples: [Float], language: String? = nil) async throws -> String {
         guard let whisperKit = whisperKit else {
             throw TranscriberError.modelNotLoaded
         }
@@ -54,7 +56,19 @@ final class Transcriber: ObservableObject {
             throw TranscriberError.emptyAudio
         }
 
-        let result = try await whisperKit.transcribe(audioArray: audioSamples)
+        let options = DecodingOptions(
+            language: language,
+            temperatureFallbackCount: 3,         // Retry with higher temp if failed
+            compressionRatioThreshold: 2.4,      // Detect repetitive hallucinations
+            logProbThreshold: -1.0,              // Filter low-confidence output
+            noSpeechThreshold: 0.6               // Detect silence/no speech
+        )
+
+        print("[Transcriber] Using language: \(language ?? "auto"), samples: \(audioSamples.count)")
+
+        let result = try await whisperKit.transcribe(audioArray: audioSamples, decodeOptions: options)
+
+        print("[Transcriber] Got \(result.count) segments")
 
         // Combine all segments into a single string
         let text = result.map { $0.text }.joined(separator: " ").trimmingCharacters(in: .whitespaces)

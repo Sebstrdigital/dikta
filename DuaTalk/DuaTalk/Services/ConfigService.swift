@@ -122,4 +122,15 @@ final class ConfigService: ObservableObject {
             save()
         }
     }
+
+    // MARK: - Language
+
+    var language: Language {
+        get { config.language }
+        set {
+            config.language = newValue
+            objectWillChange.send()
+            save()
+        }
+    }
 }

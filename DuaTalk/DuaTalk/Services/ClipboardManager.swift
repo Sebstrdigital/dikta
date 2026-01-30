@@ -20,19 +20,12 @@ final class ClipboardManager {
     func typeText(_ text: String) {
         let source = CGEventSource(stateID: .hidSystemState)
 
-        for char in text {
-            // Handle newlines
-            if char == "\n" {
-                if let event = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Return), keyDown: true) {
-                    event.post(tap: .cghidEventTap)
-                }
-                if let event = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Return), keyDown: false) {
-                    event.post(tap: .cghidEventTap)
-                }
-                continue
-            }
+        // Replace newlines with spaces to avoid triggering send in chat apps
+        let safeText = text.replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
 
-            // Use Unicode input for other characters
+        for char in safeText {
+            // Use Unicode input for characters
             var unicodeChar = Array(String(char).utf16)
 
             if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true) {

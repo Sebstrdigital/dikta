@@ -153,8 +153,19 @@ final class MenuBarViewModel: ObservableObject {
 
     private func processAudio(_ samples: [Float]) async {
         do {
-            // Transcribe
-            let rawText = try await transcriber.transcribe(samples)
+            // Transcribe with selected language
+            let language = configService.language
+            let rawText = try await transcriber.transcribe(samples, language: language.whisperCode)
+
+            // Check for silence/empty output from Whisper
+            let silenceIndicators = ["[silence]", "[blank_audio]", "[no speech]", "(silence)", "[ silence ]"]
+            let lowerText = rawText.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if lowerText.isEmpty || silenceIndicators.contains(where: { lowerText.contains($0) }) {
+                sendNotification(title: "No Speech", body: "No speech detected in recording")
+                appState = .idle
+                return
+            }
 
             // Format with LLM if needed
             let outputMode = configService.outputMode
@@ -162,9 +173,16 @@ final class MenuBarViewModel: ObservableObject {
 
             if outputMode.requiresOllama {
                 if isOllamaAvailable {
-                    finalText = try await llmService.format(text: rawText, mode: outputMode)
+                    finalText = try await llmService.format(text: rawText, mode: outputMode, language: language)
                 }
                 // If Ollama not available, use raw text
+            }
+
+            // Skip if LLM returned empty (silence detected)
+            if finalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                sendNotification(title: "No Speech", body: "No speech detected in recording")
+                appState = .idle
+                return
             }
 
             // Output
@@ -222,6 +240,37 @@ final class MenuBarViewModel: ObservableObject {
         configService.activeHotkeyMode = mode
         updateHotkeyConfig()
         sendNotification(title: "Mode Changed", body: "Now using \(mode.displayName)")
+    }
+
+    // MARK: - Language
+
+    func setLanguage(_ language: Language) {
+        // Check if current model supports the language
+        let currentModel = configService.whisperModel
+        let isEnglishOnlyModel = currentModel.hasSuffix(".en")
+
+        if language != .english && isEnglishOnlyModel {
+            // Need to switch to multilingual model
+            let multilingualModel = currentModel.replacingOccurrences(of: ".en", with: "")
+            sendNotification(
+                title: "Model Change Required",
+                body: "Switching from \(currentModel) to \(multilingualModel) for \(language.displayName). Restart app to apply."
+            )
+            configService.whisperModel = multilingualModel
+        }
+
+        configService.language = language
+        sendNotification(title: "Language Changed", body: "Now using \(language.displayName)")
+    }
+
+    // MARK: - Whisper Model
+
+    func setWhisperModel(_ model: WhisperModel) {
+        configService.whisperModel = model.rawValue
+        sendNotification(
+            title: "Model Changed",
+            body: "Switched to \(model.displayName). Restart app to load new model."
+        )
     }
 
     // MARK: - Hotkey Recording
