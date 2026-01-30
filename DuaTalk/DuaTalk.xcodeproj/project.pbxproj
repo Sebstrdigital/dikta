@@ -1,0 +1,479 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		/* Models */
+		100000000000000000000001 /* OutputMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000001 /* OutputMode.swift */; };
+		100000000000000000000002 /* HotkeyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000002 /* HotkeyConfig.swift */; };
+		100000000000000000000003 /* HistoryItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000003 /* HistoryItem.swift */; };
+		100000000000000000000004 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000004 /* AppConfig.swift */; };
+
+		/* Services */
+		100000000000000000000011 /* ConfigService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000011 /* ConfigService.swift */; };
+		100000000000000000000012 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000012 /* AudioRecorder.swift */; };
+		100000000000000000000013 /* AudioFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000013 /* AudioFeedback.swift */; };
+		100000000000000000000014 /* Transcriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000014 /* Transcriber.swift */; };
+		100000000000000000000015 /* LLMService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000015 /* LLMService.swift */; };
+		100000000000000000000016 /* ClipboardManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000016 /* ClipboardManager.swift */; };
+		100000000000000000000017 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* HotkeyManager.swift */; };
+
+		/* ViewModels */
+		100000000000000000000021 /* MenuBarViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000021 /* MenuBarViewModel.swift */; };
+
+		/* Views */
+		100000000000000000000031 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000031 /* MenuBarView.swift */; };
+
+		/* App */
+		100000000000000000000041 /* DuaTalkApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000041 /* DuaTalkApp.swift */; };
+
+		/* Resources */
+		100000000000000000000051 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000051 /* Assets.xcassets */; };
+
+		/* WhisperKit */
+		100000000000000000000061 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 300000000000000000000001 /* WhisperKit */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		/* Models */
+		200000000000000000000001 /* OutputMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputMode.swift; sourceTree = "<group>"; };
+		200000000000000000000002 /* HotkeyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyConfig.swift; sourceTree = "<group>"; };
+		200000000000000000000003 /* HistoryItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryItem.swift; sourceTree = "<group>"; };
+		200000000000000000000004 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+
+		/* Services */
+		200000000000000000000011 /* ConfigService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigService.swift; sourceTree = "<group>"; };
+		200000000000000000000012 /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
+		200000000000000000000013 /* AudioFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFeedback.swift; sourceTree = "<group>"; };
+		200000000000000000000014 /* Transcriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Transcriber.swift; sourceTree = "<group>"; };
+		200000000000000000000015 /* LLMService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMService.swift; sourceTree = "<group>"; };
+		200000000000000000000016 /* ClipboardManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManager.swift; sourceTree = "<group>"; };
+		200000000000000000000017 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
+
+		/* ViewModels */
+		200000000000000000000021 /* MenuBarViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModel.swift; sourceTree = "<group>"; };
+
+		/* Views */
+		200000000000000000000031 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
+
+		/* App */
+		200000000000000000000041 /* DuaTalkApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuaTalkApp.swift; sourceTree = "<group>"; };
+
+		/* Resources */
+		200000000000000000000051 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		200000000000000000000052 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		200000000000000000000053 /* DuaTalk.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DuaTalk.entitlements; sourceTree = "<group>"; };
+
+		/* Product */
+		400000000000000000000001 /* Dua Talk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Dua Talk.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		500000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000061 /* WhisperKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		600000000000000000000000 = {
+			isa = PBXGroup;
+			children = (
+				600000000000000000000001 /* DuaTalk */,
+				600000000000000000000099 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		600000000000000000000001 /* DuaTalk */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000041 /* DuaTalkApp.swift */,
+				600000000000000000000002 /* Models */,
+				600000000000000000000003 /* Services */,
+				600000000000000000000004 /* ViewModels */,
+				600000000000000000000005 /* Views */,
+				600000000000000000000006 /* Resources */,
+			);
+			path = DuaTalk;
+			sourceTree = "<group>";
+		};
+		600000000000000000000002 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000001 /* OutputMode.swift */,
+				200000000000000000000002 /* HotkeyConfig.swift */,
+				200000000000000000000003 /* HistoryItem.swift */,
+				200000000000000000000004 /* AppConfig.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		600000000000000000000003 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000011 /* ConfigService.swift */,
+				200000000000000000000012 /* AudioRecorder.swift */,
+				200000000000000000000013 /* AudioFeedback.swift */,
+				200000000000000000000014 /* Transcriber.swift */,
+				200000000000000000000015 /* LLMService.swift */,
+				200000000000000000000016 /* ClipboardManager.swift */,
+				200000000000000000000017 /* HotkeyManager.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		600000000000000000000004 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000021 /* MenuBarViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		600000000000000000000005 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000031 /* MenuBarView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		600000000000000000000006 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000051 /* Assets.xcassets */,
+				200000000000000000000052 /* Info.plist */,
+				200000000000000000000053 /* DuaTalk.entitlements */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		600000000000000000000099 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				400000000000000000000001 /* Dua Talk.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		700000000000000000000001 /* DuaTalk */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 800000000000000000000003 /* Build configuration list for PBXNativeTarget "DuaTalk" */;
+			buildPhases = (
+				500000000000000000000002 /* Sources */,
+				500000000000000000000001 /* Frameworks */,
+				500000000000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = DuaTalk;
+			packageProductDependencies = (
+				300000000000000000000001 /* WhisperKit */,
+			);
+			productName = DuaTalk;
+			productReference = 400000000000000000000001 /* Dua Talk.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		900000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					700000000000000000000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = 800000000000000000000001 /* Build configuration list for PBXProject "DuaTalk" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 600000000000000000000000;
+			packageReferences = (
+				A00000000000000000000001 /* XCRemoteSwiftPackageReference "WhisperKit" */,
+			);
+			productRefGroup = 600000000000000000000099 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				700000000000000000000001 /* DuaTalk */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		500000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000051 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		500000000000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000001 /* OutputMode.swift in Sources */,
+				100000000000000000000002 /* HotkeyConfig.swift in Sources */,
+				100000000000000000000003 /* HistoryItem.swift in Sources */,
+				100000000000000000000004 /* AppConfig.swift in Sources */,
+				100000000000000000000011 /* ConfigService.swift in Sources */,
+				100000000000000000000012 /* AudioRecorder.swift in Sources */,
+				100000000000000000000013 /* AudioFeedback.swift in Sources */,
+				100000000000000000000014 /* Transcriber.swift in Sources */,
+				100000000000000000000015 /* LLMService.swift in Sources */,
+				100000000000000000000016 /* ClipboardManager.swift in Sources */,
+				100000000000000000000017 /* HotkeyManager.swift in Sources */,
+				100000000000000000000021 /* MenuBarViewModel.swift in Sources */,
+				100000000000000000000031 /* MenuBarView.swift in Sources */,
+				100000000000000000000041 /* DuaTalkApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		B00000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		B00000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		B00000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = DuaTalk/Resources/DuaTalk.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DuaTalk/Resources/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dua Talk needs microphone access to record your voice for dictation.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app;
+				PRODUCT_NAME = "Dua Talk";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		B00000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = DuaTalk/Resources/DuaTalk.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DuaTalk/Resources/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dua Talk needs microphone access to record your voice for dictation.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app;
+				PRODUCT_NAME = "Dua Talk";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		800000000000000000000001 /* Build configuration list for PBXProject "DuaTalk" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B00000000000000000000001 /* Debug */,
+				B00000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		800000000000000000000003 /* Build configuration list for PBXNativeTarget "DuaTalk" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B00000000000000000000003 /* Debug */,
+				B00000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A00000000000000000000001 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/argmaxinc/WhisperKit";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		300000000000000000000001 /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A00000000000000000000001 /* XCRemoteSwiftPackageReference "WhisperKit" */;
+			productName = WhisperKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 900000000000000000000001 /* Project object */;
+}

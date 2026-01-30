@@ -1,21 +1,16 @@
-# Local Dictation Tool
+# Dua Talk
 
-A minimal, fully offline dictation tool that transcribes speech to clipboard using a global hotkey. A local alternative to Wispr Flow.
+A minimal, fully offline dictation tool that runs as a macOS menu bar app. Transcribes speech to clipboard using a global hotkey and optionally formats output with a local LLM.
 
 ## Features
 
 - **Fully Offline**: Uses Whisper for speech-to-text, no cloud services required
-- **Global Hotkey**: Toggle recording with Left Shift + Left Control from anywhere
-- **Audio Feedback**: Distinct beeps for start, stop, and ready states
-- **Clipboard Integration**: Transcription automatically copied to clipboard
-- **Optional LLM Cleanup**: Clean up transcription using Ollama (remove fillers, fix punctuation)
-
-## Architecture
-
-```
-Left Shift + Left Control (start) → [beep] → Recording...
-Left Shift + Left Control (stop)  → [beep] → Whisper STT → (optional LLM cleanup) → Clipboard → [double beep]
-```
+- **Menu Bar App**: Runs unobtrusively in your macOS menu bar
+- **Global Hotkey**: Toggle or push-to-talk recording from anywhere
+- **Output Modes**: Raw transcription, general cleanup, or code prompt formatting
+- **Auto-paste**: Automatically pastes transcription after recording
+- **History**: Access your last 5 dictations from the menu
+- **Audio Feedback**: Beeps indicate recording start/stop
 
 ## Installation
 
@@ -26,16 +21,13 @@ Left Shift + Left Control (stop)  → [beep] → Whisper STT → (optional LLM c
 curl -LsSf https://astral.sh/uv/install.sh | sh
 # or on macOS: brew install uv
 
-# Clone the repository
+# Clone and setup
 git clone https://github.com/vndee/local-talking-llm.git
 cd local-talking-llm
-git checkout feature/dictation-tool
 
-# Install dependencies
+# Install dependencies and activate
 uv sync
-
-# Activate the virtual environment
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate
 ```
 
 ### Using pip
@@ -43,57 +35,64 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```bash
 git clone https://github.com/vndee/local-talking-llm.git
 cd local-talking-llm
-git checkout feature/dictation-tool
 
-python -m venv venv
-source venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate
 pip install -e .
+```
+
+## Running the App
+
+```bash
+# Activate the virtual environment
+source .venv/bin/activate
+
+# Run the app
+python dua_talk.py
+
+# Run with a different Whisper model
+python dua_talk.py --whisper-model small.en
 ```
 
 ## macOS Permissions
 
-On macOS, you need to grant Accessibility permissions for the global hotkey to work:
+The app requires these permissions in **System Preferences → Privacy & Security**:
 
-1. Go to **System Preferences → Privacy & Security → Accessibility**
-2. Add your terminal application (Terminal.app, iTerm, or your IDE)
-3. Restart the dictation tool
+- **Microphone**: For recording audio
+- **Accessibility**: For global hotkey detection and auto-paste
 
-## Usage
+Add your terminal application during development. After building as an app bundle, add `Dua Talk.app`.
 
-### Basic Usage
+## Hotkey Modes
+
+| Mode | Default Hotkey | Behavior |
+|------|----------------|----------|
+| **Toggle** | Shift + Ctrl | Press to start, press again to stop |
+| **Push-to-Talk** | Cmd + Shift | Hold to record, release to stop |
+
+Hotkeys can be customized via the Settings menu.
+
+## Output Modes
+
+| Mode | Requires Ollama | Description |
+|------|-----------------|-------------|
+| **Raw** | No | Verbatim Whisper transcription |
+| **General** | Yes | Removes fillers, fixes punctuation |
+| **Code Prompt** | Yes | Formats as prompts for AI coding assistants |
+
+For General and Code Prompt modes, install Ollama:
 
 ```bash
-python dictation.py
-```
-
-Press **Left Shift + Left Control** to start recording, speak, then press the same hotkey again to stop. Your transcription will be copied to the clipboard.
-
-### Audio Feedback
-
-- **Start recording**: High-pitched beep (600 Hz)
-- **Stop recording**: Lower beep (400 Hz) - processing
-- **Clipboard ready**: Double beep (800 Hz) - ready to paste
-
-### With LLM Cleanup
-
-Enable LLM cleanup to remove filler words and fix punctuation (requires [Ollama](https://ollama.ai)):
-
-```bash
-# Install Ollama and pull a model
 ollama pull gemma3
-
-# Run with cleanup enabled
-python dictation.py --cleanup
 ```
 
-### Configuration Options
+## CLI Options
 
 ```bash
-python dictation.py --help
+python dua_talk.py --help
 ```
 
-- `--cleanup`: Use LLM to clean transcription (remove fillers, fix punctuation)
-- `--model`: Ollama model for cleanup (default: gemma3)
+- `--model`: Ollama model for LLM formatting (default: gemma3)
 - `--whisper-model`: Whisper model size (default: base.en)
 
 ### Whisper Model Options
@@ -105,52 +104,33 @@ python dictation.py --help
 | `small.en` | 244M | Medium | Great |
 | `medium.en` | 769M | Slow | Excellent |
 
+## Building the macOS App
+
 ```bash
-# Use a smaller model for faster transcription
-python dictation.py --whisper-model tiny.en
+# Install build dependencies
+uv pip install "py2app>=0.28.0,<0.28.9" "setuptools>=69.0.0,<80"
 
-# Use a larger model for better accuracy
-python dictation.py --whisper-model small.en
+# Build standalone app
+python setup.py py2app
+
+# Run the built app
+open "dist/Dua Talk.app"
 ```
-
-## Workflow Example
-
-1. Start the dictation tool: `python dictation.py`
-2. Open any text field (email, document, chat)
-3. Press **Left Shift + Left Control** → hear start beep
-4. Speak your text
-5. Press **Left Shift + Left Control** → hear stop beep
-6. Wait for double beep (transcription ready)
-7. Press **Cmd+V** (Mac) or **Ctrl+V** (Windows/Linux) to paste
 
 ## Troubleshooting
 
-### Hotkey not working on macOS
+### Hotkey not working
+Ensure Accessibility permissions are granted to your terminal or the built app.
 
-Make sure you've granted Accessibility permissions to your terminal. The app needs to listen for global keyboard events.
-
-### Microphone not detected
-
-Check that your microphone is:
-- Connected and powered on
-- Selected as the default input device in system settings
-- Not being used exclusively by another application
-
-### LLM cleanup not working
-
-Ensure Ollama is running and the model is available:
+### LLM modes not working
+Check that Ollama is running and the model is available:
 
 ```bash
-ollama list  # Check available models
-ollama pull gemma3  # Pull the model if missing
+ollama list
+ollama pull gemma3
 ```
-
-## Original Voice Assistant
-
-This tool is a fork of the full voice assistant. The original implementation with LLM conversation and ChatterBox TTS is preserved in the `main` branch.
 
 ## Resources
 
 - [Whisper](https://github.com/openai/whisper) - OpenAI's speech recognition model
 - [Ollama](https://ollama.ai) - Run LLMs locally
-- [pynput](https://pynput.readthedocs.io/) - Global hotkey detection
