@@ -2,7 +2,7 @@
 name = "dua-talk"
 version = "0.2.0"
 description = "Dua Talk - offline dictation tool with Whisper speech-to-text"
-readme = "README.md"
+readme = "../README.md"
 requires-python = ">=3.11"
 dependencies = [
     "openai-whisper>=20240930",

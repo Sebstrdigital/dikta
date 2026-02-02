@@ -2,6 +2,12 @@
 
 A minimal, fully offline dictation tool that runs as a macOS menu bar app. Transcribes speech to clipboard using a global hotkey and optionally formats output with a local LLM.
 
+## Implementations
+
+This repository contains two implementations:
+- **python/**: Python implementation using rumps, pynput, and Whisper
+- **DuaTalk/**: Native Swift/SwiftUI implementation
+
 ## Features
 
 - **Fully Offline**: Uses Whisper for speech-to-text, no cloud services required
@@ -12,7 +18,7 @@ A minimal, fully offline dictation tool that runs as a macOS menu bar app. Trans
 - **History**: Access your last 5 dictations from the menu
 - **Audio Feedback**: Beeps indicate recording start/stop
 
-## Installation
+## Python Installation
 
 ### Using uv (Recommended)
 
@@ -23,7 +29,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Clone and setup
 git clone https://github.com/vndee/local-talking-llm.git
-cd local-talking-llm
+cd local-talking-llm/python
 
 # Install dependencies and activate
 uv sync
@@ -34,16 +40,18 @@ source .venv/bin/activate
 
 ```bash
 git clone https://github.com/vndee/local-talking-llm.git
-cd local-talking-llm
+cd local-talking-llm/python
 
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
 ```
 
-## Running the App
+## Running the Python App
 
 ```bash
+cd python
+
 # Activate the virtual environment
 source .venv/bin/activate
 
@@ -52,6 +60,18 @@ python dua_talk.py
 
 # Run with a different Whisper model
 python dua_talk.py --whisper-model small.en
+```
+
+## Swift Installation
+
+```bash
+cd DuaTalk
+
+# Build with Swift Package Manager
+swift build
+
+# Or open in Xcode
+open DuaTalk.xcodeproj
 ```
 
 ## macOS Permissions
@@ -104,9 +124,11 @@ python dua_talk.py --help
 | `small.en` | 244M | Medium | Great |
 | `medium.en` | 769M | Slow | Excellent |
 
-## Building the macOS App
+## Building the macOS App (Python)
 
 ```bash
+cd python
+
 # Install build dependencies
 uv pip install "py2app>=0.28.0,<0.28.9" "setuptools>=69.0.0,<80"
 

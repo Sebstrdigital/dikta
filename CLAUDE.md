@@ -6,9 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Dua Talk is a minimal, fully offline dictation application that transcribes speech to clipboard using a global hotkey. It uses Whisper for speech-to-text and runs as a macOS menu bar app.
 
-## Development Commands
+This repository contains two implementations:
+- **python/**: Python implementation using rumps, pynput, and Whisper
+- **DuaTalk/**: Native Swift/SwiftUI implementation
+
+## Python Development Commands
 
 ```bash
+cd python
+
 # Install dependencies (recommended)
 uv sync
 source .venv/bin/activate
@@ -21,6 +27,18 @@ python dua_talk.py
 
 # Run with different Whisper model
 python dua_talk.py --whisper-model small.en
+```
+
+## Swift Development
+
+```bash
+cd DuaTalk
+
+# Build with Swift Package Manager
+swift build
+
+# Or open in Xcode
+open DuaTalk.xcodeproj
 ```
 
 ## Prerequisites
@@ -40,9 +58,9 @@ The application follows a simple pipeline:
 Hotkey → Recording → Whisper STT → Output Mode Formatting → Auto-paste + History
 ```
 
-### Key Components
+### Key Components (Python)
 
-- **dua_talk.py**: Main application with menu bar and global hotkey
+- **python/dua_talk.py**: Main application with menu bar and global hotkey
   - `ConfigManager`: Persistent settings stored in `~/Library/Application Support/Dua Talk/config.json`
   - `OutputMode`: Defines available output modes (Raw, General, Code Prompt)
   - Menu bar integration via `rumps`
@@ -152,13 +170,15 @@ Settings are persisted in `~/Library/Application Support/Dua Talk/config.json`:
 }
 ```
 
-## Building the macOS App Bundle
+## Building the macOS App Bundle (Python)
 
-The app can be packaged as a standalone macOS menu bar application using py2app.
+The Python app can be packaged as a standalone macOS menu bar application using py2app.
 
 ### Install Build Dependencies
 
 ```bash
+cd python
+
 # Note: py2app 0.28.9+ has compatibility issues with newer setuptools
 uv pip install "py2app>=0.28.0,<0.28.9" "setuptools>=69.0.0,<80"
 # or
@@ -168,6 +188,8 @@ pip install "py2app>=0.28.0,<0.28.9" "setuptools>=69.0.0,<80"
 ### Build Commands
 
 ```bash
+cd python
+
 # Development build (alias mode, fast, uses system Python)
 python setup.py py2app -A
 
@@ -175,11 +197,13 @@ python setup.py py2app -A
 python setup.py py2app
 ```
 
-The built app will be at `dist/Dua Talk.app`.
+The built app will be at `python/dist/Dua Talk.app`.
 
 ### Running the App
 
 ```bash
+cd python
+
 # Open the built app
 open "dist/Dua Talk.app"
 
