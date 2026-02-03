@@ -6,7 +6,7 @@ A minimal, fully offline dictation tool that runs as a macOS menu bar app. Trans
 
 ```bash
 # Clone the repo
-git clone https://github.com/YOUR_USERNAME/dua-talk.git
+git clone https://github.com/duadigital/dua-talk.git
 cd dua-talk/DuaTalk
 
 # Build and run
@@ -29,7 +29,7 @@ The app will appear in your menu bar (🎤). First run will download the Whisper
 brew install uv
 
 # Clone and setup
-git clone https://github.com/YOUR_USERNAME/dua-talk.git
+git clone https://github.com/duadigital/dua-talk.git
 cd dua-talk/python
 
 # Install and run
