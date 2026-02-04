@@ -26,6 +26,10 @@ struct DuaTalkApp: App {
                 .foregroundStyle(.red)
         case .processing:
             Image(systemName: "hourglass")
+        case .speaking:
+            Image(systemName: "speaker.wave.2.fill")
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.blue)
         }
     }
 }

@@ -10,7 +10,14 @@ struct MenuBarView: View {
             Button(action: { viewModel.toggleRecording() }) {
                 Text(viewModel.appState == .recording ? "Stop Recording" : "Start Recording")
             }
-            .disabled(viewModel.appState == .loading || viewModel.appState == .processing)
+            .disabled(viewModel.appState == .loading || viewModel.appState == .processing || viewModel.appState == .speaking)
+
+            // TTS control (only shown when speaking)
+            if viewModel.appState == .speaking {
+                Button(action: { viewModel.stopSpeaking() }) {
+                    Text("Stop Speaking")
+                }
+            }
 
             Divider()
 
@@ -27,6 +34,9 @@ struct MenuBarView: View {
 
             // Model submenu
             ModelMenu(viewModel: viewModel)
+
+            // TTS Voice submenu
+            VoiceMenu(viewModel: viewModel)
 
             // Settings submenu
             SettingsMenu(viewModel: viewModel)
@@ -138,6 +148,29 @@ struct ModelMenu: View {
     }
 }
 
+/// TTS Voice submenu
+struct VoiceMenu: View {
+    @ObservedObject var viewModel: MenuBarViewModel
+
+    var body: some View {
+        Menu("Voice: \(viewModel.ttsVoice.displayName)") {
+            ForEach(KokoroVoice.allCases, id: \.self) { voice in
+                Button(action: {
+                    viewModel.setTtsVoice(voice)
+                }) {
+                    HStack {
+                        Text(voice.displayName)
+                        if viewModel.ttsVoice == voice {
+                            Spacer()
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Settings submenu
 struct SettingsMenu: View {
     @ObservedObject var viewModel: MenuBarViewModel
@@ -176,6 +209,14 @@ struct SettingsMenu: View {
             let pttHotkey = viewModel.configService.getHotkey(for: .pushToTalk)
             Button("Set Push-to-Talk Hotkey... (\(pttHotkey.displayString))") {
                 viewModel.startRecordingHotkey(for: .pushToTalk)
+            }
+
+            Divider()
+
+            // TTS hotkey configuration
+            let ttsHotkey = viewModel.configService.getHotkey(for: .textToSpeech)
+            Button("Set Read Aloud Hotkey... (\(ttsHotkey.displayString))") {
+                viewModel.startRecordingHotkey(for: .textToSpeech)
             }
         }
     }
