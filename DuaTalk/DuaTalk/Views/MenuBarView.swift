@@ -6,40 +6,30 @@ struct MenuBarView: View {
 
     var body: some View {
         Group {
-            // Recording control
-            Button(action: { viewModel.toggleRecording() }) {
-                Text(viewModel.appState == .recording ? "Stop Recording" : "Start Recording")
-            }
-            .disabled(viewModel.appState == .loading || viewModel.appState == .processing || viewModel.appState == .speaking)
-
-            // TTS control (only shown when speaking)
-            if viewModel.appState == .speaking {
+            // Status indicator when active
+            if viewModel.appState == .recording {
+                Button(action: { viewModel.toggleRecording() }) {
+                    Text("Stop Recording")
+                }
+            } else if viewModel.appState == .speaking {
                 Button(action: { viewModel.stopSpeaking() }) {
                     Text("Stop Speaking")
                 }
+            } else if viewModel.appState == .processing {
+                Text("Processing...")
+                    .foregroundColor(.secondary)
             }
-
-            Divider()
 
             // History submenu
             HistoryMenu(viewModel: viewModel)
 
             Divider()
 
-            // Output mode submenu
-            ModeMenu(viewModel: viewModel)
-
-            // Language submenu
-            LanguageMenu(viewModel: viewModel)
-
-            // Model submenu
-            ModelMenu(viewModel: viewModel)
-
-            // TTS Voice submenu
-            VoiceMenu(viewModel: viewModel)
-
             // Settings submenu
             SettingsMenu(viewModel: viewModel)
+
+            // Advanced submenu
+            AdvancedMenu(viewModel: viewModel)
 
             Divider()
 
@@ -64,106 +54,6 @@ struct HistoryMenu: View {
                 ForEach(viewModel.configService.history) { item in
                     Button(item.preview) {
                         viewModel.pasteHistoryItem(item)
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Output mode submenu
-struct ModeMenu: View {
-    @ObservedObject var viewModel: MenuBarViewModel
-
-    var body: some View {
-        Menu("Mode: \(viewModel.configService.outputMode.displayName)") {
-            ForEach(OutputMode.allCases, id: \.self) { mode in
-                Button(action: {
-                    Task {
-                        await viewModel.setOutputMode(mode)
-                    }
-                }) {
-                    HStack {
-                        Text(mode.displayName)
-                        if viewModel.configService.outputMode == mode {
-                            Spacer()
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Language submenu
-struct LanguageMenu: View {
-    @ObservedObject var viewModel: MenuBarViewModel
-
-    var body: some View {
-        Menu("Language: \(viewModel.configService.language.displayName)") {
-            ForEach(Language.allCases, id: \.self) { language in
-                Button(action: {
-                    viewModel.setLanguage(language)
-                }) {
-                    HStack {
-                        Text(language.displayName)
-                        if viewModel.configService.language == language {
-                            Spacer()
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Whisper model submenu
-struct ModelMenu: View {
-    @ObservedObject var viewModel: MenuBarViewModel
-
-    private var currentModel: WhisperModel {
-        WhisperModel(rawValue: viewModel.configService.whisperModel) ?? .base
-    }
-
-    var body: some View {
-        Menu("Model: \(currentModel.displayName)") {
-            ForEach(WhisperModel.allCases, id: \.self) { model in
-                Button(action: {
-                    viewModel.setWhisperModel(model)
-                }) {
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(model.displayName)
-                        }
-                        if currentModel == model {
-                            Spacer()
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// TTS Voice submenu
-struct VoiceMenu: View {
-    @ObservedObject var viewModel: MenuBarViewModel
-
-    var body: some View {
-        Menu("Voice: \(viewModel.ttsVoice.displayName)") {
-            ForEach(KokoroVoice.allCases, id: \.self) { voice in
-                Button(action: {
-                    viewModel.setTtsVoice(voice)
-                }) {
-                    HStack {
-                        Text(voice.displayName)
-                        if viewModel.ttsVoice == voice {
-                            Spacer()
-                            Image(systemName: "checkmark")
-                        }
                     }
                 }
             }
@@ -200,7 +90,7 @@ struct SettingsMenu: View {
 
             Divider()
 
-            // Hotkey configuration - opens a window
+            // Hotkey configuration
             let toggleHotkey = viewModel.configService.getHotkey(for: .toggle)
             Button("Set Toggle Hotkey... (\(toggleHotkey.displayString))") {
                 viewModel.startRecordingHotkey(for: .toggle)
@@ -217,6 +107,89 @@ struct SettingsMenu: View {
             let ttsHotkey = viewModel.configService.getHotkey(for: .textToSpeech)
             Button("Set Read Aloud Hotkey... (\(ttsHotkey.displayString))") {
                 viewModel.startRecordingHotkey(for: .textToSpeech)
+            }
+        }
+    }
+}
+
+/// Advanced settings submenu
+struct AdvancedMenu: View {
+    @ObservedObject var viewModel: MenuBarViewModel
+
+    private var currentModel: WhisperModel {
+        WhisperModel(rawValue: viewModel.configService.whisperModel) ?? .base
+    }
+
+    var body: some View {
+        Menu("Advanced") {
+            // Output mode
+            Menu("Mode: \(viewModel.configService.outputMode.displayName)") {
+                ForEach(OutputMode.allCases, id: \.self) { mode in
+                    Button(action: {
+                        Task {
+                            await viewModel.setOutputMode(mode)
+                        }
+                    }) {
+                        HStack {
+                            Text(mode.displayName)
+                            if viewModel.configService.outputMode == mode {
+                                Spacer()
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Language
+            Menu("Language: \(viewModel.configService.language.displayName)") {
+                ForEach(Language.allCases, id: \.self) { language in
+                    Button(action: {
+                        viewModel.setLanguage(language)
+                    }) {
+                        HStack {
+                            Text(language.displayName)
+                            if viewModel.configService.language == language {
+                                Spacer()
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Whisper model
+            Menu("Whisper Model: \(currentModel.displayName)") {
+                ForEach(WhisperModel.allCases, id: \.self) { model in
+                    Button(action: {
+                        viewModel.setWhisperModel(model)
+                    }) {
+                        HStack {
+                            Text(model.displayName)
+                            if currentModel == model {
+                                Spacer()
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+
+            // TTS Voice
+            Menu("Voice: \(viewModel.ttsVoice.displayName)") {
+                ForEach(KokoroVoice.allCases, id: \.self) { voice in
+                    Button(action: {
+                        viewModel.setTtsVoice(voice)
+                    }) {
+                        HStack {
+                            Text(voice.displayName)
+                            if viewModel.ttsVoice == voice {
+                                Spacer()
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
             }
         }
     }
