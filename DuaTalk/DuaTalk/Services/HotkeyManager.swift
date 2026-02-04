@@ -7,6 +7,7 @@ protocol HotkeyManagerDelegate: AnyObject {
     func hotkeyPressed()
     func hotkeyReleased()
     func hotkeyRecorded(modifiers: [ModifierKey], key: String?)
+    func ttsHotkeyPressed()
 }
 
 /// Service for managing global hotkeys using CGEventTap
@@ -20,6 +21,10 @@ final class HotkeyManager {
     private var hotkeyMode: HotkeyMode
     private var isHotkeyActive = false
 
+    // TTS hotkey (always trigger-based, no toggle/PTT modes)
+    private var ttsHotkeyConfig: HotkeyConfig = .defaultTextToSpeech
+    private var isTtsHotkeyActive = false
+
     // Hotkey recording state
     private var isRecordingHotkey = false
     private var recordedModifiers: Set<ModifierKey> = []
@@ -30,10 +35,15 @@ final class HotkeyManager {
         self.hotkeyMode = .toggle
     }
 
-    /// Update the hotkey configuration
+    /// Update the dictation hotkey configuration
     func updateConfig(_ config: HotkeyConfig, mode: HotkeyMode) {
         self.hotkeyConfig = config
         self.hotkeyMode = mode
+    }
+
+    /// Update the TTS hotkey configuration
+    func updateTtsConfig(_ config: HotkeyConfig) {
+        self.ttsHotkeyConfig = config
     }
 
     /// Start listening for global hotkeys
@@ -156,7 +166,20 @@ final class HotkeyManager {
     }
 
     private func handleModifierEvent(flags: CGEventFlags) {
-        // For modifier-only hotkeys
+        // Check TTS hotkey (modifier-only, trigger-based)
+        if ttsHotkeyConfig.key == nil {
+            let ttsMatches = ttsHotkeyConfig.matchesModifiers(flags)
+            if ttsMatches && !isTtsHotkeyActive {
+                isTtsHotkeyActive = true
+                DispatchQueue.main.async { [weak self] in
+                    self?.delegate?.ttsHotkeyPressed()
+                }
+            } else if !ttsMatches && isTtsHotkeyActive {
+                isTtsHotkeyActive = false
+            }
+        }
+
+        // Check dictation hotkey (modifier-only)
         if hotkeyConfig.key == nil {
             let matches = hotkeyConfig.matchesModifiers(flags)
 
@@ -188,16 +211,26 @@ final class HotkeyManager {
     }
 
     private func handleKeyEvent(type: CGEventType, event: CGEvent, flags: CGEventFlags) {
-        guard let requiredKey = hotkeyConfig.key else { return }
-
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-        guard let pressedKey = keyCodeToString(UInt16(keyCode)),
-              pressedKey.lowercased() == requiredKey.lowercased() else {
+        guard let pressedKey = keyCodeToString(UInt16(keyCode)) else { return }
+
+        // Check TTS hotkey (key-based, trigger-based)
+        if let ttsKey = ttsHotkeyConfig.key,
+           pressedKey.lowercased() == ttsKey.lowercased(),
+           ttsHotkeyConfig.matchesModifiers(flags),
+           type == .keyDown {
+            DispatchQueue.main.async { [weak self] in
+                self?.delegate?.ttsHotkeyPressed()
+            }
             return
         }
 
-        // Check modifiers
-        guard hotkeyConfig.matchesModifiers(flags) else { return }
+        // Check dictation hotkey (key-based)
+        guard let requiredKey = hotkeyConfig.key,
+              pressedKey.lowercased() == requiredKey.lowercased(),
+              hotkeyConfig.matchesModifiers(flags) else {
+            return
+        }
 
         if type == .keyDown {
             if hotkeyMode == .toggle {

@@ -50,6 +50,12 @@ For enhanced output modes (General, Code Prompt), Ollama must be running locally
 ollama pull gemma3
 ```
 
+For text-to-speech (Read Aloud feature), Piper TTS must be installed:
+```bash
+brew install piper
+# Download a voice model (e.g., en_US-lessac-medium) from github.com/rhasspy/piper
+```
+
 ## Architecture
 
 The application follows a simple pipeline:
@@ -94,8 +100,19 @@ Hotkey → Recording → Whisper STT → Output Mode Formatting → Auto-paste +
 Default hotkeys:
 - **Toggle**: Shift+Ctrl
 - **Push-to-Talk**: Cmd+Shift
+- **Read Aloud (TTS)**: Cmd+Alt
 
 Hotkeys can be customized via Settings menu.
+
+## Text-to-Speech (Read Aloud)
+
+Select text in any application, press the TTS hotkey (Cmd+Alt by default), and the text will be read aloud using Piper TTS.
+
+**Requirements:**
+- Piper TTS installed (`brew install piper`)
+- A voice model downloaded (e.g., `en_US-lessac-medium.onnx`)
+
+Voice models should be placed in `~/.local/share/piper-voices/` or `~/piper-voices/`.
 
 ## Output Modes
 
@@ -140,7 +157,9 @@ The app supports three output modes for dictation formatting:
 │   ├── Push-to-Talk Mode
 │   ├── ────
 │   ├── Set Toggle Hotkey... (⇧⌃)
-│   └── Set Push-to-Talk Hotkey... (⌘⇧)
+│   ├── Set Push-to-Talk Hotkey... (⌘⇧)
+│   ├── ────
+│   └── Set Read Aloud Hotkey... (⌘⌥)
 ├── ────
 └── Quit
 ```
@@ -154,7 +173,8 @@ Settings are persisted in `~/Library/Application Support/Dua Talk/config.json`:
   "version": 2,
   "hotkeys": {
     "toggle": {"modifiers": ["shift", "ctrl"], "key": null},
-    "push_to_talk": {"modifiers": ["cmd", "shift"], "key": null}
+    "push_to_talk": {"modifiers": ["cmd", "shift"], "key": null},
+    "text_to_speech": {"modifiers": ["cmd", "alt"], "key": null}
   },
   "active_mode": "toggle",
   "output_mode": "general",
@@ -213,7 +233,7 @@ python dua_talk.py
 
 ### Menu Bar Features
 
-- **Icon states**: 🎤 (idle), 🔴 (recording), ⏳ (processing)
+- **Icon states**: 🎤 (idle), 🔴 (recording), ⏳ (processing), 🔊 (speaking)
 - **Menu**: Start/Stop Recording, History, Output Mode, Settings, Quit
 - **Hotkey**: Configurable via Settings menu
 - **Notifications**: macOS notifications for status updates

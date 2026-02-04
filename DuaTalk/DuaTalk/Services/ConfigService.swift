@@ -52,6 +52,7 @@ final class ConfigService: ObservableObject {
         switch mode {
         case .toggle: return config.hotkeys.toggle
         case .pushToTalk: return config.hotkeys.pushToTalk
+        case .textToSpeech: return config.hotkeys.textToSpeech
         }
     }
 
@@ -61,9 +62,15 @@ final class ConfigService: ObservableObject {
             config.hotkeys.toggle = hotkey
         case .pushToTalk:
             config.hotkeys.pushToTalk = hotkey
+        case .textToSpeech:
+            config.hotkeys.textToSpeech = hotkey
         }
         objectWillChange.send()
         save()
+    }
+
+    var ttsHotkey: HotkeyConfig {
+        config.hotkeys.textToSpeech
     }
 
     var activeHotkeyMode: HotkeyMode {

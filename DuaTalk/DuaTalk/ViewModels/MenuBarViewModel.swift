@@ -9,6 +9,7 @@ enum AppState {
     case loading
     case recording
     case processing
+    case speaking
 
     var icon: String {
         switch self {
@@ -16,6 +17,7 @@ enum AppState {
         case .loading: return "hourglass"
         case .recording: return "record.circle.fill"
         case .processing: return "hourglass"
+        case .speaking: return "speaker.wave.2.fill"
         }
     }
 
@@ -25,6 +27,7 @@ enum AppState {
         case .loading: return "⏳"
         case .recording: return "🔴"
         case .processing: return "⏳"
+        case .speaking: return "🔊"
         }
     }
 }
@@ -45,6 +48,8 @@ final class MenuBarViewModel: ObservableObject {
     private let audioFeedback: AudioFeedback
     private let clipboardManager: ClipboardManager
     private let hotkeyManager: HotkeyManager
+    private let ttsService: TextToSpeechService
+    private let textSelectionService: TextSelectionService
 
     // Hotkey recording state
     @Published var isRecordingHotkey = false
@@ -61,11 +66,13 @@ final class MenuBarViewModel: ObservableObject {
         self.audioFeedback = AudioFeedback()
         self.clipboardManager = ClipboardManager()
         self.hotkeyManager = HotkeyManager()
+        self.ttsService = TextToSpeechService()
+        self.textSelectionService = TextSelectionService(clipboardManager: clipboardManager)
 
         // Set up hotkey delegate
         hotkeyManager.delegate = self
 
-        // Update hotkey config
+        // Update hotkey configs (dictation + TTS)
         updateHotkeyConfig()
 
         // Forward ConfigService changes to trigger view updates
@@ -273,6 +280,17 @@ final class MenuBarViewModel: ObservableObject {
         )
     }
 
+    // MARK: - TTS Voice
+
+    var ttsVoice: KokoroVoice {
+        ttsService.voice
+    }
+
+    func setTtsVoice(_ voice: KokoroVoice) {
+        ttsService.voice = voice
+        sendNotification(title: "Voice Changed", body: "Now using \(voice.displayName)")
+    }
+
     // MARK: - Hotkey Recording
 
     func startRecordingHotkey(for mode: HotkeyMode) {
@@ -299,6 +317,53 @@ final class MenuBarViewModel: ObservableObject {
 
     private func updateHotkeyConfig() {
         hotkeyManager.updateConfig(configService.activeHotkey, mode: configService.activeHotkeyMode)
+        hotkeyManager.updateTtsConfig(configService.ttsHotkey)
+    }
+
+    // MARK: - Text-to-Speech
+
+    /// Speak selected text using TTS
+    func speakSelectedText() async {
+        guard appState == .idle else { return }
+
+        // Get selected text via Accessibility API or clipboard fallback
+        guard let text = textSelectionService.getSelectedText()
+              ?? textSelectionService.getSelectedTextViaClipboard() else {
+            sendNotification(title: "No Selection", body: "Please select text first")
+            return
+        }
+
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            sendNotification(title: "Empty Selection", body: "Selected text is empty")
+            return
+        }
+
+        // Check if Piper is available
+        guard ttsService.checkAvailable() else {
+            sendNotification(
+                title: "Piper TTS Not Found",
+                body: "Install with: brew install piper"
+            )
+            return
+        }
+
+        appState = .speaking
+        audioFeedback.beepOn()
+
+        do {
+            try await ttsService.speak(text)
+            audioFeedback.beepOff()
+        } catch {
+            sendNotification(title: "TTS Error", body: error.localizedDescription)
+        }
+
+        appState = .idle
+    }
+
+    /// Stop current TTS playback
+    func stopSpeaking() {
+        ttsService.stop()
+        appState = .idle
     }
 
     // MARK: - Notifications
@@ -377,6 +442,17 @@ extension MenuBarViewModel: HotkeyManagerDelegate {
                 title: "Hotkey Set",
                 body: "\(mode.displayName) hotkey set to \(hotkey.displayString)"
             )
+        }
+    }
+
+    nonisolated func ttsHotkeyPressed() {
+        Task { @MainActor in
+            // Toggle: if speaking, stop; otherwise start
+            if appState == .speaking {
+                stopSpeaking()
+            } else {
+                await speakSelectedText()
+            }
         }
     }
 }

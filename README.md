@@ -9,12 +9,15 @@ A minimal, fully offline dictation tool that runs as a macOS menu bar app. Trans
 git clone https://github.com/duadigital/dua-talk.git
 cd dua-talk/DuaTalk
 
+# Run setup (installs Kokoro TTS for read-aloud feature)
+./setup.sh
+
 # Build and run
 swift build
 .build/debug/DuaTalk
 ```
 
-The app will appear in your menu bar (🎤). First run will download the Whisper model.
+The app will appear in your menu bar (🎤). The Whisper model (~150MB) downloads automatically on first dictation.
 
 **Required permissions** (macOS will prompt you):
 - **Microphone** - for recording
@@ -73,6 +76,16 @@ The app requires these permissions in **System Settings → Privacy & Security**
 | **Push-to-Talk** | Cmd + Shift | Hold to record, release to stop |
 
 Hotkeys can be customized via the Settings menu.
+
+## Text-to-Speech (Read Aloud)
+
+Select text in any application and press `Cmd + Alt` to have it read aloud using Kokoro TTS.
+
+The setup script (`./setup.sh`) installs everything needed. The TTS server starts automatically when you use the feature.
+
+| Hotkey | Action |
+|--------|--------|
+| **Cmd + Alt** | Read selected text aloud |
 
 ## Output Modes
 
@@ -166,8 +179,20 @@ rm -rf .venv
 uv sync
 ```
 
+### Text-to-speech not working
+```bash
+# Re-run setup
+cd DuaTalk
+./setup.sh
+
+# Check if server files exist
+ls ~/.duatalk/
+# Should show: kokoro_server.py  venv/
+```
+
 ## Resources
 
 - [Whisper](https://github.com/openai/whisper) - OpenAI's speech recognition model
 - [WhisperKit](https://github.com/argmaxinc/WhisperKit) - Swift implementation used by the native app
+- [Kokoro TTS](https://github.com/hexgrad/kokoro) - Text-to-speech model for read aloud feature
 - [Ollama](https://ollama.ai) - Run LLMs locally

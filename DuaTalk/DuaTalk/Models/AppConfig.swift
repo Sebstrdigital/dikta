@@ -14,10 +14,25 @@ struct AppConfig: Codable {
     struct HotkeyConfigs: Codable {
         var toggle: HotkeyConfig
         var pushToTalk: HotkeyConfig
+        var textToSpeech: HotkeyConfig
 
         enum CodingKeys: String, CodingKey {
             case toggle
             case pushToTalk = "push_to_talk"
+            case textToSpeech = "text_to_speech"
+        }
+
+        init(toggle: HotkeyConfig, pushToTalk: HotkeyConfig, textToSpeech: HotkeyConfig = .defaultTextToSpeech) {
+            self.toggle = toggle
+            self.pushToTalk = pushToTalk
+            self.textToSpeech = textToSpeech
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            toggle = try container.decode(HotkeyConfig.self, forKey: .toggle)
+            pushToTalk = try container.decode(HotkeyConfig.self, forKey: .pushToTalk)
+            textToSpeech = try container.decodeIfPresent(HotkeyConfig.self, forKey: .textToSpeech) ?? .defaultTextToSpeech
         }
     }
 
@@ -37,7 +52,8 @@ struct AppConfig: Codable {
         version: 2,
         hotkeys: HotkeyConfigs(
             toggle: .defaultToggle,
-            pushToTalk: .defaultPushToTalk
+            pushToTalk: .defaultPushToTalk,
+            textToSpeech: .defaultTextToSpeech
         ),
         activeMode: .toggle,
         outputMode: .general,
