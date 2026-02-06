@@ -8,6 +8,7 @@ protocol HotkeyManagerDelegate: AnyObject {
     func hotkeyReleased()
     func hotkeyRecorded(modifiers: [ModifierKey], key: String?)
     func ttsHotkeyPressed()
+    func hotkeyManagerDidFailToStart(_ error: String)
 }
 
 /// Service for managing global hotkeys using CGEventTap
@@ -73,7 +74,10 @@ final class HotkeyManager {
         )
 
         guard let eventTap = eventTap else {
-            print("Failed to create event tap. Check Input Monitoring permissions.")
+            let error = "Failed to create event tap. Check Input Monitoring permissions."
+            DispatchQueue.main.async { [weak self] in
+                self?.delegate?.hotkeyManagerDidFailToStart(error)
+            }
             return
         }
 
@@ -107,6 +111,14 @@ final class HotkeyManager {
     }
 
     private func handleEvent(type: CGEventType, event: CGEvent) {
+        // Re-enable tap if macOS disabled it (e.g. after sleep/timeout)
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if let eventTap = eventTap {
+                CGEvent.tapEnable(tap: eventTap, enable: true)
+            }
+            return
+        }
+
         let flags = event.flags
 
         if isRecordingHotkey {

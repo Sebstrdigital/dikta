@@ -11,6 +11,7 @@ final class AudioFeedback {
     private var isPlaying = false
     private var samplesToPlay: Int = 0
     private var samplesPlayed: Int = 0
+    private var isReady = false
     
     // Sound parameters
     private var startFrequency: Double = 0
@@ -83,8 +84,9 @@ final class AudioFeedback {
 
         do {
             try audioEngine.start()
+            isReady = true
         } catch {
-            print("Failed to start audio engine for feedback: \(error)")
+            AppLogger.audio.error("Failed to start audio engine for feedback: \(error.localizedDescription)")
         }
     }
 
@@ -95,6 +97,7 @@ final class AudioFeedback {
     ///   - duration: Total duration in seconds
     ///   - attackTime: Attack time in seconds (fade in)
     private func playBubble(startFreq: Double, endFreq: Double, duration: Double, attackTime: Double) {
+        guard isReady else { return }
         phase = 0
         startFrequency = startFreq
         endFrequency = endFreq

@@ -46,6 +46,6 @@ final class ClipboardManager {
     func pasteText(_ text: String) {
         // Type text directly - bypasses clipboard entirely
         typeText(text)
-        print("[ClipboardManager] Typed \(text.count) characters directly")
+        AppLogger.general.debug("Typed \(text.count) characters directly")
     }
 }

@@ -2,10 +2,15 @@ import Foundation
 
 /// Service for formatting text using Ollama LLM
 final class LLMService {
-    private let baseURL = "http://localhost:11434"
+    private static let ollamaBaseURL = "http://localhost:11434"
+    private static let availabilityTimeout: TimeInterval = 2.0
+    private static let generateTimeout: TimeInterval = 30.0
+
+    private let baseURL: String
     private let model: String
 
     init(model: String = "gemma3") {
+        self.baseURL = Self.ollamaBaseURL
         self.model = model
     }
 
@@ -16,7 +21,7 @@ final class LLMService {
         }
 
         var request = URLRequest(url: url)
-        request.timeoutInterval = 2.0
+        request.timeoutInterval = Self.availabilityTimeout
 
         do {
             let (_, response) = try await URLSession.shared.data(for: request)
@@ -57,7 +62,7 @@ final class LLMService {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
-        request.timeoutInterval = 30.0
+        request.timeoutInterval = Self.generateTimeout
 
         let (data, response) = try await URLSession.shared.data(for: request)
 

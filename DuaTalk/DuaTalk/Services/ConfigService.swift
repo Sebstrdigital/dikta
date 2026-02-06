@@ -29,7 +29,7 @@ final class ConfigService: ObservableObject {
             let decoder = JSONDecoder()
             return try decoder.decode(AppConfig.self, from: data)
         } catch {
-            print("Failed to load config: \(error)")
+            AppLogger.config.error("Failed to load config: \(error.localizedDescription)")
             return nil
         }
     }
@@ -42,7 +42,7 @@ final class ConfigService: ObservableObject {
             let data = try encoder.encode(config)
             try data.write(to: configFile)
         } catch {
-            print("Failed to save config: \(error)")
+            AppLogger.config.error("Failed to save config: \(error.localizedDescription)")
         }
     }
 

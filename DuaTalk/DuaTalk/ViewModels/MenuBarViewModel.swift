@@ -338,11 +338,11 @@ final class MenuBarViewModel: ObservableObject {
             return
         }
 
-        // Check if Piper is available
-        guard ttsService.checkAvailable() else {
+        // Check if TTS server is available
+        guard await ttsService.checkAvailable() else {
             sendNotification(
-                title: "Piper TTS Not Found",
-                body: "Install with: brew install piper"
+                title: "TTS Not Available",
+                body: "TTS server not running. Run: cd DuaTalk && ./setup.sh"
             )
             return
         }
@@ -375,7 +375,7 @@ final class MenuBarViewModel: ObservableObject {
 
     private func sendNotification(title: String, body: String) {
         guard canUseNotifications else {
-            print("[\(title)] \(body)")
+            AppLogger.general.info("[\(title)] \(body)")
             return
         }
 
@@ -442,6 +442,12 @@ extension MenuBarViewModel: HotkeyManagerDelegate {
                 title: "Hotkey Set",
                 body: "\(mode.displayName) hotkey set to \(hotkey.displayString)"
             )
+        }
+    }
+
+    nonisolated func hotkeyManagerDidFailToStart(_ error: String) {
+        Task { @MainActor in
+            sendNotification(title: "Hotkey Error", body: error)
         }
     }
 

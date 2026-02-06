@@ -36,7 +36,7 @@ final class Transcriber: ObservableObject {
             loadingProgress = 1.0
         } catch {
             errorMessage = "Failed to load Whisper model: \(error.localizedDescription)"
-            print("Whisper model loading error: \(error)")
+            AppLogger.transcription.error("Whisper model loading error: \(error.localizedDescription)")
         }
 
         isLoading = false
@@ -64,11 +64,11 @@ final class Transcriber: ObservableObject {
             noSpeechThreshold: 0.6               // Detect silence/no speech
         )
 
-        print("[Transcriber] Using language: \(language ?? "auto"), samples: \(audioSamples.count)")
+        AppLogger.transcription.debug("Using language: \(language ?? "auto"), samples: \(audioSamples.count)")
 
         let result = try await whisperKit.transcribe(audioArray: audioSamples, decodeOptions: options)
 
-        print("[Transcriber] Got \(result.count) segments")
+        AppLogger.transcription.debug("Got \(result.count) segments")
 
         // Combine all segments into a single string
         let text = result.map { $0.text }.joined(separator: " ").trimmingCharacters(in: .whitespaces)

@@ -15,18 +15,21 @@ final class TextSelectionService {
 
         var focusedApp: AnyObject?
         let appResult = AXUIElementCopyAttributeValue(systemWideElement, kAXFocusedApplicationAttribute as CFString, &focusedApp)
-        guard appResult == .success, let app = focusedApp else {
+        guard appResult == .success, let focusedApp else {
             return nil
         }
+        // AXUIElement is a CoreFoundation type — cast always succeeds when non-nil
+        let appElement = focusedApp as! AXUIElement
 
         var focusedElement: AnyObject?
-        let elementResult = AXUIElementCopyAttributeValue(app as! AXUIElement, kAXFocusedUIElementAttribute as CFString, &focusedElement)
-        guard elementResult == .success, let element = focusedElement else {
+        let elementResult = AXUIElementCopyAttributeValue(appElement, kAXFocusedUIElementAttribute as CFString, &focusedElement)
+        guard elementResult == .success, let focusedElement else {
             return nil
         }
+        let element = focusedElement as! AXUIElement
 
         var selectedText: AnyObject?
-        let textResult = AXUIElementCopyAttributeValue(element as! AXUIElement, kAXSelectedTextAttribute as CFString, &selectedText)
+        let textResult = AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &selectedText)
 
         if textResult == .success, let text = selectedText as? String, !text.isEmpty {
             return text

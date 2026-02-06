@@ -22,6 +22,8 @@
     <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
     <key>LSUIElement</key>
     <true/>
+    <key>NSAccessibilityUsageDescription</key>
+    <string>Dua Talk needs accessibility access for global hotkeys, text selection, and auto-paste.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Dua Talk needs microphone access to record your voice for dictation.</string>
     <key>NSPrincipalClass</key>

@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import AppKit
 
 /// Available Kokoro TTS voices
 enum KokoroVoice: String, CaseIterable {
@@ -36,9 +37,16 @@ enum KokoroVoice: String, CaseIterable {
 
 /// Service for text-to-speech using Kokoro server (keeps model in memory)
 final class TextToSpeechService: NSObject {
+    private static let serverBaseURL = "http://127.0.0.1:59123"
+    private static let serverPort = 59123
+    private static let pingTimeout: TimeInterval = 1.0
+    private static let speakTimeout: TimeInterval = 120.0
+    private static let serverStartupAttempts = 120
+    private static let serverStartupInterval: UInt64 = 500_000_000 // 500ms
+
     private var audioPlayer: AVAudioPlayer?
     private var isSpeaking = false
-    private let serverURL = "http://127.0.0.1:59123"
+    private let serverURL: String
     var voice: KokoroVoice = .af_heart
     private var serverProcess: Process?
 
@@ -63,7 +71,15 @@ final class TextToSpeechService: NSObject {
     }
 
     override init() {
+        self.serverURL = Self.serverBaseURL
         super.init()
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(applicationWillTerminate),
+            name: NSApplication.willTerminateNotification,
+            object: nil
+        )
 
         // Try to start server if not running
         Task {
@@ -71,30 +87,62 @@ final class TextToSpeechService: NSObject {
         }
     }
 
+    @objc private func applicationWillTerminate() {
+        terminateServer()
+    }
+
+    private func terminateServer() {
+        serverProcess?.terminate()
+        serverProcess = nil
+    }
+
+    /// Kill any stale server process on port 59123
+    private func killStaleServer() {
+        let pipe = Pipe()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        process.arguments = ["-ti", ":\(Self.serverPort)"]
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !output.isEmpty {
+                // Kill stale processes
+                for pidString in output.components(separatedBy: "\n") {
+                    if let pid = Int32(pidString.trimmingCharacters(in: .whitespaces)) {
+                        kill(pid, SIGTERM)
+                    }
+                }
+                // Brief wait for processes to exit
+                usleep(500_000)
+            }
+        } catch {
+            // lsof not available or no process found — fine
+        }
+    }
+
     /// Check if TTS server is available
-    func checkAvailable() -> Bool {
+    func checkAvailable() async -> Bool {
         guard let url = URL(string: "\(serverURL)/ping") else { return false }
 
-        let semaphore = DispatchSemaphore(value: 0)
-        var isAvailable = false
-
         var request = URLRequest(url: url)
-        request.timeoutInterval = 1.0
+        request.timeoutInterval = Self.pingTimeout
 
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
-                isAvailable = true
-            }
-            semaphore.signal()
-        }.resume()
-
-        semaphore.wait()
-        return isAvailable
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            return (response as? HTTPURLResponse)?.statusCode == 200
+        } catch {
+            return false
+        }
     }
 
     /// Ensure the TTS server is running
     private func ensureServerRunning() async {
-        if checkAvailable() {
+        if await checkAvailable() {
             return
         }
 
@@ -102,9 +150,9 @@ final class TextToSpeechService: NSObject {
         await startServer()
 
         // Wait for it to be ready (up to 60 seconds for model loading)
-        for _ in 0..<120 {
-            try? await Task.sleep(nanoseconds: 500_000_000) // 500ms
-            if checkAvailable() {
+        for _ in 0..<Self.serverStartupAttempts {
+            try? await Task.sleep(nanoseconds: Self.serverStartupInterval)
+            if await checkAvailable() {
                 return
             }
         }
@@ -112,13 +160,16 @@ final class TextToSpeechService: NSObject {
 
     /// Start the Kokoro server
     private func startServer() async {
+        // Kill any stale server from a previous crash
+        killStaleServer()
+
         let duatalkDir = NSHomeDirectory() + "/.duatalk"
         let serverScript = duatalkDir + "/kokoro_server.py"
         let pythonPath = duatalkDir + "/venv/bin/python"
 
         guard FileManager.default.fileExists(atPath: serverScript),
               FileManager.default.fileExists(atPath: pythonPath) else {
-            print("Kokoro not set up. Run: cd DuaTalk && ./setup.sh")
+            AppLogger.tts.warning("Kokoro not set up. Run: cd DuaTalk && ./setup.sh")
             return
         }
 
@@ -131,9 +182,9 @@ final class TextToSpeechService: NSObject {
         do {
             try process.run()
             serverProcess = process
-            print("Started Kokoro server")
+            AppLogger.tts.info("Started Kokoro server")
         } catch {
-            print("Failed to start server: \(error)")
+            AppLogger.tts.error("Failed to start server: \(error.localizedDescription)")
         }
     }
 
@@ -149,9 +200,9 @@ final class TextToSpeechService: NSObject {
         }
 
         // Ensure server is running
-        if !checkAvailable() {
+        if !(await checkAvailable()) {
             await ensureServerRunning()
-            if !checkAvailable() {
+            if !(await checkAvailable()) {
                 throw TTSError.serverNotRunning
             }
         }
@@ -176,7 +227,7 @@ final class TextToSpeechService: NSObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 120.0  // XTTS can be slow
+        request.timeoutInterval = Self.speakTimeout
 
         let payload: [String: Any] = [
             "text": text,
@@ -218,6 +269,6 @@ final class TextToSpeechService: NSObject {
     }
 
     deinit {
-        serverProcess?.terminate()
+        terminateServer()
     }
 }

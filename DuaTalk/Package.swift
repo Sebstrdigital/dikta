@@ -10,7 +10,7 @@ let package = Package(
         .executable(name: "DuaTalk", targets: ["DuaTalk"])
     ],
     dependencies: [
-        .package(url: "https://github.com/argmaxinc/WhisperKit", from: "0.9.0")
+        .package(url: "https://github.com/argmaxinc/WhisperKit", "0.9.0"..<"0.10.0")
     ],
     targets: [
         .executableTarget(
