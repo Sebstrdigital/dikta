@@ -6,7 +6,7 @@ A minimal, fully offline dictation tool that runs as a macOS menu bar app. Trans
 
 ```bash
 # Clone the repo
-git clone https://github.com/duadigital/dua-talk.git
+git clone https://github.com/Sebstrdigital/dua-talk.git
 cd dua-talk/DuaTalk
 
 # Run setup (installs Kokoro TTS for read-aloud feature)
@@ -32,7 +32,7 @@ The app will appear in your menu bar (🎤). The Whisper model (~150MB) download
 brew install uv
 
 # Clone and setup
-git clone https://github.com/duadigital/dua-talk.git
+git clone https://github.com/Sebstrdigital/dua-talk.git
 cd dua-talk/python
 
 # Install and run
@@ -196,3 +196,7 @@ ls ~/.duatalk/
 - [WhisperKit](https://github.com/argmaxinc/WhisperKit) - Swift implementation used by the native app
 - [Kokoro TTS](https://github.com/hexgrad/kokoro) - Text-to-speech model for read aloud feature
 - [Ollama](https://ollama.ai) - Run LLMs locally
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
