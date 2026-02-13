@@ -41,6 +41,28 @@ swift build
 open DuaTalk.xcodeproj
 ```
 
+### Release Build (xcodebuild)
+
+When building outside Xcode, the WhisperKit dependency's `swift-transformers_Hub.bundle` gets `com.apple.FinderInfo` extended attributes that cause code signing to fail with "resource fork, Finder information, or similar detritus not allowed". The workaround is to copy the `.app` to `/tmp`, strip xattrs, then sign:
+
+```bash
+cd DuaTalk
+
+# Build
+xcodebuild clean build -project DuaTalk.xcodeproj -scheme DuaTalk \
+    -configuration Release -derivedDataPath build/derived -quiet
+
+# Copy to /tmp, strip xattrs, sign
+cp -R "build/derived/Build/Products/Release/Dua Talk.app" "/tmp/Dua Talk.app"
+xattr -cr "/tmp/Dua Talk.app"
+codesign --force --deep --sign "Developer ID Application: Sebastian Strandberg (UUM29335B4)" "/tmp/Dua Talk.app"
+```
+
+Or use the full release script which handles signing, notarization, and DMG creation:
+```bash
+./scripts/build-release.sh
+```
+
 ## Prerequisites
 
 For basic dictation (Raw mode), no external services are required.

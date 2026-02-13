@@ -12,6 +12,8 @@
 		100000000000000000000002 /* HotkeyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000002 /* HotkeyConfig.swift */; };
 		100000000000000000000003 /* HistoryItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000003 /* HistoryItem.swift */; };
 		100000000000000000000004 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000004 /* AppConfig.swift */; };
+		100000000000000000000005 /* Language.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000005 /* Language.swift */; };
+		100000000000000000000006 /* WhisperModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000006 /* WhisperModel.swift */; };
 
 		/* Services */
 		100000000000000000000011 /* ConfigService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000011 /* ConfigService.swift */; };
@@ -21,18 +23,25 @@
 		100000000000000000000015 /* LLMService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000015 /* LLMService.swift */; };
 		100000000000000000000016 /* ClipboardManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000016 /* ClipboardManager.swift */; };
 		100000000000000000000017 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* HotkeyManager.swift */; };
+		100000000000000000000018 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000018 /* Logger.swift */; };
+		100000000000000000000019 /* TextToSpeechService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000019 /* TextToSpeechService.swift */; };
+		100000000000000000000020 /* TextSelectionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000020 /* TextSelectionService.swift */; };
 
 		/* ViewModels */
 		100000000000000000000021 /* MenuBarViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000021 /* MenuBarViewModel.swift */; };
 
 		/* Views */
 		100000000000000000000031 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000031 /* MenuBarView.swift */; };
+		100000000000000000000032 /* HotkeyRecordingWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000032 /* HotkeyRecordingWindow.swift */; };
+		100000000000000000000033 /* OnboardingWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000033 /* OnboardingWindow.swift */; };
 
 		/* App */
 		100000000000000000000041 /* DuaTalkApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000041 /* DuaTalkApp.swift */; };
 
 		/* Resources */
 		100000000000000000000051 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000051 /* Assets.xcassets */; };
+		100000000000000000000052 /* kokoro_server.py in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000054 /* kokoro_server.py */; };
+		100000000000000000000053 /* setup.sh in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000055 /* setup.sh */; };
 
 		/* WhisperKit */
 		100000000000000000000061 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 300000000000000000000001 /* WhisperKit */; };
@@ -44,6 +53,8 @@
 		200000000000000000000002 /* HotkeyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyConfig.swift; sourceTree = "<group>"; };
 		200000000000000000000003 /* HistoryItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryItem.swift; sourceTree = "<group>"; };
 		200000000000000000000004 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+		200000000000000000000005 /* Language.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Language.swift; sourceTree = "<group>"; };
+		200000000000000000000006 /* WhisperModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperModel.swift; sourceTree = "<group>"; };
 
 		/* Services */
 		200000000000000000000011 /* ConfigService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigService.swift; sourceTree = "<group>"; };
@@ -53,12 +64,17 @@
 		200000000000000000000015 /* LLMService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMService.swift; sourceTree = "<group>"; };
 		200000000000000000000016 /* ClipboardManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManager.swift; sourceTree = "<group>"; };
 		200000000000000000000017 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
+		200000000000000000000018 /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
+		200000000000000000000019 /* TextToSpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextToSpeechService.swift; sourceTree = "<group>"; };
+		200000000000000000000020 /* TextSelectionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextSelectionService.swift; sourceTree = "<group>"; };
 
 		/* ViewModels */
 		200000000000000000000021 /* MenuBarViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModel.swift; sourceTree = "<group>"; };
 
 		/* Views */
 		200000000000000000000031 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
+		200000000000000000000032 /* HotkeyRecordingWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyRecordingWindow.swift; sourceTree = "<group>"; };
+		200000000000000000000033 /* OnboardingWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingWindow.swift; sourceTree = "<group>"; };
 
 		/* App */
 		200000000000000000000041 /* DuaTalkApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuaTalkApp.swift; sourceTree = "<group>"; };
@@ -67,6 +83,8 @@
 		200000000000000000000051 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		200000000000000000000052 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		200000000000000000000053 /* DuaTalk.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DuaTalk.entitlements; sourceTree = "<group>"; };
+		200000000000000000000054 /* kokoro_server.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = kokoro_server.py; path = ../../kokoro_server.py; sourceTree = "<group>"; };
+		200000000000000000000055 /* setup.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; name = setup.sh; path = ../../setup.sh; sourceTree = "<group>"; };
 
 		/* Product */
 		400000000000000000000001 /* Dua Talk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Dua Talk.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -112,6 +130,8 @@
 				200000000000000000000002 /* HotkeyConfig.swift */,
 				200000000000000000000003 /* HistoryItem.swift */,
 				200000000000000000000004 /* AppConfig.swift */,
+				200000000000000000000005 /* Language.swift */,
+				200000000000000000000006 /* WhisperModel.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -126,6 +146,9 @@
 				200000000000000000000015 /* LLMService.swift */,
 				200000000000000000000016 /* ClipboardManager.swift */,
 				200000000000000000000017 /* HotkeyManager.swift */,
+				200000000000000000000018 /* Logger.swift */,
+				200000000000000000000019 /* TextToSpeechService.swift */,
+				200000000000000000000020 /* TextSelectionService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -142,6 +165,8 @@
 			isa = PBXGroup;
 			children = (
 				200000000000000000000031 /* MenuBarView.swift */,
+				200000000000000000000032 /* HotkeyRecordingWindow.swift */,
+				200000000000000000000033 /* OnboardingWindow.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -152,6 +177,8 @@
 				200000000000000000000051 /* Assets.xcassets */,
 				200000000000000000000052 /* Info.plist */,
 				200000000000000000000053 /* DuaTalk.entitlements */,
+				200000000000000000000054 /* kokoro_server.py */,
+				200000000000000000000055 /* setup.sh */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -229,6 +256,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				100000000000000000000051 /* Assets.xcassets in Resources */,
+				100000000000000000000052 /* kokoro_server.py in Resources */,
+				100000000000000000000053 /* setup.sh in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -253,6 +282,13 @@
 				100000000000000000000021 /* MenuBarViewModel.swift in Sources */,
 				100000000000000000000031 /* MenuBarView.swift in Sources */,
 				100000000000000000000041 /* DuaTalkApp.swift in Sources */,
+				100000000000000000000005 /* Language.swift in Sources */,
+				100000000000000000000006 /* WhisperModel.swift in Sources */,
+				100000000000000000000018 /* Logger.swift in Sources */,
+				100000000000000000000019 /* TextToSpeechService.swift in Sources */,
+				100000000000000000000020 /* TextSelectionService.swift in Sources */,
+				100000000000000000000032 /* HotkeyRecordingWindow.swift in Sources */,
+				100000000000000000000033 /* OnboardingWindow.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -383,15 +419,16 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = DuaTalk/Resources/DuaTalk.entitlements;
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = UUM29335B4;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DuaTalk/Resources/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Sebastian Strandberg. All rights reserved.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dua Talk needs microphone access to record your voice for dictation.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -411,15 +448,16 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = DuaTalk/Resources/DuaTalk.entitlements;
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = UUM29335B4;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DuaTalk/Resources/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Sebastian Strandberg. All rights reserved.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dua Talk needs microphone access to record your voice for dictation.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
