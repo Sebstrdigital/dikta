@@ -95,7 +95,10 @@ final class MenuBarViewModel: ObservableObject {
     func initialize() async {
         appState = .loading
 
-        // Check microphone permission
+        // Always show onboarding on app start
+        OnboardingWindowController.shared.show()
+
+        // Now request mic permission (shows system dialog if not determined)
         let hasMicPermission = await AudioRecorder.checkPermission()
         if !hasMicPermission {
             sendNotification(title: "Permission Required", body: "Please grant Microphone access in System Preferences")
@@ -122,12 +125,6 @@ final class MenuBarViewModel: ObservableObject {
             sendNotification(title: "Ready", body: "Whisper model loaded. Use \(hotkey) to record.")
         } else {
             sendNotification(title: "Error", body: transcriber.errorMessage ?? "Failed to load model")
-        }
-
-        // Show onboarding if essential permissions are missing
-        let hasAccessibility = AXIsProcessTrusted()
-        if !hasMicPermission || !hasAccessibility {
-            OnboardingWindowController.shared.show()
         }
     }
 
