@@ -65,25 +65,16 @@ Or use the full release script which handles signing, notarization, and DMG crea
 
 ## Prerequisites
 
-For basic dictation (Raw mode), no external services are required.
+No external services are required for dictation. The app runs fully offline using WhisperKit.
 
-For enhanced output modes (General, Code Prompt), Ollama must be running locally:
-```bash
-ollama pull gemma3
-```
-
-For text-to-speech (Read Aloud feature), Piper TTS must be installed:
-```bash
-brew install piper
-# Download a voice model (e.g., en_US-lessac-medium) from github.com/rhasspy/piper
-```
+For text-to-speech (Read Aloud feature), Kokoro TTS is set up from within the app's onboarding window.
 
 ## Architecture
 
 The application follows a simple pipeline:
 
 ```
-Hotkey → Recording → Whisper STT → Output Mode Formatting → Auto-paste + History
+Hotkey → Recording → Whisper STT → Auto-paste + History
 ```
 
 ### Key Components (Python)
@@ -104,11 +95,6 @@ Hotkey → Recording → Whisper STT → Output Mode Formatting → Auto-paste +
 - **350 Hz beep**: Recording started
 - **280 Hz beep**: Recording stopped, text pasted
 
-## CLI Arguments
-
-- `--model`: Ollama model for LLM formatting (default: gemma3)
-- `--whisper-model`: Whisper model size (default: base.en)
-
 ## Hotkey Modes
 
 ### Toggle Mode (default)
@@ -128,52 +114,19 @@ Hotkeys can be customized via Settings menu.
 
 ## Text-to-Speech (Read Aloud)
 
-Select text in any application, press the TTS hotkey (Cmd+Alt by default), and the text will be read aloud using Piper TTS.
+Select text in any application, press the TTS hotkey (Cmd+Alt by default), and the text will be read aloud using Kokoro TTS.
 
-**Requirements:**
-- Piper TTS installed (`brew install piper`)
-- A voice model downloaded (e.g., `en_US-lessac-medium.onnx`)
-
-Voice models should be placed in `~/.local/share/piper-voices/` or `~/piper-voices/`.
-
-## Output Modes
-
-The app supports three output modes for dictation formatting:
-
-| Mode | Requires Ollama | Description |
-|------|-----------------|-------------|
-| **Raw** | No | Verbatim Whisper transcription (default fallback) |
-| **General** | Yes (gemma3) | Clean up fillers, fix punctuation, natural prose |
-| **Code Prompt** | Yes (gemma3) | Structured prompts for AI coding assistants |
-
-**Default behavior:**
-- If Ollama available: defaults to **General** mode
-- If Ollama unavailable: shows notification and falls back to **Raw** mode
-
-### Example Transformations
-
-**General Mode:**
-- Raw: "um so I was thinking that we should probably you know schedule a meeting"
-- Output: "I was thinking we should schedule a meeting."
-
-**Code Prompt Mode:**
-- Raw: "um so I need you to create a function that uh validates email addresses"
-- Output: "Create a function that validates email addresses..."
+Set up TTS from the onboarding window (Setup... in the menu bar). The app creates a Python venv and installs Kokoro automatically.
 
 ## Menu Structure
 
 ```
 🎤 Dua Talk
-├── Start Recording
-├── ────
+├── Stop Recording / Stop Speaking / Processing...
 ├── History >
 │   ├── "Last dictation preview..."
 │   └── (up to 5 items)
 ├── ────
-├── Mode: General >
-│   ├── Raw
-│   ├── General ✓
-│   └── Code Prompt
 ├── Settings >
 │   ├── Toggle Mode ✓
 │   ├── Push-to-Talk Mode
@@ -182,7 +135,12 @@ The app supports three output modes for dictation formatting:
 │   ├── Set Push-to-Talk Hotkey... (⌘⇧)
 │   ├── ────
 │   └── Set Read Aloud Hotkey... (⌘⌥)
+├── Advanced >
+│   ├── Language: English >
+│   ├── Whisper Model: Small >
+│   └── Voice: ... >
 ├── ────
+├── Setup...
 └── Quit
 ```
 
@@ -199,16 +157,13 @@ Settings are persisted in `~/Library/Application Support/Dua Talk/config.json`:
     "text_to_speech": {"modifiers": ["cmd", "alt"], "key": null}
   },
   "active_mode": "toggle",
-  "output_mode": "general",
   "history": [
     {
       "text": "Hello world",
-      "timestamp": "2024-01-15T10:30:00Z",
-      "output_mode": "general"
+      "timestamp": "2024-01-15T10:30:00Z"
     }
   ],
-  "whisper_model": "base.en",
-  "llm_model": "gemma3"
+  "whisper_model": "small"
 }
 ```
 
