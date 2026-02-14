@@ -37,7 +37,8 @@ enum OutputMode: String, Codable, CaseIterable {
                 - Remove stuttering and repeated words
                 - Fix punctuation, grammar, and sentence structure
                 - Keep technical terms and meaningful content exactly as spoken
-                - Break into paragraphs when the topic shifts or the speaker says "new paragraph" or "new line"
+                - Break into paragraphs when the topic shifts, the time or date changes, or the speaker says "new paragraph" or "new line"
+                - For emails: put a blank line after the greeting, between paragraphs, and before the sign-off. Put the name on its own line after the sign-off
                 - Output only the cleaned text, nothing else
                 """
             case .swedish:
@@ -49,7 +50,8 @@ enum OutputMode: String, Codable, CaseIterable {
                 - Ta bort stamning och upprepade ord
                 - Fixa interpunktion, grammatik och meningsuppbyggnad
                 - Bevara tekniska termer och meningsfullt innehåll exakt som det sägs
-                - Dela upp i stycken när ämnet skiftar eller talaren säger "nytt stycke" eller "ny rad"
+                - Dela upp i stycken när ämnet skiftar, tid eller datum ändras, eller talaren säger "nytt stycke" eller "ny rad"
+                - För mejl: lägg en tom rad efter hälsningen, mellan stycken, och före avslutningen. Sätt namnet på en egen rad efter avslutningen
                 - Skriv bara den städade texten, inget annat
                 """
             }
