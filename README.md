@@ -1,202 +1,102 @@
 # Dua Talk
 
-A minimal, fully offline dictation tool that runs as a macOS menu bar app. Transcribes speech to clipboard using a global hotkey and optionally formats output with a local LLM.
+A minimal, fully offline dictation app for macOS. Press a hotkey, speak, and your words are pasted instantly. No cloud services, no subscriptions.
 
-## Quick Start (Swift - Recommended)
+## Install
+
+Download the latest DMG from [Releases](https://github.com/Sebstrdigital/dua-talk/releases), drag to Applications, and launch. The setup screen will guide you through permissions.
+
+Or build from source:
 
 ```bash
-# Clone the repo
 git clone https://github.com/Sebstrdigital/dua-talk.git
 cd dua-talk/DuaTalk
-
-# Run setup (installs Kokoro TTS for read-aloud feature)
-./setup.sh
-
-# Build and run
 swift build
 .build/debug/DuaTalk
 ```
 
-The app will appear in your menu bar (🎤). The Whisper model (~150MB) downloads automatically on first dictation.
-
-**Required permissions** (macOS will prompt you):
-- **Microphone** - for recording
-- **Accessibility** - for hotkeys (System Settings → Privacy & Security → Accessibility → add Terminal)
-
-**Default hotkey**: `Shift + Ctrl` to start/stop recording.
-
-## Quick Start (Python)
-
-```bash
-# Install uv (package manager)
-brew install uv
-
-# Clone and setup
-git clone https://github.com/Sebstrdigital/dua-talk.git
-cd dua-talk/python
-
-# Install and run
-uv sync
-source .venv/bin/activate
-python dua_talk.py
-```
-
 ## Features
 
-- **Fully Offline**: Uses Whisper for speech-to-text, no cloud services required
-- **Menu Bar App**: Runs unobtrusively in your macOS menu bar
-- **Global Hotkey**: Toggle or push-to-talk recording from anywhere
-- **Output Modes**: Raw transcription, general cleanup, or code prompt formatting
-- **Auto-paste**: Automatically pastes transcription after recording
-- **History**: Access your last 5 dictations from the menu
-- **Audio Feedback**: Sounds indicate recording start/stop
+- **Fully Offline** — WhisperKit runs speech-to-text locally on your Mac
+- **Menu Bar App** — sits quietly in your menu bar
+- **Global Hotkeys** — toggle or push-to-talk recording from any app
+- **fn/Globe Key Support** — use the fn key as a hotkey modifier
+- **Auto-paste** — transcription goes straight to your cursor
+- **Text-to-Speech** — select text and have it read aloud via Kokoro TTS
+- **History** — access your last 5 dictations from the menu
+- **Multi-language** — English and Swedish
 
-## Implementations
+## Permissions
 
-This repository contains two implementations:
-- **DuaTalk/**: Native Swift/SwiftUI implementation (recommended)
-- **python/**: Python implementation using rumps, pynput, and Whisper
+The setup screen checks these for you on first launch:
 
-## macOS Permissions
+| Permission | Why | How |
+|------------|-----|-----|
+| **Microphone** | Record audio | Click "Grant" on the setup screen |
+| **Accessibility** | Global hotkeys + auto-paste | System Settings > Privacy & Security > Accessibility |
 
-The app requires these permissions in **System Settings → Privacy & Security**:
+## Hotkeys
 
-| Permission | Why | How to Grant |
-|------------|-----|--------------|
-| **Microphone** | Recording audio | macOS will prompt on first use |
-| **Accessibility** | Global hotkeys + auto-paste | Manually add Terminal (or the .app) in System Settings |
+All hotkeys are customizable via **Settings** in the menu bar.
 
-**Important**: After granting Accessibility permission, you may need to restart the app.
-
-## Hotkey Modes
-
-| Mode | Default Hotkey | Behavior |
-|------|----------------|----------|
+| Mode | Default | Behavior |
+|------|---------|----------|
 | **Toggle** | Shift + Ctrl | Press to start, press again to stop |
 | **Push-to-Talk** | Cmd + Shift | Hold to record, release to stop |
+| **Read Aloud** | Cmd + Alt | Reads selected text aloud |
 
-Hotkeys can be customized via the Settings menu.
+Switch between Toggle and Push-to-Talk in the Settings menu.
 
-## Text-to-Speech (Read Aloud)
+## Text-to-Speech
 
-Select text in any application and press `Cmd + Alt` to have it read aloud using Kokoro TTS.
+Select text in any app and press the Read Aloud hotkey. Set up the TTS engine from the setup screen (Setup... in the menu bar) — it downloads Kokoro TTS automatically.
 
-The setup script (`./setup.sh`) installs everything needed. The TTS server starts automatically when you use the feature.
+## Advanced Settings
 
-| Hotkey | Action |
-|--------|--------|
-| **Cmd + Alt** | Read selected text aloud |
+Available under **Advanced** in the menu bar:
 
-## Output Modes
+| Setting | Options |
+|---------|---------|
+| **Language** | English, Svenska |
+| **Whisper Model** | Small (~500MB, balanced), Medium (~1.5GB, accurate) |
+| **Voice** | Multiple Kokoro TTS voices |
 
-| Mode | Requires Ollama | Description |
-|------|-----------------|-------------|
-| **Raw** | No | Verbatim Whisper transcription |
-| **General** | Yes | Removes fillers, fixes punctuation |
-| **Code Prompt** | Yes | Formats as prompts for AI coding assistants |
-
-For General and Code Prompt modes, install Ollama first:
+## Building a Release
 
 ```bash
-# Install Ollama (https://ollama.ai)
-brew install ollama
-
-# Start the Ollama service
-ollama serve &
-
-# Pull the required model
-ollama pull gemma3
+cd DuaTalk
+./scripts/build-release.sh
 ```
 
-The app will automatically detect if Ollama is available and fall back to Raw mode if not.
+This archives, signs, bundles the Whisper model, notarizes with Apple, and produces a DMG at `build/DuaTalk.dmg`.
 
-## CLI Options
+Requires a Developer ID certificate and notarization credentials (see script header for setup).
 
-```bash
-python dua_talk.py --help
-```
+## Python Implementation
 
-- `--model`: Ollama model for LLM formatting (default: gemma3)
-- `--whisper-model`: Whisper model size (default: base.en)
-
-### Whisper Model Options
-
-| Model | Size | Speed | Accuracy |
-|-------|------|-------|----------|
-| `tiny.en` | 39M | Fastest | Good |
-| `base.en` | 74M | Fast | Better (default) |
-| `small.en` | 244M | Medium | Great |
-| `medium.en` | 769M | Slow | Excellent |
-
-## Building the macOS App (Python)
+A legacy Python implementation is also available in `python/`. See `python/` for details.
 
 ```bash
 cd python
-
-# Install build dependencies
-uv pip install "py2app>=0.28.0,<0.28.9" "setuptools>=69.0.0,<80"
-
-# Build standalone app
-python setup.py py2app
-
-# Run the built app
-open "dist/Dua Talk.app"
+uv sync && source .venv/bin/activate
+python dua_talk.py
 ```
 
 ## Troubleshooting
 
-### Hotkey not working
-1. Check Accessibility permission: System Settings → Privacy & Security → Accessibility
-2. Add Terminal (or the app) to the list
-3. Restart the app after granting permission
+**Hotkey not working** — Check that the app (or Terminal for dev builds) is listed in System Settings > Privacy & Security > Accessibility. Restart after granting.
 
-### No audio / Microphone not working
-1. Check Microphone permission: System Settings → Privacy & Security → Microphone
-2. Ensure your mic is selected as input device in System Settings → Sound
+**Microphone not detected** — Click "Grant" on the setup screen, or manually enable in System Settings > Privacy & Security > Microphone.
 
-### LLM modes not working (General/Code Prompt)
-```bash
-# Check if Ollama is running
-ollama list
+**Text-to-speech not working** — Open the setup screen (Setup... in menu bar) and click "Set Up" next to Text-to-Speech. Requires Python 3.
 
-# If not running, start it
-ollama serve &
-
-# Pull the model if missing
-ollama pull gemma3
-```
-
-### App won't start / Build fails
-```bash
-# Clean and rebuild (Swift)
-cd DuaTalk
-rm -rf .build
-swift build
-
-# For Python, recreate venv
-cd python
-rm -rf .venv
-uv sync
-```
-
-### Text-to-speech not working
-```bash
-# Re-run setup
-cd DuaTalk
-./setup.sh
-
-# Check if server files exist
-ls ~/.duatalk/
-# Should show: kokoro_server.py  venv/
-```
+**App won't start** — Clean and rebuild: `cd DuaTalk && rm -rf .build && swift build`
 
 ## Resources
 
-- [Whisper](https://github.com/openai/whisper) - OpenAI's speech recognition model
-- [WhisperKit](https://github.com/argmaxinc/WhisperKit) - Swift implementation used by the native app
-- [Kokoro TTS](https://github.com/hexgrad/kokoro) - Text-to-speech model for read aloud feature
-- [Ollama](https://ollama.ai) - Run LLMs locally
+- [WhisperKit](https://github.com/argmaxinc/WhisperKit) — On-device speech recognition for Apple Silicon
+- [Kokoro TTS](https://github.com/hexgrad/kokoro) — Text-to-speech engine
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+[MIT License](LICENSE)
