@@ -7,6 +7,7 @@ enum ModifierKey: String, Codable, CaseIterable {
     case ctrl
     case cmd
     case alt
+    case fn
 
     /// Display symbol for the modifier
     var symbol: String {
@@ -15,6 +16,7 @@ enum ModifierKey: String, Codable, CaseIterable {
         case .ctrl: return "⌃"
         case .cmd: return "⌘"
         case .alt: return "⌥"
+        case .fn: return "fn"
         }
     }
 
@@ -25,6 +27,7 @@ enum ModifierKey: String, Codable, CaseIterable {
         case .ctrl: return .maskControl
         case .cmd: return .maskCommand
         case .alt: return .maskAlternate
+        case .fn: return .maskSecondaryFn
         }
     }
 }
