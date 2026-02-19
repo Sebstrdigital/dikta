@@ -230,6 +230,12 @@ struct OnboardingView: View {
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
+
+                if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+                    Text("v\(version)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
             .padding(.top, 28)
             .padding(.bottom, 20)

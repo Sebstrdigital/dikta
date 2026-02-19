@@ -92,9 +92,10 @@ echo "    Model bundled ($(du -sh "${WHISPER_MODEL_DEST}" | cut -f1) total)"
 echo "==> Stripping extended attributes..."
 xattr -cr "${APP_EXPORT}"
 
-# Re-sign after stripping xattrs
+# Re-sign after stripping xattrs (must pass entitlements or they get stripped)
+ENTITLEMENTS="${PROJECT_DIR}/DuaTalk/Resources/DuaTalk.entitlements"
 echo "==> Signing app..."
-codesign --force --deep --options runtime --sign "${SIGNING_IDENTITY}" "${APP_EXPORT}"
+codesign --force --deep --options runtime --entitlements "${ENTITLEMENTS}" --sign "${SIGNING_IDENTITY}" "${APP_EXPORT}"
 
 # Step 3: Verify code signing
 echo "==> Verifying code signature..."
