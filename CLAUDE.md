@@ -4,223 +4,112 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Dua Talk is a minimal, fully offline dictation application that transcribes speech to clipboard using a global hotkey. It uses Whisper for speech-to-text and runs as a macOS menu bar app.
+Dua Talk is a minimal, fully offline dictation app for macOS (v0.1). It transcribes speech to clipboard using a global hotkey, running as a menu bar app. No cloud services required.
 
-This repository contains two implementations:
-- **python/**: Python implementation using rumps, pynput, and Whisper
-- **DuaTalk/**: Native Swift/SwiftUI implementation
-
-## Python Development Commands
-
-```bash
-cd python
-
-# Install dependencies (recommended)
-uv sync
-source .venv/bin/activate
-
-# Alternative: pip install
-pip install -e .
-
-# Run the app
-python dua_talk.py
-
-# Run with different Whisper model
-python dua_talk.py --whisper-model small.en
-```
+The primary implementation is **DuaTalk/** (native Swift/SwiftUI). A legacy Python implementation exists in **python/**.
 
 ## Swift Development
 
 ```bash
 cd DuaTalk
 
-# Build with Swift Package Manager
+# Build and run
 swift build
+.build/debug/DuaTalk
 
 # Or open in Xcode
 open DuaTalk.xcodeproj
 ```
 
-### Release Build (xcodebuild)
+### Release Build
 
-When building outside Xcode, the WhisperKit dependency's `swift-transformers_Hub.bundle` gets `com.apple.FinderInfo` extended attributes that cause code signing to fail with "resource fork, Finder information, or similar detritus not allowed". The workaround is to copy the `.app` to `/tmp`, strip xattrs, then sign:
+The full release script handles archiving, signing, bundling the Whisper model, notarization, and DMG creation:
 
-```bash
-cd DuaTalk
-
-# Build
-xcodebuild clean build -project DuaTalk.xcodeproj -scheme DuaTalk \
-    -configuration Release -derivedDataPath build/derived -quiet
-
-# Copy to /tmp, strip xattrs, sign
-cp -R "build/derived/Build/Products/Release/Dua Talk.app" "/tmp/Dua Talk.app"
-xattr -cr "/tmp/Dua Talk.app"
-codesign --force --deep --sign "Developer ID Application: Sebastian Strandberg (UUM29335B4)" "/tmp/Dua Talk.app"
-```
-
-Or use the full release script which handles signing, notarization, and DMG creation:
 ```bash
 ./scripts/build-release.sh
 ```
 
-## Prerequisites
+Output: `DuaTalk/build/DuaTalk.dmg`
 
-No external services are required for dictation. The app runs fully offline using WhisperKit.
-
-For text-to-speech (Read Aloud feature), Kokoro TTS is set up from within the app's onboarding window.
+**Important build note**: The re-signing step after bundling the Whisper model must pass `--entitlements` or they get stripped. This is handled in the script.
 
 ## Architecture
 
-The application follows a simple pipeline:
-
 ```
-Hotkey → Recording → Whisper STT → Auto-paste + History
+Hotkey → Recording → WhisperKit STT → Auto-paste + History
 ```
 
-### Key Components (Python)
+### Key Files (Swift)
 
-- **python/dua_talk.py**: Main application with menu bar and global hotkey
-  - `ConfigManager`: Persistent settings stored in `~/Library/Application Support/Dua Talk/config.json`
-  - `OutputMode`: Defines available output modes (Raw, General, Code Prompt)
-  - Menu bar integration via `rumps`
-  - Global hotkey detection via `pynput`
-  - Audio recording via `sounddevice`
-  - Speech-to-text via Whisper
-  - Mode-specific text formatting via Ollama (optional)
-  - Auto-paste via simulated Cmd+V (preserves original clipboard)
-  - History menu with last 5 dictations
+- **Models/**
+  - `AppConfig.swift` — Full config structure, persisted as JSON
+  - `HotkeyConfig.swift` — Modifier keys (shift, ctrl, cmd, alt, fn), hotkey matching logic
+  - `WhisperModel.swift` — Available models: small, medium
+  - `Language.swift` — Supported languages: English, Swedish
+- **Services/**
+  - `HotkeyManager.swift` — CGEventTap-based global hotkey detection (flagsChanged + keyDown/keyUp)
+  - `ConfigService.swift` — Singleton config manager, persists to `~/Library/Application Support/Dua Talk/config.json`
+  - `TextToSpeechService.swift` — Kokoro TTS integration via local Python server
+  - `TextSelectionService.swift` — Gets selected text via Accessibility API
+  - `ClipboardManager.swift` — Clipboard operations and auto-paste (Cmd+V simulation)
+- **ViewModels/**
+  - `MenuBarViewModel.swift` — Main app state machine (idle/loading/recording/processing/speaking), delegates hotkey events
+- **Views/**
+  - `MenuBarView.swift` — Menu structure: Settings, Advanced, History
+  - `OnboardingWindow.swift` — Setup screen with permission checks, TTS install, version display
+  - `HotkeyRecordingWindow.swift` — Hotkey capture UI
 
-### Audio Feedback
+### Hotkey Detection
 
-- **350 Hz beep**: Recording started
-- **280 Hz beep**: Recording stopped, text pasted
+Uses `CGEvent.tapCreate` listening for `keyDown`, `keyUp`, and `flagsChanged` events. Modifier-only hotkeys (e.g., Shift+Ctrl) are detected via `flagsChanged`. The fn/Globe key uses `.maskSecondaryFn`.
+
+`HotkeyConfig.matchesModifiers()` does **strict matching** — all modifiers in `ModifierKey.allCases` must match exactly (required pressed, non-required not pressed).
+
+### Config
+
+Persisted at `~/Library/Application Support/Dua Talk/config.json`. Key fields: `hotkeys` (toggle, push_to_talk, text_to_speech), `active_mode`, `whisper_model`, `language`.
 
 ## Hotkey Modes
 
-### Toggle Mode (default)
-- Press hotkey → start recording
-- Press hotkey again → stop recording and paste
+- **Toggle** (default): Press hotkey to start, press again to stop
+- **Push-to-Talk**: Hold hotkey to record, release to stop
+- **Read Aloud**: Press hotkey to read selected text via TTS
 
-### Push-to-Talk Mode
-- Hold hotkey → recording
-- Release hotkey → stop recording and paste
+Default hotkeys: Toggle = Shift+Ctrl, PTT = Cmd+Shift, TTS = Cmd+Alt. All customizable via Settings menu.
 
-Default hotkeys:
-- **Toggle**: Shift+Ctrl
-- **Push-to-Talk**: Cmd+Shift
-- **Read Aloud (TTS)**: Cmd+Alt
+## Text-to-Speech
 
-Hotkeys can be customized via Settings menu.
-
-## Text-to-Speech (Read Aloud)
-
-Select text in any application, press the TTS hotkey (Cmd+Alt by default), and the text will be read aloud using Kokoro TTS.
-
-Set up TTS from the onboarding window (Setup... in the menu bar). The app creates a Python venv and installs Kokoro automatically.
+Kokoro TTS is set up from the onboarding window (Setup... in menu bar). Creates a Python venv at `~/Library/Application Support/Dua Talk/venv` and installs kokoro + dependencies.
 
 ## Menu Structure
 
 ```
-🎤 Dua Talk
+Dua Talk
 ├── Stop Recording / Stop Speaking / Processing...
 ├── History >
-│   ├── "Last dictation preview..."
-│   └── (up to 5 items)
-├── ────
 ├── Settings >
-│   ├── Toggle Mode ✓
-│   ├── Push-to-Talk Mode
-│   ├── ────
-│   ├── Set Toggle Hotkey... (⇧⌃)
-│   ├── Set Push-to-Talk Hotkey... (⌘⇧)
-│   ├── ────
-│   └── Set Read Aloud Hotkey... (⌘⌥)
+│   ├── Toggle Mode / Push-to-Talk Mode
+│   ├── Set Toggle Hotkey... / Set Push-to-Talk Hotkey...
+│   └── Set Read Aloud Hotkey...
 ├── Advanced >
-│   ├── Language: English >
-│   ├── Whisper Model: Small >
-│   └── Voice: ... >
-├── ────
+│   ├── Language: English / Svenska
+│   ├── Whisper Model: Small / Medium
+│   └── Voice: (Kokoro voices)
 ├── Setup...
 └── Quit
 ```
 
-## Configuration
+## macOS Permissions
 
-Settings are persisted in `~/Library/Application Support/Dua Talk/config.json`:
+- **Microphone** — for recording (entitlement: `com.apple.security.device.audio-input`)
+- **Accessibility** — for global hotkeys and auto-paste
 
-```json
-{
-  "version": 2,
-  "hotkeys": {
-    "toggle": {"modifiers": ["shift", "ctrl"], "key": null},
-    "push_to_talk": {"modifiers": ["cmd", "shift"], "key": null},
-    "text_to_speech": {"modifiers": ["cmd", "alt"], "key": null}
-  },
-  "active_mode": "toggle",
-  "history": [
-    {
-      "text": "Hello world",
-      "timestamp": "2024-01-15T10:30:00Z"
-    }
-  ],
-  "whisper_model": "small"
-}
-```
-
-## Building the macOS App Bundle (Python)
-
-The Python app can be packaged as a standalone macOS menu bar application using py2app.
-
-### Install Build Dependencies
+## Python Implementation (Legacy)
 
 ```bash
 cd python
-
-# Note: py2app 0.28.9+ has compatibility issues with newer setuptools
-uv pip install "py2app>=0.28.0,<0.28.9" "setuptools>=69.0.0,<80"
-# or
-pip install "py2app>=0.28.0,<0.28.9" "setuptools>=69.0.0,<80"
-```
-
-### Build Commands
-
-```bash
-cd python
-
-# Development build (alias mode, fast, uses system Python)
-python setup.py py2app -A
-
-# Production build (standalone, includes all dependencies)
-python setup.py py2app
-```
-
-The built app will be at `python/dist/Dua Talk.app`.
-
-### Running the App
-
-```bash
-cd python
-
-# Open the built app
-open "dist/Dua Talk.app"
-
-# Or run directly for development
+uv sync && source .venv/bin/activate
 python dua_talk.py
 ```
 
-### Menu Bar Features
-
-- **Icon states**: 🎤 (idle), 🔴 (recording), ⏳ (processing), 🔊 (speaking)
-- **Menu**: Start/Stop Recording, History, Output Mode, Settings, Quit
-- **Hotkey**: Configurable via Settings menu
-- **Notifications**: macOS notifications for status updates
-
-## macOS Permissions
-
-The app requires these permissions:
-- **Microphone**: For recording audio (System Preferences → Privacy & Security → Microphone)
-- **Accessibility**: For global hotkey detection and auto-paste (System Preferences → Privacy & Security → Accessibility)
-
-Add Terminal/IDE during development, or Dua Talk.app after building.
-
-**Note**: Auto-paste (Cmd+V simulation) requires the app to be code-signed for full functionality when built as a .app bundle.
+Not actively developed. See `python/` for details.
