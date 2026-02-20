@@ -1,0 +1,124 @@
+{
+  "stories": {
+    "US-001": [
+      {
+        "id": "SC-001",
+        "given": "the app is running and idle with both Toggle (Shift+Ctrl) and Push-to-Talk (Cmd+Shift) hotkeys configured",
+        "when": "the user presses Shift+Ctrl (toggle hotkey)",
+        "then": "recording starts and the menu shows Stop Recording",
+        "type": "behavioral"
+      },
+      {
+        "id": "SC-002",
+        "given": "the app is running and idle",
+        "when": "the user holds Cmd+Shift (PTT hotkey) and then releases it",
+        "then": "recording starts on press and stops on release, producing a transcription",
+        "type": "behavioral"
+      },
+      {
+        "id": "SC-003",
+        "given": "recording is in progress via the toggle hotkey",
+        "when": "the user presses and releases the PTT hotkey",
+        "then": "the PTT hotkey is ignored and recording continues until the toggle hotkey is pressed again",
+        "type": "edge"
+      },
+      {
+        "id": "SC-004",
+        "given": "recording is in progress via the PTT hotkey (held down)",
+        "when": "the user presses the toggle hotkey",
+        "then": "the toggle hotkey is ignored and recording continues until the PTT keys are released",
+        "type": "edge"
+      },
+      {
+        "id": "SC-005",
+        "given": "the user opens the Settings menu",
+        "when": "they look at the menu items",
+        "then": "there are no Toggle Mode or Push-to-Talk Mode radio buttons; only hotkey configuration buttons are shown",
+        "type": "behavioral"
+      }
+    ],
+    "US-002": [
+      {
+        "id": "SC-006",
+        "given": "the app has been running for an extended period and the audio output device changes (e.g., headphones connected)",
+        "when": "the user starts a new recording",
+        "then": "the start-recording beep plays audibly through the new audio device",
+        "type": "behavioral"
+      },
+      {
+        "id": "SC-007",
+        "given": "the audio engine has silently stopped due to a system audio reconfiguration",
+        "when": "the user triggers a recording",
+        "then": "the engine auto-recovers and the feedback sound plays without requiring an app restart",
+        "type": "behavioral"
+      },
+      {
+        "id": "SC-008",
+        "given": "the app is running and multiple rapid recordings are performed",
+        "when": "beepOn and beepOff are called in quick succession across many recording cycles",
+        "then": "sounds play correctly each time without glitches, stuck states, or silence due to corrupted audio state",
+        "type": "edge"
+      },
+      {
+        "id": "SC-009",
+        "given": "the audio engine restarts due to a configuration change",
+        "when": "the restart occurs",
+        "then": "a log entry is written indicating the engine was restarted and the reason",
+        "type": "contract"
+      }
+    ],
+    "US-003": [
+      {
+        "id": "SC-010",
+        "given": "the user opens the Advanced menu",
+        "when": "they look at the menu items",
+        "then": "a Mute Sounds option is visible with a checkmark indicating the current state",
+        "type": "behavioral"
+      },
+      {
+        "id": "SC-011",
+        "given": "the user has enabled Mute Sounds in the Advanced menu",
+        "when": "they start and stop a recording",
+        "then": "no beep sounds are heard at recording start or transcription completion",
+        "type": "behavioral"
+      },
+      {
+        "id": "SC-012",
+        "given": "a fresh install of the app with no existing config file",
+        "when": "the app launches and the user makes a recording",
+        "then": "feedback sounds play normally because mute defaults to off",
+        "type": "edge"
+      },
+      {
+        "id": "SC-013",
+        "given": "an existing config file from v0.1 that has no mute_sounds field",
+        "when": "the app loads the config",
+        "then": "the config loads without error and mute defaults to off",
+        "type": "edge"
+      }
+    ],
+    "US-004": [
+      {
+        "id": "SC-014",
+        "given": "the codebase after all changes are complete",
+        "when": "a project-wide search is performed for activeMode, activeHotkeyMode, activeHotkey, or setHotkeyMode",
+        "then": "zero matches are found in production code (excluding git history and this scenarios file)",
+        "type": "contract"
+      },
+      {
+        "id": "SC-015",
+        "given": "a user upgrading from v0.1 with a config file containing the active_mode field",
+        "when": "the app loads the old config",
+        "then": "the config loads successfully, the active_mode field is silently ignored, and both hotkeys work",
+        "type": "behavioral"
+      },
+      {
+        "id": "SC-016",
+        "given": "the app saves a new config after the upgrade",
+        "when": "the config JSON is inspected",
+        "then": "the version field is 3 and there is no active_mode key present",
+        "type": "contract"
+      }
+    ]
+  }
+}

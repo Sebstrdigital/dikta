@@ -1,0 +1,88 @@
+{
+  "project": "Dua Talk",
+  "branchName": "takt/v02-dual-hotkeys-and-audio-reliability",
+  "description": "Dua Talk v0.2 — Make both Toggle and Push-to-Talk hotkeys active simultaneously, fix audio feedback dying after extended runtime, add mute option",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Always-on dual dictation hotkeys",
+      "description": "As a user, I want both my Toggle hotkey and Push-to-Talk hotkey to work at the same time so that I don't have to switch modes before dictating.",
+      "type": "logic",
+      "acceptanceCriteria": [
+        "HotkeyManager tracks two independent dictation hotkey configs (toggleConfig + pttConfig) with separate isActive state, checked independently in handleModifierEvent() and handleKeyEvent() — same pattern as existing TTS hotkey",
+        "HotkeyManagerDelegate conveys which mode triggered via hotkeyPressed(mode:) parameter; MenuBarViewModel tracks activeRecordingMode and only allows the initiating mode to stop recording",
+        "Settings menu no longer shows Toggle Mode / Push-to-Talk Mode radio buttons; the three hotkey configuration buttons remain",
+        "swift build succeeds"
+      ],
+      "priority": 1,
+      "size": "medium",
+      "passes": false,
+      "verify": "inline",
+      "startTime": "2026-02-20 09:08",
+      "endTime": "",
+      "dependsOn": []
+    },
+    {
+      "id": "US-002",
+      "title": "Resilient audio feedback engine",
+      "description": "As a user, I want recording start/stop sounds to keep working no matter how long the app has been running, so that I always get audible confirmation of my actions.",
+      "type": "logic",
+      "acceptanceCriteria": [
+        "AudioFeedback observes AVAudioEngineConfigurationChange notification and automatically rebuilds and restarts the engine when fired",
+        "playBubble() checks audioEngine.isRunning before each play and restarts transparently if stopped; engine restarts are logged via AppLogger.audio",
+        "Shared mutable state between the audio render thread and main thread is synchronized using os_unfair_lock — no data races on isPlaying, samplesPlayed, phase, frequencies, or envelope parameters",
+        "swift build succeeds"
+      ],
+      "priority": 2,
+      "size": "medium",
+      "passes": false,
+      "verify": "inline",
+      "startTime": "",
+      "endTime": "",
+      "dependsOn": []
+    },
+    {
+      "id": "US-003",
+      "title": "Mute feedback sounds",
+      "description": "As a user, I want to be able to mute the dictation feedback sounds from the menu, so I can use the app silently when I prefer.",
+      "type": "logic",
+      "acceptanceCriteria": [
+        "AppConfig has muteSounds Bool field (default false), persisted as mute_sounds in JSON; old configs without the field decode gracefully to false",
+        "A Mute Sounds toggle in the Advanced menu shows checkmark state and persists the setting via ConfigService",
+        "beepOn() and beepOff() early-return without playing when muteSounds is true",
+        "swift build succeeds"
+      ],
+      "priority": 3,
+      "size": "small",
+      "passes": false,
+      "verify": "inline",
+      "startTime": "",
+      "endTime": "",
+      "dependsOn": [
+        "US-002"
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Remove activeMode from config and clean up references",
+      "description": "As a developer, I want the activeMode field removed from the config model and all code paths that reference it, so there is no dead code around mode switching.",
+      "type": "logic",
+      "acceptanceCriteria": [
+        "activeMode removed from AppConfig; activeHotkeyMode and activeHotkey removed from ConfigService; HotkeyManager.updateConfig() accepts both toggle and PTT configs instead of single config + mode",
+        "AppConfig version bumped to 3; JSON decoding handles version 2 configs (with activeMode field) without error",
+        "No references to activeMode, activeHotkeyMode, activeHotkey, or setHotkeyMode remain in the codebase",
+        "swift build succeeds"
+      ],
+      "priority": 4,
+      "size": "medium",
+      "passes": false,
+      "verify": "deep",
+      "startTime": "",
+      "endTime": "",
+      "dependsOn": [
+        "US-001"
+      ]
+    }
+  ],
+  "waves": []
+}

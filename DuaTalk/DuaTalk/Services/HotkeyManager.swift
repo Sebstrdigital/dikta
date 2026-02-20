@@ -4,8 +4,8 @@ import Cocoa
 
 /// Delegate for hotkey events
 protocol HotkeyManagerDelegate: AnyObject {
-    func hotkeyPressed()
-    func hotkeyReleased()
+    func hotkeyPressed(mode: HotkeyMode)
+    func hotkeyReleased(mode: HotkeyMode)
     func hotkeyRecorded(modifiers: [ModifierKey], key: String?)
     func ttsHotkeyPressed()
     func hotkeyManagerDidFailToStart(_ error: String)
@@ -18,9 +18,12 @@ final class HotkeyManager {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
 
-    private var hotkeyConfig: HotkeyConfig
-    private var hotkeyMode: HotkeyMode
-    private var isHotkeyActive = false
+    // Dual dictation hotkeys (both always active)
+    private var toggleHotkeyConfig: HotkeyConfig = .defaultToggle
+    private var isToggleHotkeyActive = false
+
+    private var pttHotkeyConfig: HotkeyConfig = .defaultPushToTalk
+    private var isPttHotkeyActive = false
 
     // TTS hotkey (always trigger-based, no toggle/PTT modes)
     private var ttsHotkeyConfig: HotkeyConfig = .defaultTextToSpeech
@@ -31,15 +34,12 @@ final class HotkeyManager {
     private var recordedModifiers: Set<ModifierKey> = []
     private var recordedKey: String?
 
-    init() {
-        self.hotkeyConfig = .defaultToggle
-        self.hotkeyMode = .toggle
-    }
+    init() {}
 
-    /// Update the dictation hotkey configuration
-    func updateConfig(_ config: HotkeyConfig, mode: HotkeyMode) {
-        self.hotkeyConfig = config
-        self.hotkeyMode = mode
+    /// Update both dictation hotkey configurations (both always active)
+    func updateConfig(toggle: HotkeyConfig, pushToTalk: HotkeyConfig) {
+        self.toggleHotkeyConfig = toggle
+        self.pttHotkeyConfig = pushToTalk
     }
 
     /// Update the TTS hotkey configuration
@@ -191,32 +191,31 @@ final class HotkeyManager {
             }
         }
 
-        // Check dictation hotkey (modifier-only)
-        if hotkeyConfig.key == nil {
-            let matches = hotkeyConfig.matchesModifiers(flags)
-
-            if hotkeyMode == .toggle {
-                // Toggle mode: trigger on press
-                if matches && !isHotkeyActive {
-                    isHotkeyActive = true
-                    DispatchQueue.main.async { [weak self] in
-                        self?.delegate?.hotkeyPressed()
-                    }
-                } else if !matches && isHotkeyActive {
-                    isHotkeyActive = false
+        // Check toggle hotkey (modifier-only, trigger on press only)
+        if toggleHotkeyConfig.key == nil {
+            let toggleMatches = toggleHotkeyConfig.matchesModifiers(flags)
+            if toggleMatches && !isToggleHotkeyActive {
+                isToggleHotkeyActive = true
+                DispatchQueue.main.async { [weak self] in
+                    self?.delegate?.hotkeyPressed(mode: .toggle)
                 }
-            } else {
-                // Push-to-talk mode
-                if matches && !isHotkeyActive {
-                    isHotkeyActive = true
-                    DispatchQueue.main.async { [weak self] in
-                        self?.delegate?.hotkeyPressed()
-                    }
-                } else if !matches && isHotkeyActive {
-                    isHotkeyActive = false
-                    DispatchQueue.main.async { [weak self] in
-                        self?.delegate?.hotkeyReleased()
-                    }
+            } else if !toggleMatches && isToggleHotkeyActive {
+                isToggleHotkeyActive = false
+            }
+        }
+
+        // Check PTT hotkey (modifier-only, trigger on press AND release)
+        if pttHotkeyConfig.key == nil {
+            let pttMatches = pttHotkeyConfig.matchesModifiers(flags)
+            if pttMatches && !isPttHotkeyActive {
+                isPttHotkeyActive = true
+                DispatchQueue.main.async { [weak self] in
+                    self?.delegate?.hotkeyPressed(mode: .pushToTalk)
+                }
+            } else if !pttMatches && isPttHotkeyActive {
+                isPttHotkeyActive = false
+                DispatchQueue.main.async { [weak self] in
+                    self?.delegate?.hotkeyReleased(mode: .pushToTalk)
                 }
             }
         }
@@ -237,28 +236,31 @@ final class HotkeyManager {
             return
         }
 
-        // Check dictation hotkey (key-based)
-        guard let requiredKey = hotkeyConfig.key,
-              pressedKey.lowercased() == requiredKey.lowercased(),
-              hotkeyConfig.matchesModifiers(flags) else {
+        // Check toggle hotkey (key-based, trigger on each keyDown)
+        if let toggleKey = toggleHotkeyConfig.key,
+           pressedKey.lowercased() == toggleKey.lowercased(),
+           toggleHotkeyConfig.matchesModifiers(flags),
+           type == .keyDown {
+            DispatchQueue.main.async { [weak self] in
+                self?.delegate?.hotkeyPressed(mode: .toggle)
+            }
             return
         }
 
-        if type == .keyDown {
-            if hotkeyMode == .toggle {
+        // Check PTT hotkey (key-based, trigger on press AND release)
+        if let pttKey = pttHotkeyConfig.key,
+           pressedKey.lowercased() == pttKey.lowercased(),
+           pttHotkeyConfig.matchesModifiers(flags) {
+            if type == .keyDown && !isPttHotkeyActive {
+                isPttHotkeyActive = true
                 DispatchQueue.main.async { [weak self] in
-                    self?.delegate?.hotkeyPressed()
+                    self?.delegate?.hotkeyPressed(mode: .pushToTalk)
                 }
-            } else if !isHotkeyActive {
-                isHotkeyActive = true
+            } else if type == .keyUp && isPttHotkeyActive {
+                isPttHotkeyActive = false
                 DispatchQueue.main.async { [weak self] in
-                    self?.delegate?.hotkeyPressed()
+                    self?.delegate?.hotkeyReleased(mode: .pushToTalk)
                 }
-            }
-        } else if type == .keyUp && hotkeyMode == .pushToTalk && isHotkeyActive {
-            isHotkeyActive = false
-            DispatchQueue.main.async { [weak self] in
-                self?.delegate?.hotkeyReleased()
             }
         }
     }
