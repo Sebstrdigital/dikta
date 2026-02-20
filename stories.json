@@ -16,10 +16,10 @@
       ],
       "priority": 1,
       "size": "medium",
-      "passes": false,
+      "passes": true,
       "verify": "inline",
       "startTime": "2026-02-20 09:08",
-      "endTime": "",
+      "endTime": "2026-02-20 09:14",
       "dependsOn": []
     },
     {
@@ -37,7 +37,7 @@
       "size": "medium",
       "passes": false,
       "verify": "inline",
-      "startTime": "",
+      "startTime": "2026-02-20 09:14",
       "endTime": "",
       "dependsOn": []
     },
