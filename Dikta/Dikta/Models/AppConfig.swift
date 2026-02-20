@@ -11,6 +11,7 @@ struct AppConfig: Codable {
     var language: Language
     var customPrompt: String
     var muteSounds: Bool
+    var muteNotifications: Bool
 
     struct HotkeyConfigs: Codable {
         var toggle: HotkeyConfig
@@ -47,6 +48,7 @@ struct AppConfig: Codable {
         case language
         case customPrompt = "custom_prompt"
         case muteSounds = "mute_sounds"
+        case muteNotifications = "mute_notifications"
     }
 
     static let defaultCustomPrompt = "Clean up this dictation. Fix grammar, punctuation, and remove filler words. Output only the cleaned text."
@@ -65,14 +67,15 @@ struct AppConfig: Codable {
         llmModel: "gemma3",
         language: .english,
         customPrompt: defaultCustomPrompt,
-        muteSounds: false
+        muteSounds: false,
+        muteNotifications: false
     )
 
     /// Maximum history items to keep
     static let historyLimit = 5
 
     /// Memberwise initializer
-    init(version: Int, hotkeys: HotkeyConfigs, outputMode: OutputMode, history: [HistoryItem], whisperModel: String, llmModel: String, language: Language, customPrompt: String = defaultCustomPrompt, muteSounds: Bool = false) {
+    init(version: Int, hotkeys: HotkeyConfigs, outputMode: OutputMode, history: [HistoryItem], whisperModel: String, llmModel: String, language: Language, customPrompt: String = defaultCustomPrompt, muteSounds: Bool = false, muteNotifications: Bool = false) {
         self.version = version
         self.hotkeys = hotkeys
         self.outputMode = outputMode
@@ -82,6 +85,7 @@ struct AppConfig: Codable {
         self.language = language
         self.customPrompt = customPrompt
         self.muteSounds = muteSounds
+        self.muteNotifications = muteNotifications
     }
 
     /// Handle missing fields from old configs (v2 configs with active_mode are handled gracefully —
@@ -105,5 +109,6 @@ struct AppConfig: Codable {
         language = try container.decodeIfPresent(Language.self, forKey: .language) ?? .english
         customPrompt = try container.decodeIfPresent(String.self, forKey: .customPrompt) ?? Self.defaultCustomPrompt
         muteSounds = try container.decodeIfPresent(Bool.self, forKey: .muteSounds) ?? false
+        muteNotifications = try container.decodeIfPresent(Bool.self, forKey: .muteNotifications) ?? false
     }
 }

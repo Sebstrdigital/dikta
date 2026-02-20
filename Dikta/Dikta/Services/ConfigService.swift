@@ -11,9 +11,9 @@ final class ConfigService: ObservableObject {
     @Published private(set) var config: AppConfig
 
     private init() {
-        // ~/Library/Application Support/Dua Talk/
+        // ~/Library/Application Support/Dikta/
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        configDir = appSupport.appendingPathComponent("Dua Talk")
+        configDir = appSupport.appendingPathComponent("Dikta")
         configFile = configDir.appendingPathComponent("config.json")
 
         // Load or create default config
@@ -126,6 +126,17 @@ final class ConfigService: ObservableObject {
         get { config.muteSounds }
         set {
             config.muteSounds = newValue
+            objectWillChange.send()
+            save()
+        }
+    }
+
+    // MARK: - Mute Notifications
+
+    var muteNotifications: Bool {
+        get { config.muteNotifications }
+        set {
+            config.muteNotifications = newValue
             objectWillChange.send()
             save()
         }

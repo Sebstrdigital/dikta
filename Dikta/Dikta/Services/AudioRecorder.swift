@@ -7,6 +7,7 @@ final class AudioRecorder {
     private var audioBuffer: [Float] = []
     private let bufferLock = NSLock()
     private var isRecording = false
+    private var configObserver: NSObjectProtocol?
 
     /// Target sample rate for Whisper (16kHz)
     static let sampleRate: Double = 16000
@@ -28,14 +29,27 @@ final class AudioRecorder {
     func startRecording() throws {
         guard !isRecording else { return }
 
-        audioEngine = AVAudioEngine()
-        guard let audioEngine = audioEngine else {
-            throw AudioRecorderError.engineCreationFailed
+        var engine = AVAudioEngine()
+        var inputFormat = engine.inputNode.outputFormat(forBus: 0)
+
+        // Retry if sample rate is 0 (e.g. Bluetooth HFP profile switching for AirPods)
+        if inputFormat.sampleRate == 0 {
+            AppLogger.audio.info("Input format has 0 sample rate, waiting for audio route to settle...")
+            engine.stop()
+            Thread.sleep(forTimeInterval: 0.3)
+
+            engine = AVAudioEngine()
+            inputFormat = engine.inputNode.outputFormat(forBus: 0)
+            guard inputFormat.sampleRate > 0 else {
+                throw AudioRecorderError.noInputDevice
+            }
         }
 
-        let inputNode = audioEngine.inputNode
-        let inputFormat = inputNode.outputFormat(forBus: 0)
+        self.audioEngine = engine
+        try startRecordingWithEngine(engine, inputFormat: inputFormat)
+    }
 
+    private func startRecordingWithEngine(_ engine: AVAudioEngine, inputFormat: AVAudioFormat) throws {
         // Target format: 16kHz mono Float32
         guard let outputFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
@@ -57,13 +71,23 @@ final class AudioRecorder {
         bufferLock.unlock()
 
         // Install tap on input node
+        let inputNode = engine.inputNode
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
             self?.processBuffer(buffer, converter: converter, outputFormat: outputFormat)
         }
 
-        audioEngine.prepare()
-        try audioEngine.start()
+        engine.prepare()
+        try engine.start()
         isRecording = true
+
+        // Observe audio configuration changes during recording (e.g. Bluetooth route changes)
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: .main
+        ) { _ in
+            AppLogger.audio.warning("AudioRecorder engine config changed during recording")
+        }
     }
 
     private func processBuffer(_ buffer: AVAudioPCMBuffer, converter: AVAudioConverter, outputFormat: AVAudioFormat) {
@@ -98,6 +122,11 @@ final class AudioRecorder {
     func stopRecording() -> [Float] {
         guard isRecording else { return [] }
 
+        if let observer = configObserver {
+            NotificationCenter.default.removeObserver(observer)
+            configObserver = nil
+        }
+
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
         audioEngine = nil
@@ -121,6 +150,7 @@ enum AudioRecorderError: Error, LocalizedError {
     case engineCreationFailed
     case formatCreationFailed
     case converterCreationFailed
+    case noInputDevice
 
     var errorDescription: String? {
         switch self {
@@ -130,6 +160,8 @@ enum AudioRecorderError: Error, LocalizedError {
             return "Failed to create audio format"
         case .converterCreationFailed:
             return "Failed to create audio converter"
+        case .noInputDevice:
+            return "No audio input device available"
         }
     }
 }

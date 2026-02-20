@@ -59,7 +59,7 @@ final class TextToSpeechService: NSObject {
         var errorDescription: String? {
             switch self {
             case .serverNotRunning:
-                return "TTS not set up. Open Dua Talk to set up Text-to-Speech."
+                return "TTS not set up. Open Dikta to set up Text-to-Speech."
             case .synthesizeFailed(let msg):
                 return "TTS failed: \(msg)"
             case .playbackFailed:

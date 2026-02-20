@@ -33,7 +33,7 @@ final class OnboardingWindowController {
             backing: .buffered,
             defer: false
         )
-        window.title = "Welcome to Dua Talk"
+        window.title = "Welcome to Dikta"
         window.contentView = hostingView
         window.center()
         window.level = .floating
@@ -222,7 +222,7 @@ struct OnboardingView: View {
                     .resizable()
                     .frame(width: 80, height: 80)
 
-                Text("Welcome to Dua Talk")
+                Text("Welcome to Dikta")
                     .font(.system(size: 24, weight: .bold))
 
                 Text("Offline dictation for your Mac. Press a hotkey, speak, and your words are pasted instantly.")
@@ -276,7 +276,7 @@ struct OnboardingView: View {
             Spacer()
 
             // Tip
-            Text("Look for the mic icon in your menu bar. Reopen this window by launching Dua Talk again.")
+            Text("Look for the mic icon in your menu bar. Reopen this window by launching Dikta again.")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)

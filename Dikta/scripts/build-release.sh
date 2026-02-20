@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ============================================================
-# Dua Talk — Build, Sign, Notarize, and Package as DMG
+# Dikta — Build, Sign, Notarize, and Package as DMG
 # ============================================================
 #
 # First-time setup (run once):
@@ -20,10 +20,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-SCHEME="DuaTalk"
-APP_NAME="Dua Talk"
-ARCHIVE_PATH="${PROJECT_DIR}/build/DuaTalk.xcarchive"
-DMG_PATH="${PROJECT_DIR}/build/DuaTalk.dmg"
+SCHEME="Dikta"
+APP_NAME="Dikta"
+ARCHIVE_PATH="${PROJECT_DIR}/build/Dikta.xcarchive"
+DMG_PATH="${PROJECT_DIR}/build/Dikta.dmg"
 NOTARIZE_PROFILE="DuaTalk-Notarize"
 
 SIGNING_IDENTITY="Developer ID Application: Sebastian Strandberg (UUM29335B4)"
@@ -31,7 +31,7 @@ SIGNING_IDENTITY="Developer ID Application: Sebastian Strandberg (UUM29335B4)"
 # Use /tmp for export/signing to avoid iCloud re-adding extended attributes
 # (~/Documents is iCloud-synced; macOS re-adds com.apple.FinderInfo xattrs
 #  that cause "resource fork, Finder information, or similar detritus" errors)
-WORK_DIR=$(mktemp -d /tmp/DuaTalk-build.XXXXXX)
+WORK_DIR=$(mktemp -d /tmp/Dikta-build.XXXXXX)
 EXPORT_PATH="${WORK_DIR}/export"
 trap 'rm -rf "${WORK_DIR}"' EXIT
 
@@ -42,7 +42,7 @@ mkdir -p "${PROJECT_DIR}/build"
 # Step 1: Archive
 echo "==> Archiving ${SCHEME}..."
 xcodebuild archive \
-    -project "${PROJECT_DIR}/DuaTalk.xcodeproj" \
+    -project "${PROJECT_DIR}/Dikta.xcodeproj" \
     -scheme "${SCHEME}" \
     -configuration Release \
     -archivePath "${ARCHIVE_PATH}" \
@@ -76,7 +76,7 @@ WHISPER_MODEL_DEST="${APP_EXPORT}/Contents/Resources/WhisperModels/${WHISPER_MOD
 if [ ! -d "${WHISPER_MODEL_SRC}" ]; then
     echo "ERROR: Whisper small model not found at ${WHISPER_MODEL_SRC}"
     echo ""
-    echo "Download it first by running the app in dev mode (swift build && .build/debug/DuaTalk)"
+    echo "Download it first by running the app in dev mode (swift build && .build/debug/Dikta)"
     echo "or manually download from HuggingFace:"
     echo "  huggingface-cli download argmaxinc/whisperkit-coreml openai_whisper-small --local-dir ~/Documents/huggingface/models/argmaxinc/whisperkit-coreml"
     exit 1
@@ -93,7 +93,7 @@ echo "==> Stripping extended attributes..."
 xattr -cr "${APP_EXPORT}"
 
 # Re-sign after stripping xattrs (must pass entitlements or they get stripped)
-ENTITLEMENTS="${PROJECT_DIR}/DuaTalk/Resources/DuaTalk.entitlements"
+ENTITLEMENTS="${PROJECT_DIR}/Dikta/Resources/Dikta.entitlements"
 echo "==> Signing app..."
 codesign --force --deep --options runtime --entitlements "${ENTITLEMENTS}" --sign "${SIGNING_IDENTITY}" "${APP_EXPORT}"
 
@@ -106,7 +106,7 @@ codesign -dv --verbose=2 "${APP_EXPORT}" 2>&1 | grep -E "Authority|TeamIdentifie
 
 # Step 4: Notarize
 echo "==> Creating zip for notarization..."
-NOTARIZE_ZIP="${WORK_DIR}/DuaTalk-notarize.zip"
+NOTARIZE_ZIP="${WORK_DIR}/Dikta-notarize.zip"
 ditto -c -k --keepParent "${APP_EXPORT}" "${NOTARIZE_ZIP}"
 
 echo "==> Submitting for notarization..."

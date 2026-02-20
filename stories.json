@@ -1,7 +1,7 @@
 {
-  "project": "Dua Talk",
+  "project": "Dikta",
   "branchName": "takt/v02-dual-hotkeys-and-audio-reliability",
-  "description": "Dua Talk v0.2 — Make both Toggle and Push-to-Talk hotkeys active simultaneously, fix audio feedback dying after extended runtime, add mute option",
+  "description": "Dikta v0.2 — Make both Toggle and Push-to-Talk hotkeys active simultaneously, fix audio feedback dying after extended runtime, add mute option",
   "userStories": [
     {
       "id": "US-001",

@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "DuaTalk",
+    name: "Dikta",
     platforms: [
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "DuaTalk", targets: ["DuaTalk"])
+        .executable(name: "Dikta", targets: ["Dikta"])
     ],
     dependencies: [
         .package(url: "https://github.com/argmaxinc/WhisperKit", "0.9.0"..<"0.10.0"),
@@ -15,13 +15,13 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "DuaTalk",
+            name: "Dikta",
             dependencies: [
                 "WhisperKit",
                 .product(name: "LlamaSwift", package: "llama.swift")
             ],
-            path: "DuaTalk",
-            exclude: ["Resources/Info.plist", "Resources/DuaTalk.entitlements"],
+            path: "Dikta",
+            exclude: ["Resources/Info.plist", "Resources/Dikta.entitlements"],
             resources: [
                 .process("Resources/Assets.xcassets")
             ]
