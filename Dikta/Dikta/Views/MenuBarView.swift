@@ -113,6 +113,16 @@ struct AdvancedMenu: View {
                 }
             }
 
+            Button(action: { viewModel.toggleMuteNotifications() }) {
+                HStack {
+                    Text("Mute Notifications")
+                    if viewModel.configService.muteNotifications {
+                        Spacer()
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+
             Divider()
 
             // Language

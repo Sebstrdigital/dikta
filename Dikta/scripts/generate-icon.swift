@@ -9,7 +9,7 @@
 import AppKit
 import Foundation
 
-let assetDir = "DuaTalk/Resources/Assets.xcassets/AppIcon.appiconset"
+let assetDir = "Dikta/Resources/Assets.xcassets/AppIcon.appiconset"
 
 // macOS icon sizes: (point size, scale) -> pixel size
 let iconSizes: [(points: Int, scale: Int)] = [

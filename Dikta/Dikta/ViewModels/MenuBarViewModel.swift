@@ -96,7 +96,7 @@ final class MenuBarViewModel: ObservableObject {
             hotkeyManager.start()
 
             let toggleHotkey = configService.getHotkey(for: .toggle).displayString
-            sendNotification(title: "Ready", body: "Whisper model loaded. Use \(toggleHotkey) to record.")
+            sendNotification(title: "Ready", body: "Whisper model loaded. Use \(toggleHotkey) to record.", isRoutine: true)
         } else {
             sendNotification(title: "Error", body: transcriber.errorMessage ?? "Failed to load model")
         }
@@ -148,7 +148,7 @@ final class MenuBarViewModel: ObservableObject {
             let lowerText = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
 
             if lowerText.isEmpty || silenceIndicators.contains(where: { lowerText.contains($0) }) {
-                sendNotification(title: "No Speech", body: "No speech detected in recording")
+                sendNotification(title: "No Speech", body: "No speech detected in recording", isRoutine: true)
                 appState = .idle
                 return
             }
@@ -173,7 +173,7 @@ final class MenuBarViewModel: ObservableObject {
         audioFeedback.beepOff()
 
         let preview = text.count > 50 ? String(text.prefix(50)) + "..." : text
-        sendNotification(title: "Pasted", body: preview)
+        sendNotification(title: "Pasted", body: preview, isRoutine: true)
     }
 
     /// Paste a history item
@@ -188,11 +188,17 @@ final class MenuBarViewModel: ObservableObject {
         audioFeedback.isMuted = configService.muteSounds
     }
 
+    // MARK: - Mute Notifications
+
+    func toggleMuteNotifications() {
+        configService.muteNotifications.toggle()
+    }
+
     // MARK: - Language
 
     func setLanguage(_ language: Language) {
         configService.language = language
-        sendNotification(title: "Language Changed", body: "Now using \(language.displayName)")
+        sendNotification(title: "Language Changed", body: "Now using \(language.displayName)", isRoutine: true)
     }
 
     // MARK: - Whisper Model
@@ -201,7 +207,8 @@ final class MenuBarViewModel: ObservableObject {
         configService.whisperModel = model.rawValue
         sendNotification(
             title: "Model Changed",
-            body: "Switched to \(model.displayName). Restart app to load new model."
+            body: "Switched to \(model.displayName). Restart app to load new model.",
+            isRoutine: true
         )
     }
 
@@ -213,7 +220,7 @@ final class MenuBarViewModel: ObservableObject {
 
     func setTtsVoice(_ voice: KokoroVoice) {
         ttsService.voice = voice
-        sendNotification(title: "Voice Changed", body: "Now using \(voice.displayName)")
+        sendNotification(title: "Voice Changed", body: "Now using \(voice.displayName)", isRoutine: true)
     }
 
     // MARK: - Hotkey Recording
@@ -270,7 +277,7 @@ final class MenuBarViewModel: ObservableObject {
         guard await ttsService.checkAvailable() else {
             sendNotification(
                 title: "TTS Not Available",
-                body: "TTS server not running. Reopen Dua Talk to set up Text-to-Speech."
+                body: "TTS server not running. Reopen Dikta to set up Text-to-Speech."
             )
             return
         }
@@ -301,14 +308,15 @@ final class MenuBarViewModel: ObservableObject {
         Bundle.main.bundleIdentifier != nil
     }
 
-    private func sendNotification(title: String, body: String) {
+    private func sendNotification(title: String, body: String, isRoutine: Bool = false) {
+        if isRoutine && configService.muteNotifications { return }
         guard canUseNotifications else {
             AppLogger.general.info("[\(title)] \(body)")
             return
         }
 
         let content = UNMutableNotificationContent()
-        content.title = "Dua Talk"
+        content.title = "Dikta"
         content.subtitle = title
         content.body = body
         content.sound = nil
@@ -373,7 +381,8 @@ extension MenuBarViewModel: HotkeyManagerDelegate {
 
             sendNotification(
                 title: "Hotkey Set",
-                body: "\(mode.displayName) hotkey set to \(hotkey.displayString)"
+                body: "\(mode.displayName) hotkey set to \(hotkey.displayString)",
+                isRoutine: true
             )
         }
     }

@@ -2,6 +2,8 @@ import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Migrate from old "Dua Talk" directory if needed
+        AppPaths.migrateIfNeeded()
         // Copy bundled kokoro_server.py to Application Support if missing
         copyBundledServerScript()
     }
@@ -33,7 +35,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 @main
-struct DuaTalkApp: App {
+struct DiktaApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var viewModel = MenuBarViewModel()
 

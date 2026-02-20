@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Dua Talk - Offline dictation tool.
+Dikta - Offline dictation tool (legacy Python implementation).
 
 Uses Whisper for speech-to-text and copies transcription to clipboard.
 Supports toggle mode and push-to-talk mode with configurable hotkeys.

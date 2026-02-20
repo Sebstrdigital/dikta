@@ -1,13 +1,13 @@
 #!/bin/bash
-# DuaTalk Setup Script
+# Dikta Setup Script
 # Sets up Kokoro TTS for text-to-speech functionality
 set -e
 
-DUATALK_DIR="$HOME/.duatalk"
-VENV_DIR="$DUATALK_DIR/venv"
+DIKTA_DIR="$HOME/.dikta"
+VENV_DIR="$DIKTA_DIR/venv"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "=== DuaTalk Setup ==="
+echo "=== Dikta Setup ==="
 echo ""
 
 # 1. Check for Homebrew
@@ -39,9 +39,9 @@ fi
 
 echo "Using Python: $PYTHON_PATH"
 
-# 3. Create duatalk directory
-echo "Creating ~/.duatalk directory..."
-mkdir -p "$DUATALK_DIR"
+# 3. Create dikta directory
+echo "Creating ~/.dikta directory..."
+mkdir -p "$DIKTA_DIR"
 
 # 4. Create virtual environment if it doesn't exist
 if [ ! -d "$VENV_DIR" ]; then
@@ -56,14 +56,14 @@ echo "Installing Kokoro TTS (this may take a minute)..."
 
 # 6. Copy server script
 echo "Copying server script..."
-cp "$SCRIPT_DIR/kokoro_server.py" "$DUATALK_DIR/"
+cp "$SCRIPT_DIR/kokoro_server.py" "$DIKTA_DIR/"
 
 echo ""
 echo "=== Setup Complete ==="
 echo ""
 echo "Next steps:"
 echo "  1. Build the app:  swift build"
-echo "  2. Run the app:    .build/debug/DuaTalk"
+echo "  2. Run the app:    .build/debug/Dikta"
 echo ""
 echo "The Whisper model (~150MB) will download automatically on first dictation."
 echo ""

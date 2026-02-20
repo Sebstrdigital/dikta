@@ -1,10 +1,20 @@
 # Changelog
 
-All notable changes to Dua Talk will be documented in this file.
+All notable changes to Dikta will be documented in this file.
+
+## [0.2] - 2026-02-20
+
+### Features
+- Mute Notifications toggle in Advanced menu — suppresses routine notifications (Ready, Pasted, No Speech, etc.) while keeping error/important ones
+- Mute Sounds and Mute Notifications are independent toggles
+
+### Fixes
+- AirPods Pro microphone not detected — AudioRecorder now retries when Bluetooth HFP profile switch causes a zero-sample-rate format
+- AudioRecorder observes `AVAudioEngineConfigurationChange` during recording for better Bluetooth device handling
 
 ## [0.1] - 2026-02-19
 
-Initial release.
+Initial release (as "Dua Talk", renamed to "Dikta" in v0.2).
 
 ### Features
 - Offline speech-to-text using WhisperKit (Small and Medium models)

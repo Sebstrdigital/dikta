@@ -39,7 +39,7 @@
 		100000000000000000000034 /* CustomPromptWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000034 /* CustomPromptWindow.swift */; };
 
 		/* App */
-		100000000000000000000041 /* DuaTalkApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000041 /* DuaTalkApp.swift */; };
+		100000000000000000000041 /* DiktaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000041 /* DiktaApp.swift */; };
 
 		/* Resources */
 		100000000000000000000051 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000051 /* Assets.xcassets */; };
@@ -84,17 +84,17 @@
 		200000000000000000000034 /* CustomPromptWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPromptWindow.swift; sourceTree = "<group>"; };
 
 		/* App */
-		200000000000000000000041 /* DuaTalkApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuaTalkApp.swift; sourceTree = "<group>"; };
+		200000000000000000000041 /* DiktaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiktaApp.swift; sourceTree = "<group>"; };
 
 		/* Resources */
 		200000000000000000000051 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		200000000000000000000052 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		200000000000000000000053 /* DuaTalk.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DuaTalk.entitlements; sourceTree = "<group>"; };
+		200000000000000000000053 /* Dikta.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Dikta.entitlements; sourceTree = "<group>"; };
 		200000000000000000000054 /* kokoro_server.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = kokoro_server.py; path = ../../kokoro_server.py; sourceTree = "<group>"; };
 		200000000000000000000055 /* setup.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; name = setup.sh; path = ../../setup.sh; sourceTree = "<group>"; };
 
 		/* Product */
-		400000000000000000000001 /* Dua Talk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Dua Talk.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		400000000000000000000001 /* Dikta.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Dikta.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -113,22 +113,22 @@
 		600000000000000000000000 = {
 			isa = PBXGroup;
 			children = (
-				600000000000000000000001 /* DuaTalk */,
+				600000000000000000000001 /* Dikta */,
 				600000000000000000000099 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		600000000000000000000001 /* DuaTalk */ = {
+		600000000000000000000001 /* Dikta */ = {
 			isa = PBXGroup;
 			children = (
-				200000000000000000000041 /* DuaTalkApp.swift */,
+				200000000000000000000041 /* DiktaApp.swift */,
 				600000000000000000000002 /* Models */,
 				600000000000000000000003 /* Services */,
 				600000000000000000000004 /* ViewModels */,
 				600000000000000000000005 /* Views */,
 				600000000000000000000006 /* Resources */,
 			);
-			path = DuaTalk;
+			path = Dikta;
 			sourceTree = "<group>";
 		};
 		600000000000000000000002 /* Models */ = {
@@ -187,7 +187,7 @@
 			children = (
 				200000000000000000000051 /* Assets.xcassets */,
 				200000000000000000000052 /* Info.plist */,
-				200000000000000000000053 /* DuaTalk.entitlements */,
+				200000000000000000000053 /* Dikta.entitlements */,
 				200000000000000000000054 /* kokoro_server.py */,
 				200000000000000000000055 /* setup.sh */,
 			);
@@ -197,7 +197,7 @@
 		600000000000000000000099 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				400000000000000000000001 /* Dua Talk.app */,
+				400000000000000000000001 /* Dikta.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -205,9 +205,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		700000000000000000000001 /* DuaTalk */ = {
+		700000000000000000000001 /* Dikta */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 800000000000000000000003 /* Build configuration list for PBXNativeTarget "DuaTalk" */;
+			buildConfigurationList = 800000000000000000000003 /* Build configuration list for PBXNativeTarget "Dikta" */;
 			buildPhases = (
 				500000000000000000000002 /* Sources */,
 				500000000000000000000001 /* Frameworks */,
@@ -217,13 +217,13 @@
 			);
 			dependencies = (
 			);
-			name = DuaTalk;
+			name = Dikta;
 			packageProductDependencies = (
 				300000000000000000000001 /* WhisperKit */,
 				300000000000000000000002 /* LlamaSwift */,
 			);
-			productName = DuaTalk;
-			productReference = 400000000000000000000001 /* Dua Talk.app */;
+			productName = Dikta;
+			productReference = 400000000000000000000001 /* Dikta.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -241,7 +241,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 800000000000000000000001 /* Build configuration list for PBXProject "DuaTalk" */;
+			buildConfigurationList = 800000000000000000000001 /* Build configuration list for PBXProject "Dikta" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -258,7 +258,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				700000000000000000000001 /* DuaTalk */,
+				700000000000000000000001 /* Dikta */,
 			);
 		};
 /* End PBXProject section */
@@ -296,7 +296,7 @@
 				100000000000000000000017 /* HotkeyManager.swift in Sources */,
 				100000000000000000000021 /* MenuBarViewModel.swift in Sources */,
 				100000000000000000000031 /* MenuBarView.swift in Sources */,
-				100000000000000000000041 /* DuaTalkApp.swift in Sources */,
+				100000000000000000000041 /* DiktaApp.swift in Sources */,
 				100000000000000000000005 /* Language.swift in Sources */,
 				100000000000000000000006 /* WhisperModel.swift in Sources */,
 				100000000000000000000018 /* Logger.swift in Sources */,
@@ -434,7 +434,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = DuaTalk/Resources/DuaTalk.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Dikta/Resources/Dikta.entitlements;
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -442,17 +442,17 @@
 				DEVELOPMENT_TEAM = UUM29335B4;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = DuaTalk/Resources/Info.plist;
+				INFOPLIST_FILE = Dikta/Resources/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Sebastian Strandberg. All rights reserved.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dua Talk needs microphone access to record your voice for dictation.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dikta needs microphone access to record your voice for dictation.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app;
-				PRODUCT_NAME = "Dua Talk";
+				PRODUCT_NAME = Dikta;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -463,7 +463,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = DuaTalk/Resources/DuaTalk.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Dikta/Resources/Dikta.entitlements;
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -471,17 +471,17 @@
 				DEVELOPMENT_TEAM = UUM29335B4;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = DuaTalk/Resources/Info.plist;
+				INFOPLIST_FILE = Dikta/Resources/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Sebastian Strandberg. All rights reserved.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dua Talk needs microphone access to record your voice for dictation.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dikta needs microphone access to record your voice for dictation.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app;
-				PRODUCT_NAME = "Dua Talk";
+				PRODUCT_NAME = Dikta;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -490,7 +490,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		800000000000000000000001 /* Build configuration list for PBXProject "DuaTalk" */ = {
+		800000000000000000000001 /* Build configuration list for PBXProject "Dikta" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				B00000000000000000000001 /* Debug */,
@@ -499,7 +499,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		800000000000000000000003 /* Build configuration list for PBXNativeTarget "DuaTalk" */ = {
+		800000000000000000000003 /* Build configuration list for PBXNativeTarget "Dikta" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				B00000000000000000000003 /* Debug */,

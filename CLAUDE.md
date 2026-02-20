@@ -4,21 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Dua Talk is a minimal, fully offline dictation app for macOS (v0.1). It transcribes speech to clipboard using a global hotkey, running as a menu bar app. No cloud services required.
+Dikta is a minimal, fully offline dictation app for macOS (v0.2). It transcribes speech to clipboard using a global hotkey, running as a menu bar app. No cloud services required.
 
-The primary implementation is **DuaTalk/** (native Swift/SwiftUI). A legacy Python implementation exists in **python/**.
+The primary implementation is **Dikta/** (native Swift/SwiftUI). A legacy Python implementation exists in **python/**.
 
 ## Swift Development
 
 ```bash
-cd DuaTalk
+cd Dikta
 
 # Build and run
 swift build
-.build/debug/DuaTalk
+.build/debug/Dikta
 
 # Or open in Xcode
-open DuaTalk.xcodeproj
+open Dikta.xcodeproj
 ```
 
 ### Release Build
@@ -29,7 +29,7 @@ The full release script handles archiving, signing, bundling the Whisper model, 
 ./scripts/build-release.sh
 ```
 
-Output: `DuaTalk/build/DuaTalk.dmg`
+Output: `Dikta/build/Dikta.dmg`
 
 **Important build note**: The re-signing step after bundling the Whisper model must pass `--entitlements` or they get stripped. This is handled in the script.
 
@@ -48,7 +48,7 @@ Hotkey → Recording → WhisperKit STT → Auto-paste + History
   - `Language.swift` — Supported languages: English, Swedish
 - **Services/**
   - `HotkeyManager.swift` — CGEventTap-based global hotkey detection (flagsChanged + keyDown/keyUp)
-  - `ConfigService.swift` — Singleton config manager, persists to `~/Library/Application Support/Dua Talk/config.json`
+  - `ConfigService.swift` — Singleton config manager, persists to `~/Library/Application Support/Dikta/config.json`
   - `TextToSpeechService.swift` — Kokoro TTS integration via local Python server
   - `TextSelectionService.swift` — Gets selected text via Accessibility API
   - `ClipboardManager.swift` — Clipboard operations and auto-paste (Cmd+V simulation)
@@ -67,7 +67,7 @@ Uses `CGEvent.tapCreate` listening for `keyDown`, `keyUp`, and `flagsChanged` ev
 
 ### Config
 
-Persisted at `~/Library/Application Support/Dua Talk/config.json`. Key fields: `hotkeys` (toggle, push_to_talk, text_to_speech), `active_mode`, `whisper_model`, `language`.
+Persisted at `~/Library/Application Support/Dikta/config.json`. Key fields: `hotkeys` (toggle, push_to_talk, text_to_speech), `whisper_model`, `language`, `mute_sounds`, `mute_notifications`.
 
 ## Hotkey Modes
 
@@ -79,12 +79,12 @@ Default hotkeys: Toggle = Shift+Ctrl, PTT = Cmd+Shift, TTS = Cmd+Alt. All custom
 
 ## Text-to-Speech
 
-Kokoro TTS is set up from the onboarding window (Setup... in menu bar). Creates a Python venv at `~/Library/Application Support/Dua Talk/venv` and installs kokoro + dependencies.
+Kokoro TTS is set up from the onboarding window (Setup... in menu bar). Creates a Python venv at `~/Library/Application Support/Dikta/venv` and installs kokoro + dependencies.
 
 ## Menu Structure
 
 ```
-Dua Talk
+Dikta
 ├── Stop Recording / Stop Speaking / Processing...
 ├── History >
 ├── Settings >
@@ -92,6 +92,8 @@ Dua Talk
 │   ├── Set Toggle Hotkey... / Set Push-to-Talk Hotkey...
 │   └── Set Read Aloud Hotkey...
 ├── Advanced >
+│   ├── Mute Sounds
+│   ├── Mute Notifications
 │   ├── Language: English / Svenska
 │   ├── Whisper Model: Small / Medium
 │   └── Voice: (Kokoro voices)

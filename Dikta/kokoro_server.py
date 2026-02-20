@@ -22,7 +22,7 @@ from kokoro import KPipeline
 import soundfile as sf
 import numpy as np
 
-pipe = KPipeline(lang_code='a', repo_id='hexgrad/Kokoro-82M')
+pipe = KPipeline(lang_code='a')
 print("Model loaded! Server ready.")
 
 

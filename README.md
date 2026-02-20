@@ -1,4 +1,4 @@
-# Dua Talk
+# Dikta
 
 A minimal, fully offline dictation app for macOS. Press a hotkey, speak, and your words are pasted instantly. No cloud services, no subscriptions.
 
@@ -10,9 +10,9 @@ Or build from source:
 
 ```bash
 git clone https://github.com/Sebstrdigital/dua-talk.git
-cd dua-talk/DuaTalk
+cd dua-talk/Dikta
 swift build
-.build/debug/DuaTalk
+.build/debug/Dikta
 ```
 
 ## Features
@@ -57,6 +57,8 @@ Available under **Advanced** in the menu bar:
 
 | Setting | Options |
 |---------|---------|
+| **Mute Sounds** | Toggle feedback sounds on/off |
+| **Mute Notifications** | Toggle routine notifications on/off (errors always show) |
 | **Language** | English, Svenska |
 | **Whisper Model** | Small (~500MB, balanced), Medium (~1.5GB, accurate) |
 | **Voice** | Multiple Kokoro TTS voices |
@@ -64,11 +66,11 @@ Available under **Advanced** in the menu bar:
 ## Building a Release
 
 ```bash
-cd DuaTalk
+cd Dikta
 ./scripts/build-release.sh
 ```
 
-This archives, signs, bundles the Whisper model, notarizes with Apple, and produces a DMG at `build/DuaTalk.dmg`.
+This archives, signs, bundles the Whisper model, notarizes with Apple, and produces a DMG at `build/Dikta.dmg`.
 
 Requires a Developer ID certificate and notarization credentials (see script header for setup).
 
@@ -90,7 +92,9 @@ python dua_talk.py
 
 **Text-to-speech not working** — Open the setup screen (Setup... in menu bar) and click "Set Up" next to Text-to-Speech. Requires Python 3.
 
-**App won't start** — Clean and rebuild: `cd DuaTalk && rm -rf .build && swift build`
+**AirPods not picking up audio** — This is handled automatically. If AirPods still don't work, make sure they're set as the input device in System Settings > Sound > Input before starting a recording.
+
+**App won't start** — Clean and rebuild: `cd Dikta && rm -rf .build && swift build`
 
 ## Resources
 
