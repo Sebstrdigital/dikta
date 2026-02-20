@@ -73,19 +73,6 @@ final class ConfigService: ObservableObject {
         config.hotkeys.textToSpeech
     }
 
-    var activeHotkeyMode: HotkeyMode {
-        get { config.activeMode }
-        set {
-            config.activeMode = newValue
-            objectWillChange.send()
-            save()
-        }
-    }
-
-    var activeHotkey: HotkeyConfig {
-        getHotkey(for: activeHotkeyMode)
-    }
-
     // MARK: - Output Mode
 
     var outputMode: OutputMode {

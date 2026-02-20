@@ -4,7 +4,6 @@ import Foundation
 struct AppConfig: Codable {
     var version: Int
     var hotkeys: HotkeyConfigs
-    var activeMode: HotkeyMode
     var outputMode: OutputMode
     var history: [HistoryItem]
     var whisperModel: String
@@ -41,7 +40,6 @@ struct AppConfig: Codable {
     enum CodingKeys: String, CodingKey {
         case version
         case hotkeys
-        case activeMode = "active_mode"
         case outputMode = "output_mode"
         case history
         case whisperModel = "whisper_model"
@@ -55,13 +53,12 @@ struct AppConfig: Codable {
 
     /// Default configuration
     static let `default` = AppConfig(
-        version: 2,
+        version: 3,
         hotkeys: HotkeyConfigs(
             toggle: .defaultToggle,
             pushToTalk: .defaultPushToTalk,
             textToSpeech: .defaultTextToSpeech
         ),
-        activeMode: .toggle,
         outputMode: .general,
         history: [],
         whisperModel: "small",
@@ -75,10 +72,9 @@ struct AppConfig: Codable {
     static let historyLimit = 5
 
     /// Memberwise initializer
-    init(version: Int, hotkeys: HotkeyConfigs, activeMode: HotkeyMode, outputMode: OutputMode, history: [HistoryItem], whisperModel: String, llmModel: String, language: Language, customPrompt: String = defaultCustomPrompt, muteSounds: Bool = false) {
+    init(version: Int, hotkeys: HotkeyConfigs, outputMode: OutputMode, history: [HistoryItem], whisperModel: String, llmModel: String, language: Language, customPrompt: String = defaultCustomPrompt, muteSounds: Bool = false) {
         self.version = version
         self.hotkeys = hotkeys
-        self.activeMode = activeMode
         self.outputMode = outputMode
         self.history = history
         self.whisperModel = whisperModel
@@ -88,12 +84,14 @@ struct AppConfig: Codable {
         self.muteSounds = muteSounds
     }
 
-    /// Handle missing fields from old configs
+    /// Handle missing fields from old configs (v2 configs with active_mode are handled gracefully —
+    /// unknown JSON keys are ignored by Codable since the CodingKey case was removed)
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        version = try container.decode(Int.self, forKey: .version)
+        let savedVersion = try container.decode(Int.self, forKey: .version)
+        // Migrate old configs to current version
+        version = max(savedVersion, 3)
         hotkeys = try container.decode(HotkeyConfigs.self, forKey: .hotkeys)
-        activeMode = try container.decode(HotkeyMode.self, forKey: .activeMode)
         outputMode = try container.decode(OutputMode.self, forKey: .outputMode)
         history = try container.decode([HistoryItem].self, forKey: .history)
         let rawWhisperModel = try container.decode(String.self, forKey: .whisperModel)
