@@ -29,6 +29,9 @@ final class MenuBarViewModel: ObservableObject {
     private let ttsService: TextToSpeechService
     private let textSelectionService: TextSelectionService
 
+    // Track which mode initiated a recording (nil when not recording)
+    private var activeRecordingMode: HotkeyMode? = nil
+
     // Hotkey recording state
     @Published var isRecordingHotkey = false
     @Published var recordingHotkeyFor: HotkeyMode?
@@ -89,8 +92,8 @@ final class MenuBarViewModel: ObservableObject {
             // Start hotkey listener
             hotkeyManager.start()
 
-            let hotkey = configService.activeHotkey.displayString
-            sendNotification(title: "Ready", body: "Whisper model loaded. Use \(hotkey) to record.")
+            let toggleHotkey = configService.getHotkey(for: .toggle).displayString
+            sendNotification(title: "Ready", body: "Whisper model loaded. Use \(toggleHotkey) to record.")
         } else {
             sendNotification(title: "Error", body: transcriber.errorMessage ?? "Failed to load model")
         }
@@ -122,6 +125,7 @@ final class MenuBarViewModel: ObservableObject {
     func stopRecording() {
         guard appState == .recording else { return }
 
+        activeRecordingMode = nil
         let audioSamples = audioRecorder.stopRecording()
         appState = .processing
 
@@ -172,14 +176,6 @@ final class MenuBarViewModel: ObservableObject {
     /// Paste a history item
     func pasteHistoryItem(_ item: HistoryItem) {
         clipboardManager.pasteText(item.text)
-    }
-
-    // MARK: - Hotkey Mode
-
-    func setHotkeyMode(_ mode: HotkeyMode) {
-        configService.activeHotkeyMode = mode
-        updateHotkeyConfig()
-        sendNotification(title: "Mode Changed", body: "Now using \(mode.displayName)")
     }
 
     // MARK: - Language
@@ -235,7 +231,10 @@ final class MenuBarViewModel: ObservableObject {
     }
 
     private func updateHotkeyConfig() {
-        hotkeyManager.updateConfig(configService.activeHotkey, mode: configService.activeHotkeyMode)
+        hotkeyManager.updateConfig(
+            toggle: configService.getHotkey(for: .toggle),
+            pushToTalk: configService.getHotkey(for: .pushToTalk)
+        )
         hotkeyManager.updateTtsConfig(configService.ttsHotkey)
     }
 
@@ -327,19 +326,24 @@ final class MenuBarViewModel: ObservableObject {
 // MARK: - HotkeyManagerDelegate
 
 extension MenuBarViewModel: HotkeyManagerDelegate {
-    nonisolated func hotkeyPressed() {
+    nonisolated func hotkeyPressed(mode: HotkeyMode) {
         Task { @MainActor in
-            if configService.activeHotkeyMode == .toggle {
-                toggleRecording()
-            } else {
+            if appState == .idle {
+                // Start recording and track which mode initiated it
+                activeRecordingMode = mode
                 startRecording()
+            } else if appState == .recording && mode == .toggle && activeRecordingMode == .toggle {
+                // Only toggle mode can stop its own recording via press
+                stopRecording()
             }
+            // Otherwise ignore (e.g., PTT press while toggle is recording)
         }
     }
 
-    nonisolated func hotkeyReleased() {
+    nonisolated func hotkeyReleased(mode: HotkeyMode) {
         Task { @MainActor in
-            if configService.activeHotkeyMode == .pushToTalk {
+            // Only stop if PTT released its own recording
+            if mode == .pushToTalk && activeRecordingMode == .pushToTalk {
                 stopRecording()
             }
         }

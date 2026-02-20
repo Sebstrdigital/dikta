@@ -70,29 +70,6 @@ struct SettingsMenu: View {
 
     var body: some View {
         Menu("Settings") {
-            // Hotkey mode selection
-            Button(action: { viewModel.setHotkeyMode(.toggle) }) {
-                HStack {
-                    Text("Toggle Mode")
-                    if viewModel.configService.activeHotkeyMode == .toggle {
-                        Spacer()
-                        Image(systemName: "checkmark")
-                    }
-                }
-            }
-
-            Button(action: { viewModel.setHotkeyMode(.pushToTalk) }) {
-                HStack {
-                    Text("Push-to-Talk Mode")
-                    if viewModel.configService.activeHotkeyMode == .pushToTalk {
-                        Spacer()
-                        Image(systemName: "checkmark")
-                    }
-                }
-            }
-
-            Divider()
-
             // Hotkey configuration
             let toggleHotkey = viewModel.configService.getHotkey(for: .toggle)
             Button("Set Toggle Hotkey... (\(toggleHotkey.displayString))") {
