@@ -274,11 +274,12 @@ final class MenuBarViewModel: ObservableObject {
         }
 
         // Check if TTS server is available
-        guard await ttsService.checkAvailable() else {
-            sendNotification(
-                title: "TTS Not Available",
-                body: "TTS server not running. Reopen Dikta to set up Text-to-Speech."
-            )
+        if !(await ttsService.checkAvailable()) {
+            if ttsService.isSetUp {
+                sendNotification(title: "TTS Starting Up", body: "Voice engine is loading, please try again shortly.", isRoutine: true)
+            } else {
+                sendNotification(title: "TTS Not Available", body: "Open Setup to install Text-to-Speech.")
+            }
             return
         }
 

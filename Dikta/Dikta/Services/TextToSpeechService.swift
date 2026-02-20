@@ -81,10 +81,29 @@ final class TextToSpeechService: NSObject {
             object: nil
         )
 
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleTTSInstalled),
+            name: .ttsInstallCompleted,
+            object: nil
+        )
+
         // Try to start server if not running
         Task {
             await ensureServerRunning()
         }
+    }
+
+    @objc private func handleTTSInstalled() {
+        Task {
+            await ensureServerRunning()
+        }
+    }
+
+    /// Whether TTS files are installed (venv + server script exist)
+    var isSetUp: Bool {
+        FileManager.default.fileExists(atPath: AppPaths.venvPython)
+            && FileManager.default.fileExists(atPath: AppPaths.kokoroServerScript)
     }
 
     @objc private func applicationWillTerminate() {

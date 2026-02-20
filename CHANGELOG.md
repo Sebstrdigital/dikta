@@ -11,6 +11,10 @@ All notable changes to Dikta will be documented in this file.
 ### Fixes
 - AirPods Pro microphone not detected — AudioRecorder now retries when Bluetooth HFP profile switch causes a zero-sample-rate format
 - AudioRecorder observes `AVAudioEngineConfigurationChange` during recording for better Bluetooth device handling
+- TTS onboarding: green checkmark now only appears after the server is actually responding, not just after files are installed
+- TTS error messages now distinguish "not set up" from "server still starting" when pressing the Read Aloud hotkey
+- Accessibility and Microphone permission status now auto-updates in the onboarding window (polls every 5 seconds)
+- Get Started button disabled while TTS installation is in progress
 
 ## [0.1] - 2026-02-19
 

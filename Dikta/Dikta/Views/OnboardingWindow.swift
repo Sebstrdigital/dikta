@@ -55,13 +55,18 @@ final class OnboardingWindowController {
 
 // MARK: - TTS Setup
 
+extension Notification.Name {
+    static let ttsInstallCompleted = Notification.Name("ttsInstallCompleted")
+}
+
 enum TTSSetupStatus: Equatable {
     case notInstalled
     case installing(step: String)
+    case startingServer
     case installed
     case failed(String)
 
-    /// Whether setup is in progress
+    /// Whether user-initiated setup is in progress (disables Get Started button)
     var isInstalling: Bool {
         if case .installing = self { return true }
         return false
@@ -82,8 +87,13 @@ final class TTSSetupManager: ObservableObject {
 
     func checkExisting() {
         let fm = FileManager.default
-        if fm.fileExists(atPath: Self.venvPython) && fm.fileExists(atPath: Self.serverScript) {
-            status = .installed
+        guard fm.fileExists(atPath: Self.venvPython) && fm.fileExists(atPath: Self.serverScript) else { return }
+
+        // Files exist — verify server is actually ready
+        status = .startingServer
+        Task {
+            let ready = await waitForServer(timeout: 120)
+            status = ready ? .installed : .failed("Voice engine failed to start. Try restarting.")
         }
     }
 
@@ -94,7 +104,18 @@ final class TTSSetupManager: ObservableObject {
         Task {
             do {
                 try await runSetup()
-                status = .installed
+                status = .installing(step: "Starting voice engine...")
+
+                // Signal TextToSpeechService to start the server
+                NotificationCenter.default.post(name: .ttsInstallCompleted, object: nil)
+
+                // Wait for server to actually respond
+                let ready = await waitForServer(timeout: 120)
+                if ready {
+                    status = .installed
+                } else {
+                    status = .failed("Voice engine timed out. Try restarting Dikta.")
+                }
             } catch {
                 status = .failed(error.localizedDescription)
             }
@@ -183,6 +204,27 @@ final class TTSSetupManager: ObservableObject {
             } catch {
                 continuation.resume(throwing: error)
             }
+        }
+    }
+
+    private func waitForServer(timeout: Int) async -> Bool {
+        let attempts = timeout * 2  // 500ms intervals
+        for _ in 0..<attempts {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            if await pingServer() { return true }
+        }
+        return false
+    }
+
+    private func pingServer() async -> Bool {
+        guard let url = URL(string: "http://127.0.0.1:59123/ping") else { return false }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 1.0
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            return (response as? HTTPURLResponse)?.statusCode == 200
+        } catch {
+            return false
         }
     }
 
@@ -290,12 +332,28 @@ struct OnboardingView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            .disabled(ttsSetup.status.isInstalling)
             .padding(.horizontal, 32)
             .padding(.bottom, 24)
         }
         .frame(width: 500, height: 580)
         .onAppear {
             checkPermissions()
+        }
+        .task {
+            // Poll permissions every 5 seconds until all granted
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                if !accessibilityStatus {
+                    accessibilityStatus = AXIsProcessTrusted()
+                }
+                if micStatus == .denied {
+                    if AVCaptureDevice.authorizationStatus(for: .audio) == .authorized {
+                        micStatus = .granted
+                    }
+                }
+                if accessibilityStatus && micStatus == .granted { break }
+            }
         }
     }
 
@@ -371,6 +429,15 @@ struct OnboardingView: View {
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
+            }
+        case .startingServer:
+            HStack(spacing: 6) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Starting voice engine...")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
             }
         case .installed:
             Label("Ready", systemImage: "checkmark.circle.fill")
