@@ -4,6 +4,9 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
     <ApplicationIcon>Resources\dikta.ico</ApplicationIcon>
     <AssemblyName>DiktaWindows</AssemblyName>
     <RootNamespace>DiktaWindows</RootNamespace>
@@ -13,8 +16,8 @@
 
   <ItemGroup>
     <PackageReference Include="NAudio" Version="2.2.1" />
-    <PackageReference Include="Whisper.net" Version="1.7.5" />
-    <PackageReference Include="Whisper.net.Runtime" Version="1.7.5" />
+    <PackageReference Include="Whisper.net" Version="1.8.0" />
+    <PackageReference Include="Whisper.net.Runtime" Version="1.8.0" />
   </ItemGroup>
 
   <ItemGroup>
