@@ -6,12 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Dikta is a minimal, fully offline dictation app for macOS (v0.2). It transcribes speech to clipboard using a global hotkey, running as a menu bar app. No cloud services required.
 
-The primary implementation is **Dikta/** (native Swift/SwiftUI). A legacy Python implementation exists in **python/**.
+The primary implementation is **dikta-macos/** (native Swift/SwiftUI). A Windows port lives in **dikta-windows/** (.NET 8/C#/WPF). A legacy Python implementation exists in **python/**.
 
 ## Swift Development
 
 ```bash
-cd Dikta
+cd dikta-macos
 
 # Build and run
 swift build
@@ -29,7 +29,7 @@ The full release script handles archiving, signing, bundling the Whisper model, 
 ./scripts/build-release.sh
 ```
 
-Output: `Dikta/build/Dikta.dmg`
+Output: `dikta-macos/build/Dikta.dmg`
 
 **Important build note**: The re-signing step after bundling the Whisper model must pass `--entitlements` or they get stripped. This is handled in the script.
 
