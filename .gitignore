@@ -168,3 +168,4 @@ cython_debug/
 icon.iconset/
 build/
 dist/
+*.certSigningRequest
