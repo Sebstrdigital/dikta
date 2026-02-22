@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Dikta is a minimal, fully offline dictation app for macOS (v0.2). It transcribes speech to clipboard using a global hotkey, running as a menu bar app. No cloud services required.
 
-The primary implementation is **dikta-macos/** (native Swift/SwiftUI). A Windows port lives in **dikta-windows/** (.NET 8/C#/WPF). A legacy Python implementation exists in **python/**.
+The primary implementation is **dikta-macos/** (native Swift/SwiftUI). A Windows port lives in **dikta-windows/** (.NET 8/C#/WPF). A legacy Python implementation exists in **dikta-python/**.
 
 ## Swift Development
 
@@ -114,4 +114,4 @@ uv sync && source .venv/bin/activate
 python dua_talk.py
 ```
 
-Not actively developed. See `python/` for details.
+Not actively developed. See `dikta-python/` for details.

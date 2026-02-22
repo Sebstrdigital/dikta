@@ -76,10 +76,10 @@ Requires a Developer ID certificate and notarization credentials (see script hea
 
 ## Python Implementation
 
-A legacy Python implementation is also available in `python/`. See `python/` for details.
+A legacy Python implementation is also available in `dikta-python/`. See `dikta-python/` for details.
 
 ```bash
-cd python
+cd dikta-python
 uv sync && source .venv/bin/activate
 python dua_talk.py
 ```
