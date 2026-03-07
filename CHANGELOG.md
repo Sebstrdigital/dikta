@@ -15,7 +15,6 @@ All notable changes to Dikta will be documented in this file.
 
 ### Features
 - Mic Sensitivity replaces Mic Distance — simplified to Normal / Headset (removed Close preset)
-- Whisper control tokens (`<|startoftranscript|>`, `<|en|>`, timestamps, etc.) stripped from output
 - Smart segment filtering — valid text segments kept even when mixed with silence/empty segments
 - Error notifications (No Speech, Transcription Timeout) always shown even when notifications are muted
 
