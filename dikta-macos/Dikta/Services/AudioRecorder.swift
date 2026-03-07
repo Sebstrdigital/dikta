@@ -107,7 +107,11 @@ final class AudioRecorder {
         // Install tap on input node
         let inputNode = engine.inputNode
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
-            guard let self, let converter = self.audioConverter else { return }
+            guard let self else { return }
+            self.bufferLock.lock()
+            let converter = self.audioConverter
+            self.bufferLock.unlock()
+            guard let converter else { return }
             self.processBuffer(buffer, converter: converter, outputFormat: outputFormat)
         }
 
@@ -134,7 +138,9 @@ final class AudioRecorder {
                 AppLogger.audio.error("Failed to recreate AVAudioConverter after config change")
                 return
             }
+            self.bufferLock.lock()
             self.audioConverter = newConverter
+            self.bufferLock.unlock()
             AppLogger.audio.info("AVAudioConverter recreated with new input format: \(newInputFormat.sampleRate)Hz")
         }
     }
@@ -232,10 +238,10 @@ final class AudioRecorder {
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
         audioEngine = nil
-        audioConverter = nil
         isRecording = false
 
         bufferLock.lock()
+        audioConverter = nil
         let result = audioBuffer
         audioBuffer.removeAll()
         bufferLock.unlock()
