@@ -4,6 +4,7 @@ import AVFoundation
 /// Service for recording audio from the microphone
 final class AudioRecorder {
     private var audioEngine: AVAudioEngine?
+    private var audioConverter: AVAudioConverter?
     private var audioBuffer: [Float] = []
     private let bufferLock = NSLock()
     private var isRecording = false
@@ -75,10 +76,11 @@ final class AudioRecorder {
             throw AudioRecorderError.formatCreationFailed
         }
 
-        // Create converter for sample rate conversion
+        // Create converter for sample rate conversion (stored as instance property to avoid closure capture leak)
         guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
             throw AudioRecorderError.converterCreationFailed
         }
+        self.audioConverter = converter
 
         // Clear buffer and silence state
         silenceStartDate = nil
@@ -89,7 +91,8 @@ final class AudioRecorder {
         // Install tap on input node
         let inputNode = engine.inputNode
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
-            self?.processBuffer(buffer, converter: converter, outputFormat: outputFormat)
+            guard let self, let converter = self.audioConverter else { return }
+            self.processBuffer(buffer, converter: converter, outputFormat: outputFormat)
         }
 
         engine.prepare()
@@ -194,6 +197,7 @@ final class AudioRecorder {
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
         audioEngine = nil
+        audioConverter = nil
         isRecording = false
 
         bufferLock.lock()
