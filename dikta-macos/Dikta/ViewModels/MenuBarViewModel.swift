@@ -145,7 +145,7 @@ final class MenuBarViewModel: ObservableObject {
 
         Task {
             do {
-                try await audioRecorder.startRecording()
+                try await audioRecorder.startRecording(micDistance: configService.micDistance)
                 appState = .recording
                 audioFeedback.beepOn()
             } catch {
@@ -177,6 +177,11 @@ final class MenuBarViewModel: ObservableObject {
             let language = configService.language
             let micDistance = configService.micDistance
 
+            // Diagnostic: log memory before transcription
+            if let memBefore = memoryFootprintMB() {
+                AppLogger.transcription.info("Memory before transcription: \(String(format: "%.1f", memBefore)) MB")
+            }
+
             let text = try await withThrowingTaskGroup(of: String.self) { group in
                 group.addTask {
                     try await self.transcriber.transcribe(samples, language: language.whisperCode, micDistance: micDistance)
@@ -189,6 +194,11 @@ final class MenuBarViewModel: ObservableObject {
                 return try await group.next()!
             }
 
+            // Diagnostic: log memory after transcription
+            if let memAfter = memoryFootprintMB() {
+                AppLogger.transcription.info("Memory after transcription: \(String(format: "%.1f", memAfter)) MB")
+            }
+
             // Check for silence/empty output from Whisper
             let silenceIndicators = ["[silence]", "[blank_audio]", "[no speech]", "(silence)", "[ silence ]"]
             let lowerText = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
@@ -196,8 +206,7 @@ final class MenuBarViewModel: ObservableObject {
             if lowerText.isEmpty || silenceIndicators.contains(where: { lowerText.contains($0) }) {
                 sendNotification(
                     title: "No Speech",
-                    body: "No speech detected. Try adjusting Mic Distance in Audio settings.",
-                    isRoutine: true
+                    body: "No speech detected. Try adjusting Mic Distance in Audio settings."
                 )
                 appState = .idle
                 return
@@ -212,8 +221,7 @@ final class MenuBarViewModel: ObservableObject {
         } catch is TranscriberError {
             sendNotification(
                 title: "No Speech",
-                body: "No speech detected. Try adjusting Mic Distance in Audio settings.",
-                isRoutine: true
+                body: "No speech detected. Try adjusting Mic Distance in Audio settings."
             )
             appState = .idle
         } catch {
@@ -428,6 +436,19 @@ final class MenuBarViewModel: ObservableObject {
     func requestNotificationPermissions() async {
         guard canUseNotifications else { return }
         _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
+    }
+
+    /// Returns the app's memory footprint in MB, or nil if unavailable.
+    private func memoryFootprintMB() -> Double? {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+            }
+        }
+        guard result == KERN_SUCCESS else { return nil }
+        return Double(info.resident_size) / (1024 * 1024)
     }
 
     deinit {

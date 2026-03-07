@@ -79,19 +79,32 @@ final class Transcriber: ObservableObject {
         let options = DecodingOptions(
             language: language,
             temperatureFallbackCount: 3,         // Retry with higher temp if failed
-            compressionRatioThreshold: 2.4,      // Detect repetitive hallucinations
+            compressionRatioThreshold: 3.0,      // Relaxed to avoid rejecting valid long-form segments
             logProbThreshold: micDistance.logProbThreshold,
             noSpeechThreshold: micDistance.noSpeechThreshold
         )
 
         AppLogger.transcription.debug("Using language: \(language ?? "auto"), samples: \(audioSamples.count)")
 
-        let result = try await whisperKit.transcribe(audioArray: audioSamples, decodeOptions: options)
+        let results = try await whisperKit.transcribe(audioArray: audioSamples, decodeOptions: options)
 
-        AppLogger.transcription.debug("Got \(result.count) segments")
+        // Log segment-level details for diagnostics
+        let allSegments = results.flatMap { $0.segments }
+        AppLogger.transcription.info("Transcription returned \(results.count) result(s), \(allSegments.count) segment(s) total")
 
-        // Combine all segments into a single string
-        let text = result.map { $0.text }.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        for (i, segment) in allSegments.enumerated() {
+            let textPreview = segment.text.trimmingCharacters(in: .whitespaces)
+            AppLogger.transcription.info(
+                "Segment \(i): text=\"\(textPreview)\", avgLogprob=\(segment.avgLogprob), compressionRatio=\(segment.compressionRatio), noSpeechProb=\(segment.noSpeechProb)"
+            )
+        }
+
+        // Keep only segments with non-empty text (filter out silence/empty segments)
+        let validSegments = allSegments.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
+
+        AppLogger.transcription.info("Valid segments: \(validSegments.count) of \(allSegments.count)")
+
+        let text = validSegments.map { $0.text }.joined(separator: " ").trimmingCharacters(in: .whitespaces)
 
         if text.isEmpty {
             throw TranscriberError.noSpeechDetected

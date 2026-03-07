@@ -4,6 +4,7 @@ import AVFoundation
 /// Service for recording audio from the microphone
 final class AudioRecorder {
     private var audioEngine: AVAudioEngine?
+    private var audioConverter: AVAudioConverter?
     private var audioBuffer: [Float] = []
     private let bufferLock = NSLock()
     private var isRecording = false
@@ -16,8 +17,8 @@ final class AudioRecorder {
 
     private var silenceStartDate: Date?
     private let silenceAutoStopThreshold: TimeInterval = 10.0
-    /// RMS energy below this level is considered silence
-    private let silenceRMSThreshold: Float = 0.005
+    /// RMS energy below this level is considered silence (set per-recording based on MicDistance)
+    private var silenceRMSThreshold: Float = 0.005
 
     /// Target sample rate for Whisper (16kHz)
     static let sampleRate: Double = 16000
@@ -39,23 +40,39 @@ final class AudioRecorder {
         }
     }
 
+    /// Retry delays for Bluetooth HFP profile switching (300ms, 500ms, 800ms)
+    private static let retryDelaysNs: [UInt64] = [300_000_000, 500_000_000, 800_000_000]
+
     /// Start recording audio
-    func startRecording() async throws {
+    /// - Parameter micDistance: The current mic distance preset, used to set the silence RMS threshold.
+    func startRecording(micDistance: MicDistance = .normal) async throws {
         guard !isRecording else { return }
+
+        silenceRMSThreshold = micDistance.silenceRMSThreshold
 
         var engine = AVAudioEngine()
         var inputFormat = engine.inputNode.outputFormat(forBus: 0)
 
-        // Retry if sample rate is 0 (e.g. Bluetooth HFP profile switching for AirPods)
+        // Retry with increasing delays if sample rate is 0 (e.g. Bluetooth HFP profile switching for AirPods)
         if inputFormat.sampleRate == 0 {
             AppLogger.audio.info("Input format has 0 sample rate, waiting for audio route to settle...")
             engine.stop()
-            // Use Task.sleep so we yield the thread rather than blocking it
-            try? await Task.sleep(nanoseconds: 300_000_000) // 300ms
 
-            engine = AVAudioEngine()
-            inputFormat = engine.inputNode.outputFormat(forBus: 0)
-            guard inputFormat.sampleRate > 0 else {
+            var settled = false
+            for (attempt, delay) in Self.retryDelaysNs.enumerated() {
+                try? await Task.sleep(nanoseconds: delay)
+                engine = AVAudioEngine()
+                inputFormat = engine.inputNode.outputFormat(forBus: 0)
+                if inputFormat.sampleRate > 0 {
+                    AppLogger.audio.info("Audio route settled after retry \(attempt + 1)")
+                    settled = true
+                    break
+                }
+                AppLogger.audio.warning("Retry \(attempt + 1)/\(Self.retryDelaysNs.count): still 0 sample rate, waiting \(delay / 1_000_000)ms...")
+                engine.stop()
+            }
+
+            guard settled else {
                 throw AudioRecorderError.noInputDevice
             }
         }
@@ -75,10 +92,11 @@ final class AudioRecorder {
             throw AudioRecorderError.formatCreationFailed
         }
 
-        // Create converter for sample rate conversion
+        // Create converter for sample rate conversion (stored as instance property to avoid closure capture leak)
         guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
             throw AudioRecorderError.converterCreationFailed
         }
+        self.audioConverter = converter
 
         // Clear buffer and silence state
         silenceStartDate = nil
@@ -89,7 +107,12 @@ final class AudioRecorder {
         // Install tap on input node
         let inputNode = engine.inputNode
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
-            self?.processBuffer(buffer, converter: converter, outputFormat: outputFormat)
+            guard let self else { return }
+            self.bufferLock.lock()
+            let converter = self.audioConverter
+            self.bufferLock.unlock()
+            guard let converter else { return }
+            self.processBuffer(buffer, converter: converter, outputFormat: outputFormat)
         }
 
         engine.prepare()
@@ -101,8 +124,24 @@ final class AudioRecorder {
             forName: .AVAudioEngineConfigurationChange,
             object: engine,
             queue: .main
-        ) { _ in
-            AppLogger.audio.warning("AudioRecorder engine config changed during recording")
+        ) { [weak self] _ in
+            guard let self, self.isRecording else { return }
+            AppLogger.audio.warning("AudioRecorder engine config changed during recording — recreating converter")
+
+            let newInputFormat = engine.inputNode.outputFormat(forBus: 0)
+            guard newInputFormat.sampleRate > 0 else {
+                AppLogger.audio.error("New input format has 0 sample rate after config change, cannot recreate converter")
+                return
+            }
+
+            guard let newConverter = AVAudioConverter(from: newInputFormat, to: outputFormat) else {
+                AppLogger.audio.error("Failed to recreate AVAudioConverter after config change")
+                return
+            }
+            self.bufferLock.lock()
+            self.audioConverter = newConverter
+            self.bufferLock.unlock()
+            AppLogger.audio.info("AVAudioConverter recreated with new input format: \(newInputFormat.sampleRate)Hz")
         }
     }
 
@@ -124,7 +163,12 @@ final class AudioRecorder {
 
         converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
 
-        if error == nil, let channelData = outputBuffer.floatChannelData {
+        if let error {
+            AppLogger.audio.error("AVAudioConverter.convert() failed: \(error.localizedDescription)")
+            return
+        }
+
+        if let channelData = outputBuffer.floatChannelData {
             let frameLength = Int(outputBuffer.frameLength)
             let samples = Array(UnsafeBufferPointer(start: channelData[0], count: frameLength))
 
@@ -197,6 +241,7 @@ final class AudioRecorder {
         isRecording = false
 
         bufferLock.lock()
+        audioConverter = nil
         let result = audioBuffer
         audioBuffer.removeAll()
         bufferLock.unlock()

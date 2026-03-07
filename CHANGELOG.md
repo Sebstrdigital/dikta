@@ -2,6 +2,11 @@
 
 All notable changes to Dikta will be documented in this file.
 
+## [Unreleased]
+
+### Reliability
+- 2026-03-07: Mitigated takt agent Bash permission issue — wildcard `Bash(*)` added to project settings
+
 ## [0.4] - 2026-02-26
 
 ### Features

@@ -39,6 +39,18 @@ enum MicDistance: String, Codable, CaseIterable {
         }
     }
 
+    /// RMS energy threshold for silence detection in `AudioRecorder`.
+    /// Audio chunks with RMS below this level are considered silence.
+    /// Close mics produce stronger signals, so the threshold is higher to avoid false recordings.
+    /// Far/headset mics produce weaker signals, so the threshold is lower to avoid premature stops.
+    var silenceRMSThreshold: Float {
+        switch self {
+        case .close: return 0.01   // Higher: close mic delivers strong signal, silence is still loud
+        case .normal: return 0.005 // Balanced: default, matches previous hardcoded value
+        case .far: return 0.002    // Lower: weak Bluetooth signals need a more permissive floor
+        }
+    }
+
     /// Whisper `logProbThreshold` — lower (more negative) = accepts lower-confidence output.
     /// Whisper's default is -1.0.
     var logProbThreshold: Float {
