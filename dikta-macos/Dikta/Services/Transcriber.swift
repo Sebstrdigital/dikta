@@ -104,16 +104,23 @@ final class Transcriber: ObservableObject {
 
         AppLogger.transcription.info("Valid segments: \(validSegments.count) of \(allSegments.count)")
 
-        // Diagnostic file log: one compact line with per-segment scores
+        // Diagnostic file log: one compact line with per-segment scores and text
         let noSpeechProbs = allSegments.map { String(format: "%.2f", $0.noSpeechProb) }.joined(separator: ",")
         let logProbs = allSegments.map { String(format: "%.1f", $0.avgLogprob) }.joined(separator: ",")
-        DiagnosticLogger.shared.log("WHISPER | segs=\(allSegments.count) valid=\(validSegments.count) | noSpeech=[\(noSpeechProbs)] | logProb=[\(logProbs)]")
+        let segTexts = allSegments.map { "\"\($0.text.trimmingCharacters(in: .whitespaces))\"" }.joined(separator: ",")
+        DiagnosticLogger.shared.log("WHISPER | segs=\(allSegments.count) valid=\(validSegments.count) | noSpeech=[\(noSpeechProbs)] | logProb=[\(logProbs)] | texts=[\(segTexts)]")
 
         let text = validSegments.map { segment in
             // Strip Whisper control tokens (e.g. <|startoftranscript|>, <|en|>, <|0.00|>, <|endoftext|>)
-            segment.text.replacingOccurrences(of: "<\\|[^|]+\\|>", with: "", options: .regularExpression)
+            // Also strip bracket noise tokens (e.g. [BLANK_AUDIO], [ Silence ], [silence], [no speech])
+            // These represent trailing silence appended by Whisper and must not trigger a no_speech discard.
+            segment.text
+                .replacingOccurrences(of: "<\\|[^|]+\\|>", with: "", options: .regularExpression)
+                .replacingOccurrences(of: "\\[\\s*(?:BLANK_AUDIO|silence|no speech)\\s*\\]", with: "", options: [.regularExpression, .caseInsensitive])
                 .trimmingCharacters(in: .whitespaces)
         }.filter { !$0.isEmpty }.joined(separator: " ")
+
+        DiagnosticLogger.shared.log("WHISPER_CLEAN | text=\"\(text)\"")
 
         if text.isEmpty {
             throw TranscriberError.noSpeechDetected

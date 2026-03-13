@@ -217,8 +217,10 @@ final class MenuBarViewModel: ObservableObject {
             let silenceIndicators = ["[silence]", "[blank_audio]", "[no speech]", "(silence)", "[ silence ]"]
             let lowerText = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
 
-            if lowerText.isEmpty || silenceIndicators.contains(where: { lowerText.contains($0) }) {
-                DiagnosticLogger.shared.log("RESULT | no_speech (silence indicator in text)")
+            let matchedIndicator = silenceIndicators.first(where: { lowerText.contains($0) })
+            if lowerText.isEmpty || matchedIndicator != nil {
+                let reason = lowerText.isEmpty ? "empty text" : "matched=\"\(matchedIndicator!)\""
+                DiagnosticLogger.shared.log("RESULT | no_speech (\(reason)) | text=\"\(text)\"")
                 sendNotification(
                     title: "No Speech",
                     body: "No speech detected. Try adjusting Mic Sensitivity in Audio settings."
