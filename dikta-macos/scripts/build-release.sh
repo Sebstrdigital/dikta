@@ -53,20 +53,26 @@ xcodebuild archive \
 
 echo "==> Archive complete: ${ARCHIVE_PATH}"
 
-# Step 2: Export the .app from the archive to /tmp (avoids iCloud xattr issues)
-echo "==> Exporting app..."
-APP_PATH="${ARCHIVE_PATH}/Products/Applications/${APP_NAME}.app"
+# Step 2: Export the .app from the archive using xcodebuild -exportArchive
+# This ensures all nested frameworks and helpers are correctly signed for Developer ID
+echo "==> Exporting app with xcodebuild -exportArchive..."
+EXPORT_OPTIONS_PLIST="${SCRIPT_DIR}/ExportOptions.plist"
+mkdir -p "${EXPORT_PATH}"
+xcodebuild -exportArchive \
+    -archivePath "${ARCHIVE_PATH}" \
+    -exportOptionsPlist "${EXPORT_OPTIONS_PLIST}" \
+    -exportPath "${EXPORT_PATH}" \
+    -quiet
+APP_EXPORT="${EXPORT_PATH}/${APP_NAME}.app"
 
-if [ ! -d "${APP_PATH}" ]; then
-    echo "ERROR: App not found at ${APP_PATH}"
-    echo "Contents of archive:"
-    find "${ARCHIVE_PATH}" -name "*.app" 2>/dev/null
+if [ ! -d "${APP_EXPORT}" ]; then
+    echo "ERROR: Exported app not found at ${APP_EXPORT}"
+    echo "Contents of export directory:"
+    ls -la "${EXPORT_PATH}" 2>/dev/null || echo "(empty)"
     exit 1
 fi
 
-mkdir -p "${EXPORT_PATH}"
-cp -R "${APP_PATH}" "${EXPORT_PATH}/${APP_NAME}.app"
-APP_EXPORT="${EXPORT_PATH}/${APP_NAME}.app"
+echo "==> Export complete: ${APP_EXPORT}"
 
 # Step 2b: Bundle Whisper small model into the app
 WHISPER_MODEL_NAME="openai_whisper-small"
@@ -93,49 +99,30 @@ echo "==> Stripping extended attributes..."
 xattr -cr "${APP_EXPORT}"
 
 # Re-sign after stripping xattrs
-# Sign inside-out: frameworks/helpers first, then the main app bundle.
-# --deep is unreliable for nested frameworks; sign each component explicitly.
+# Use Sparkle's exact documented re-signing commands for sandboxed apps:
+# https://sparkle-project.org/documentation/sandboxing/#code-signing
+# No --deep, no --timestamp on Sparkle components, no custom entitlements for Downloader.xpc.
 ENTITLEMENTS="${PROJECT_DIR}/Dikta/Resources/Dikta.entitlements"
-echo "==> Signing app..."
+CODE_SIGN_IDENTITY="${SIGNING_IDENTITY}"
+SPARKLE_FRAMEWORK="${APP_EXPORT}/Contents/Frameworks/Sparkle.framework"
 
-# Sign all nested Mach-O binaries, bundles, and frameworks inside Frameworks/ (deepest first)
-# This covers Sparkle's Autoupdate helper, XPC services, sub-frameworks, etc.
-find "${APP_EXPORT}/Contents/Frameworks" -type f -perm +111 | while read -r binary; do
-    # Only sign Mach-O binaries (skip scripts, plists, etc.)
-    if file "${binary}" | grep -q "Mach-O"; then
-        codesign --force --options runtime --timestamp --sign "${SIGNING_IDENTITY}" "${binary}"
-    fi
-done
+echo "==> Re-signing Sparkle components (Sparkle documented order)..."
+codesign -f -s "${CODE_SIGN_IDENTITY}" -o runtime \
+    "${SPARKLE_FRAMEWORK}/Versions/B/XPCServices/Installer.xpc"
+codesign -f -s "${CODE_SIGN_IDENTITY}" -o runtime --preserve-metadata=entitlements \
+    "${SPARKLE_FRAMEWORK}/Versions/B/XPCServices/Downloader.xpc"
+codesign -f -s "${CODE_SIGN_IDENTITY}" -o runtime \
+    "${SPARKLE_FRAMEWORK}/Versions/B/Autoupdate"
+codesign -f -s "${CODE_SIGN_IDENTITY}" -o runtime \
+    "${SPARKLE_FRAMEWORK}/Versions/B/Updater.app"
+codesign -f -s "${CODE_SIGN_IDENTITY}" -o runtime \
+    "${SPARKLE_FRAMEWORK}"
 
-# Sign Sparkle XPC services with their required entitlements
-# Downloader.xpc needs sandbox + network.client to download updates
-DOWNLOADER_XPC="${APP_EXPORT}/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc"
-if [ -d "${DOWNLOADER_XPC}" ]; then
-    DOWNLOADER_ENTITLEMENTS="${WORK_DIR}/Downloader.entitlements"
-    cat > "${DOWNLOADER_ENTITLEMENTS}" << 'ENTEOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>com.apple.security.app-sandbox</key>
-    <true/>
-    <key>com.apple.security.network.client</key>
-    <true/>
-</dict>
-</plist>
-ENTEOF
-    codesign --force --options runtime --timestamp --entitlements "${DOWNLOADER_ENTITLEMENTS}" --sign "${SIGNING_IDENTITY}" "${DOWNLOADER_XPC}"
-fi
-
-# Sign remaining framework/bundle directories (inside-out)
-find "${APP_EXPORT}/Contents/Frameworks" -depth \
-    \( -name "*.framework" -o -name "*.xpc" -o -name "*.app" -o -name "*.bundle" \) \
-    ! -path "*/Downloader.xpc" | while read -r component; do
-    codesign --force --options runtime --timestamp --sign "${SIGNING_IDENTITY}" "${component}"
-done
-
-# Sign the main app bundle last
-codesign --force --options runtime --timestamp --entitlements "${ENTITLEMENTS}" --sign "${SIGNING_IDENTITY}" "${APP_EXPORT}"
+# Sign the main app bundle last with its entitlements
+echo "==> Signing main app bundle..."
+codesign -f -s "${CODE_SIGN_IDENTITY}" -o runtime \
+    --entitlements "${ENTITLEMENTS}" \
+    "${APP_EXPORT}"
 
 # Step 3: Verify code signing
 echo "==> Verifying code signature..."
