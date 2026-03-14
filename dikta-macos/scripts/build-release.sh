@@ -107,11 +107,31 @@ find "${APP_EXPORT}/Contents/Frameworks" -type f -perm +111 | while read -r bina
     fi
 done
 
-# Sign framework and bundle directories (inside-out: find sorts deeper paths first with -depth)
-# Preserve embedded entitlements for XPC services (Sparkle's Downloader needs sandbox + network.client)
+# Sign Sparkle XPC services with their required entitlements
+# Downloader.xpc needs sandbox + network.client to download updates
+DOWNLOADER_XPC="${APP_EXPORT}/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc"
+if [ -d "${DOWNLOADER_XPC}" ]; then
+    DOWNLOADER_ENTITLEMENTS="${WORK_DIR}/Downloader.entitlements"
+    cat > "${DOWNLOADER_ENTITLEMENTS}" << 'ENTEOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <key>com.apple.security.network.client</key>
+    <true/>
+</dict>
+</plist>
+ENTEOF
+    codesign --force --options runtime --timestamp --entitlements "${DOWNLOADER_ENTITLEMENTS}" --sign "${SIGNING_IDENTITY}" "${DOWNLOADER_XPC}"
+fi
+
+# Sign remaining framework/bundle directories (inside-out)
 find "${APP_EXPORT}/Contents/Frameworks" -depth \
-    \( -name "*.framework" -o -name "*.xpc" -o -name "*.app" -o -name "*.bundle" \) | while read -r component; do
-    codesign --force --options runtime --timestamp --preserve-metadata=entitlements --sign "${SIGNING_IDENTITY}" "${component}"
+    \( -name "*.framework" -o -name "*.xpc" -o -name "*.app" -o -name "*.bundle" \) \
+    ! -path "*/Downloader.xpc" | while read -r component; do
+    codesign --force --options runtime --timestamp --sign "${SIGNING_IDENTITY}" "${component}"
 done
 
 # Sign the main app bundle last
