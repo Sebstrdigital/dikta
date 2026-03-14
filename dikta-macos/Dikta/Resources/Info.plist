@@ -28,5 +28,9 @@
     <string>Dikta needs microphone access to record your voice for dictation.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>SUFeedURL</key>
+    <string>https://sebstrdigital.github.io/dikta/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>PLACEHOLDER_EDKEY_REPLACE_BEFORE_RELEASE</string>
 </dict>
 </plist>

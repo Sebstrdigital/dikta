@@ -29,6 +29,7 @@
 		100000000000000000000020 /* TextSelectionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000020 /* TextSelectionService.swift */; };
 		100000000000000000000027 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000027 /* UpdateChecker.swift */; };
 		100000000000000000000028 /* DiagnosticLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000028 /* DiagnosticLogger.swift */; };
+		100000000000000000000029 /* SparkleController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000029 /* SparkleController.swift */; };
 
 		/* ViewModels */
 		100000000000000000000021 /* MenuBarViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000021 /* MenuBarViewModel.swift */; };
@@ -47,6 +48,9 @@
 
 		/* WhisperKit */
 		100000000000000000000061 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 300000000000000000000001 /* WhisperKit */; };
+
+		/* Sparkle */
+		100000000000000000000062 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 300000000000000000000002 /* Sparkle */; };
 
 
 		/* Tests */
@@ -77,6 +81,7 @@
 		200000000000000000000020 /* TextSelectionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextSelectionService.swift; sourceTree = "<group>"; };
 		200000000000000000000027 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		200000000000000000000028 /* DiagnosticLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticLogger.swift; sourceTree = "<group>"; };
+		200000000000000000000029 /* SparkleController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleController.swift; sourceTree = "<group>"; };
 
 		/* ViewModels */
 		200000000000000000000021 /* MenuBarViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModel.swift; sourceTree = "<group>"; };
@@ -109,6 +114,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				100000000000000000000061 /* WhisperKit in Frameworks */,
+				100000000000000000000062 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -181,6 +187,7 @@
 				200000000000000000000020 /* TextSelectionService.swift */,
 				200000000000000000000027 /* UpdateChecker.swift */,
 				200000000000000000000028 /* DiagnosticLogger.swift */,
+				200000000000000000000029 /* SparkleController.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -259,6 +266,7 @@
 			name = Dikta;
 			packageProductDependencies = (
 				300000000000000000000001 /* WhisperKit */,
+				300000000000000000000002 /* Sparkle */,
 			);
 			productName = Dikta;
 			productReference = 400000000000000000000001 /* Dikta.app */;
@@ -308,6 +316,7 @@
 			mainGroup = 600000000000000000000000;
 			packageReferences = (
 				A00000000000000000000001 /* XCRemoteSwiftPackageReference "WhisperKit" */,
+				A00000000000000000000002 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			productRefGroup = 600000000000000000000099 /* Products */;
 			projectDirPath = "";
@@ -367,6 +376,7 @@
 				100000000000000000000020 /* TextSelectionService.swift in Sources */,
 				100000000000000000000027 /* UpdateChecker.swift in Sources */,
 				100000000000000000000028 /* DiagnosticLogger.swift in Sources */,
+				100000000000000000000029 /* SparkleController.swift in Sources */,
 				100000000000000000000032 /* HotkeyRecordingWindow.swift in Sources */,
 				100000000000000000000033 /* OnboardingWindow.swift in Sources */,
 			);
@@ -622,6 +632,14 @@
 				minimumVersion = 0.9.0;
 			};
 		};
+		A00000000000000000000002 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
 	/* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -629,6 +647,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A00000000000000000000001 /* XCRemoteSwiftPackageReference "WhisperKit" */;
 			productName = WhisperKit;
+		};
+		300000000000000000000002 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A00000000000000000000002 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 	/* End XCSwiftPackageProductDependency section */
 	};
