@@ -6,7 +6,20 @@
         <link>https://sebstrdigital.github.io/dikta/appcast.xml</link>
         <description>Dikta app updates</description>
         <language>en</language>
-                <item>
+                        <item>
+            <title>Dikta 1.0.1</title>
+            <pubDate>Sat, 14 Mar 2026 06:03:27 +0000</pubDate>
+            <sparkle:version>1.0.1</sparkle:version>
+            <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/Sebstrdigital/dikta/releases/download/v1.0.1/Dikta-1.0.1.dmg"
+                sparkle:edSignature="UdMOhhnHS7UE9XVxPSnUfBBViz7oPpun+dUsiByt4ieHF+5a7rLGVgvA9zLgAloUi9VQKgRTmyfvEEcu2tiGCQ=="
+                length="453897551"
+                type="application/octet-stream"
+            />
+        </item>
+        <item>
             <title>Dikta 1.0.1</title>
             <pubDate>Sat, 14 Mar 2026 05:46:37 +0000</pubDate>
             <sparkle:version>1.0.1</sparkle:version>
