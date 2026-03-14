@@ -3,9 +3,18 @@ import SwiftUI
 /// Main menu bar view
 struct MenuBarView: View {
     @ObservedObject var viewModel: MenuBarViewModel
+    @EnvironmentObject var sparkle: SparkleController
 
     var body: some View {
         Group {
+            // Update available badge (US-004): persistent indicator at top of menu
+            if sparkle.updateAvailable, let version = sparkle.pendingVersion {
+                Button(action: { sparkle.checkForUpdates() }) {
+                    Text("Update Available (v\(version))")
+                }
+                Divider()
+            }
+
             // Status indicator when active
             if viewModel.appState == .recording {
                 Button(action: { viewModel.toggleRecording() }) {
@@ -34,7 +43,7 @@ struct MenuBarView: View {
             // Write in (language) submenu
             WriteInMenu(viewModel: viewModel)
 
-            // Advanced submenu
+            // Advanced submenu (includes update controls - US-003)
             AdvancedMenu(viewModel: viewModel)
 
             Divider()
@@ -159,6 +168,7 @@ struct WriteInMenu: View {
 /// Advanced settings submenu
 struct AdvancedMenu: View {
     @ObservedObject var viewModel: MenuBarViewModel
+    @EnvironmentObject var sparkle: SparkleController
 
     private var currentModel: WhisperModel {
         WhisperModel(rawValue: viewModel.configService.whisperModel) ?? .small
@@ -170,6 +180,26 @@ struct AdvancedMenu: View {
                 HStack {
                     Text("Start at Login")
                     if viewModel.launchAtLogin {
+                        Spacer()
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+
+            Divider()
+
+            // US-003: Manual check for updates
+            Button("Check for Updates...") {
+                sparkle.checkForUpdates()
+            }
+
+            // US-003: Opt-out toggle for automatic update checks
+            Button(action: {
+                sparkle.automaticallyChecksForUpdates.toggle()
+            }) {
+                HStack {
+                    Text("Automatically Check for Updates")
+                    if sparkle.automaticallyChecksForUpdates {
                         Spacer()
                         Image(systemName: "checkmark")
                     }
@@ -190,6 +220,16 @@ struct AdvancedMenu: View {
                                 Image(systemName: "checkmark")
                             }
                         }
+                    }
+                }
+            }
+
+            Button(action: { viewModel.toggleDiagnosticLogging() }) {
+                HStack {
+                    Text("Diagnostic Logging")
+                    if viewModel.configService.diagnosticLogging {
+                        Spacer()
+                        Image(systemName: "checkmark")
                     }
                 }
             }
