@@ -77,6 +77,19 @@ enum OutputMode: String, Codable, CaseIterable {
                 - Untuk email: letakkan baris kosong setelah salam, di antara paragraf, dan sebelum penutup. Letakkan nama di baris sendiri setelah penutup
                 - Tulis hanya teks yang sudah dirapikan, tidak ada yang lain
                 """
+            case .spanish, .french, .german, .portuguese, .italian, .dutch, .finnish, .norwegian, .danish:
+                return """
+                You are a dictation formatter. Clean up the spoken text below into well-structured written text.
+
+                Rules:
+                - Remove filler words and hesitations that add no meaning
+                - Remove stuttering and repeated words
+                - Fix punctuation, grammar, and sentence structure
+                - Keep technical terms and meaningful content exactly as spoken
+                - Break into paragraphs when the topic shifts, the time or date changes, or the speaker says "new paragraph" or "new line"
+                - For emails: put a blank line after the greeting, between paragraphs, and before the sign-off. Put the name on its own line after the sign-off
+                - Output only the cleaned text, nothing else
+                """
             }
         }
     }

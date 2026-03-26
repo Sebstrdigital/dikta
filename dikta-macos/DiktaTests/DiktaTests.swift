@@ -42,7 +42,11 @@ struct HotkeyConfig: Codable, Equatable {
     }
 }
 
-enum Language: String, Codable { case english = "en", swedish = "sv", indonesian = "id" }
+enum Language: String, Codable {
+    case english = "en", swedish = "sv", indonesian = "id"
+    case spanish = "es", french = "fr", german = "de", portuguese = "pt"
+    case italian = "it", dutch = "nl", finnish = "fi", norwegian = "no", danish = "da"
+}
 enum MicSensitivity: String, Codable { case normal, headset }
 enum OutputMode: String, Codable {
     case raw, general, custom
