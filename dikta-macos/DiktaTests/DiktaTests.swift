@@ -42,10 +42,37 @@ struct HotkeyConfig: Codable, Equatable {
     }
 }
 
-enum Language: String, Codable {
+enum Language: String, Codable, CaseIterable {
     case english = "en", swedish = "sv", indonesian = "id"
     case spanish = "es", french = "fr", german = "de", portuguese = "pt"
     case italian = "it", dutch = "nl", finnish = "fi", norwegian = "no", danish = "da"
+
+    var displayName: String {
+        switch self {
+        case .english:    return "English"
+        case .swedish:    return "Svenska"
+        case .indonesian: return "Bahasa Indonesia"
+        case .spanish:    return "Español"
+        case .french:     return "Français"
+        case .german:     return "Deutsch"
+        case .portuguese: return "Português"
+        case .italian:    return "Italiano"
+        case .dutch:      return "Nederlands"
+        case .finnish:    return "Suomi"
+        case .norwegian:  return "Norsk"
+        case .danish:     return "Dansk"
+        }
+    }
+
+    var whisperCode: String { rawValue }
+
+    func next(in enabledLanguages: [Language]) -> Language {
+        guard !enabledLanguages.isEmpty else { return self }
+        guard let currentIndex = enabledLanguages.firstIndex(of: self) else {
+            return enabledLanguages[0]
+        }
+        return enabledLanguages[(currentIndex + 1) % enabledLanguages.count]
+    }
 }
 enum MicSensitivity: String, Codable { case normal, headset }
 enum OutputMode: String, Codable {
@@ -77,6 +104,8 @@ struct AppConfig: Codable {
     var micSensitivity: MicSensitivity
     var muteSounds: Bool
     var muteNotifications: Bool
+    var diagnosticLogging: Bool
+    var enabledLanguages: [Language]
 
     struct HotkeyConfigs: Codable {
         var toggle: HotkeyConfig
@@ -113,7 +142,9 @@ struct AppConfig: Codable {
              whisperModel = "whisper_model", llmModel = "llm_model",
              language, customPrompt = "custom_prompt",
              micSensitivity = "mic_sensitivity", muteSounds = "mute_sounds",
-             muteNotifications = "mute_notifications"
+             muteNotifications = "mute_notifications",
+             diagnosticLogging = "diagnostic_logging",
+             enabledLanguages = "enabled_languages"
     }
 
     init(from decoder: Decoder) throws {
@@ -138,6 +169,8 @@ struct AppConfig: Codable {
         }
         muteSounds = try c.decodeIfPresent(Bool.self, forKey: .muteSounds) ?? false
         muteNotifications = try c.decodeIfPresent(Bool.self, forKey: .muteNotifications) ?? false
+        diagnosticLogging = try c.decodeIfPresent(Bool.self, forKey: .diagnosticLogging) ?? false
+        enabledLanguages = try c.decodeIfPresent([Language].self, forKey: .enabledLanguages) ?? [.english, .swedish, .indonesian]
     }
 }
 
@@ -375,5 +408,276 @@ final class UpdateCheckerVersionTests: XCTestCase {
     func test_isNewer_numericNotLexicographic() {
         // "0.10.0" > "0.9.0" numerically but "0.10.0" < "0.9.0" lexicographically
         XCTAssertTrue(VersionChecker.isNewer(remote: "0.10.0", than: "0.9.0"))
+    }
+}
+
+// MARK: - Language whisperCode and displayName Tests
+
+final class LanguageMetadataTests: XCTestCase {
+
+    func test_allCases_count_is12() {
+        XCTAssertEqual(Language.allCases.count, 12)
+    }
+
+    func test_whisperCode_english() {
+        XCTAssertEqual(Language.english.whisperCode, "en")
+    }
+
+    func test_whisperCode_swedish() {
+        XCTAssertEqual(Language.swedish.whisperCode, "sv")
+    }
+
+    func test_whisperCode_indonesian() {
+        XCTAssertEqual(Language.indonesian.whisperCode, "id")
+    }
+
+    func test_whisperCode_spanish() {
+        XCTAssertEqual(Language.spanish.whisperCode, "es")
+    }
+
+    func test_whisperCode_french() {
+        XCTAssertEqual(Language.french.whisperCode, "fr")
+    }
+
+    func test_whisperCode_german() {
+        XCTAssertEqual(Language.german.whisperCode, "de")
+    }
+
+    func test_whisperCode_portuguese() {
+        XCTAssertEqual(Language.portuguese.whisperCode, "pt")
+    }
+
+    func test_whisperCode_italian() {
+        XCTAssertEqual(Language.italian.whisperCode, "it")
+    }
+
+    func test_whisperCode_dutch() {
+        XCTAssertEqual(Language.dutch.whisperCode, "nl")
+    }
+
+    func test_whisperCode_finnish() {
+        XCTAssertEqual(Language.finnish.whisperCode, "fi")
+    }
+
+    func test_whisperCode_norwegian() {
+        XCTAssertEqual(Language.norwegian.whisperCode, "no")
+    }
+
+    func test_whisperCode_danish() {
+        XCTAssertEqual(Language.danish.whisperCode, "da")
+    }
+
+    func test_displayName_english() {
+        XCTAssertEqual(Language.english.displayName, "English")
+    }
+
+    func test_displayName_swedish() {
+        XCTAssertEqual(Language.swedish.displayName, "Svenska")
+    }
+
+    func test_displayName_indonesian() {
+        XCTAssertEqual(Language.indonesian.displayName, "Bahasa Indonesia")
+    }
+
+    func test_displayName_spanish() {
+        XCTAssertEqual(Language.spanish.displayName, "Español")
+    }
+
+    func test_displayName_french() {
+        XCTAssertEqual(Language.french.displayName, "Français")
+    }
+
+    func test_displayName_german() {
+        XCTAssertEqual(Language.german.displayName, "Deutsch")
+    }
+
+    func test_displayName_portuguese() {
+        XCTAssertEqual(Language.portuguese.displayName, "Português")
+    }
+
+    func test_displayName_italian() {
+        XCTAssertEqual(Language.italian.displayName, "Italiano")
+    }
+
+    func test_displayName_dutch() {
+        XCTAssertEqual(Language.dutch.displayName, "Nederlands")
+    }
+
+    func test_displayName_finnish() {
+        XCTAssertEqual(Language.finnish.displayName, "Suomi")
+    }
+
+    func test_displayName_norwegian() {
+        XCTAssertEqual(Language.norwegian.displayName, "Norsk")
+    }
+
+    func test_displayName_danish() {
+        XCTAssertEqual(Language.danish.displayName, "Dansk")
+    }
+
+    func test_allCases_haveNonEmptyWhisperCodes() {
+        for lang in Language.allCases {
+            XCTAssertFalse(lang.whisperCode.isEmpty, "\(lang) has empty whisperCode")
+        }
+    }
+
+    func test_allCases_haveNonEmptyDisplayNames() {
+        for lang in Language.allCases {
+            XCTAssertFalse(lang.displayName.isEmpty, "\(lang) has empty displayName")
+        }
+    }
+}
+
+// MARK: - Language Carousel (next in enabledLanguages) Tests
+
+final class LanguageCarouselTests: XCTestCase {
+
+    func test_next_cyclesForwardInEnabledSubset() {
+        let enabled: [Language] = [.english, .swedish, .french]
+        XCTAssertEqual(Language.english.next(in: enabled), .swedish)
+        XCTAssertEqual(Language.swedish.next(in: enabled), .french)
+    }
+
+    func test_next_wrapsAroundAtEnd() {
+        let enabled: [Language] = [.english, .swedish, .french]
+        XCTAssertEqual(Language.french.next(in: enabled), .english)
+    }
+
+    func test_next_skipsDisabledLanguages() {
+        // german is not in enabled — skipped by construction of the enabled list
+        let enabled: [Language] = [.english, .french, .spanish]
+        XCTAssertEqual(Language.english.next(in: enabled), .french)
+        XCTAssertEqual(Language.french.next(in: enabled), .spanish)
+        XCTAssertEqual(Language.spanish.next(in: enabled), .english)
+    }
+
+    func test_next_currentNotInEnabled_returnsFirstEnabled() {
+        let enabled: [Language] = [.french, .german]
+        // english is not in the enabled set
+        XCTAssertEqual(Language.english.next(in: enabled), .french)
+    }
+
+    func test_next_emptyEnabled_returnsSelf() {
+        XCTAssertEqual(Language.english.next(in: []), .english)
+        XCTAssertEqual(Language.swedish.next(in: []), .swedish)
+    }
+
+    func test_next_singleEnabled_alwaysReturnsThatLanguage() {
+        let enabled: [Language] = [.norwegian]
+        XCTAssertEqual(Language.norwegian.next(in: enabled), .norwegian)
+    }
+
+    func test_next_singleEnabled_currentNotInSet_returnsOnlyEnabled() {
+        let enabled: [Language] = [.norwegian]
+        XCTAssertEqual(Language.english.next(in: enabled), .norwegian)
+    }
+
+    func test_next_fullCycleReturnsToStart() {
+        let enabled: [Language] = [.english, .swedish, .indonesian, .spanish]
+        var lang = Language.english
+        for _ in 0..<4 {
+            lang = lang.next(in: enabled)
+        }
+        // After 4 steps in a 4-element cycle, should be back at english
+        XCTAssertEqual(lang, .english)
+    }
+
+    func test_next_allLanguagesEnabled_cyclesAll12() {
+        let enabled = Language.allCases
+        var lang = enabled[0]
+        for i in 1..<enabled.count {
+            lang = lang.next(in: enabled)
+            XCTAssertEqual(lang, enabled[i])
+        }
+        // One more step wraps to start
+        lang = lang.next(in: enabled)
+        XCTAssertEqual(lang, enabled[0])
+    }
+}
+
+// MARK: - AppConfig enabledLanguages Backward-Compatible Decoding Tests
+
+final class AppConfigEnabledLanguagesDecodingTests: XCTestCase {
+
+    private let minimalJSON = """
+    {
+        "version": 3,
+        "hotkeys": {
+            "toggle": {"modifiers": ["shift", "ctrl"]},
+            "push_to_talk": {"modifiers": ["cmd", "shift"]}
+        },
+        "output_mode": "general",
+        "history": [],
+        "whisper_model": "small",
+        "llm_model": "gemma3"
+    }
+    """.data(using: .utf8)!
+
+    func test_decode_missingEnabledLanguages_usesDefault() throws {
+        let config = try JSONDecoder().decode(AppConfig.self, from: minimalJSON)
+        XCTAssertEqual(config.enabledLanguages, [.english, .swedish, .indonesian])
+    }
+
+    func test_decode_withEnabledLanguages_usesProvided() throws {
+        let json = """
+        {
+            "version": 3,
+            "hotkeys": {
+                "toggle": {"modifiers": ["shift", "ctrl"]},
+                "push_to_talk": {"modifiers": ["cmd", "shift"]}
+            },
+            "output_mode": "general",
+            "history": [],
+            "whisper_model": "small",
+            "llm_model": "gemma3",
+            "enabled_languages": ["en", "de", "fr", "es"]
+        }
+        """.data(using: .utf8)!
+        let config = try JSONDecoder().decode(AppConfig.self, from: json)
+        XCTAssertEqual(config.enabledLanguages, [.english, .german, .french, .spanish])
+    }
+
+    func test_decode_emptyEnabledLanguages_storesEmpty() throws {
+        let json = """
+        {
+            "version": 3,
+            "hotkeys": {
+                "toggle": {"modifiers": ["shift", "ctrl"]},
+                "push_to_talk": {"modifiers": ["cmd", "shift"]}
+            },
+            "output_mode": "general",
+            "history": [],
+            "whisper_model": "small",
+            "llm_model": "gemma3",
+            "enabled_languages": []
+        }
+        """.data(using: .utf8)!
+        let config = try JSONDecoder().decode(AppConfig.self, from: json)
+        XCTAssertEqual(config.enabledLanguages, [])
+    }
+
+    func test_decode_allLanguagesEnabled_decodes12() throws {
+        let codes = Language.allCases.map { "\"\($0.rawValue)\"" }.joined(separator: ", ")
+        let json = """
+        {
+            "version": 3,
+            "hotkeys": {
+                "toggle": {"modifiers": ["shift", "ctrl"]},
+                "push_to_talk": {"modifiers": ["cmd", "shift"]}
+            },
+            "output_mode": "general",
+            "history": [],
+            "whisper_model": "small",
+            "llm_model": "gemma3",
+            "enabled_languages": [\(codes)]
+        }
+        """.data(using: .utf8)!
+        let config = try JSONDecoder().decode(AppConfig.self, from: json)
+        XCTAssertEqual(config.enabledLanguages.count, 12)
+    }
+
+    func test_decode_missingDiagnosticLogging_defaultsFalse() throws {
+        let config = try JSONDecoder().decode(AppConfig.self, from: minimalJSON)
+        XCTAssertFalse(config.diagnosticLogging)
     }
 }
