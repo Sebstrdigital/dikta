@@ -309,12 +309,15 @@ final class MenuBarViewModel: ObservableObject {
     // MARK: - Language
 
     func setLanguage(_ language: Language) {
+        // Auto-enable if the chosen language is currently disabled
+        configService.enableLanguage(language)
         configService.language = language
         sendNotification(title: "Write in", body: language.displayName, isRoutine: true)
     }
 
     func cycleLanguage() {
-        let next = configService.language.next
+        let enabled = configService.enabledLanguages
+        let next = configService.language.next(in: enabled)
         setLanguage(next)
     }
 

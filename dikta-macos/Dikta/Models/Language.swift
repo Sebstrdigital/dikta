@@ -42,10 +42,21 @@ enum Language: String, Codable, CaseIterable {
         rawValue
     }
 
-    /// Next language in the cycle
+    /// Next language in the cycle (all languages)
     var next: Language {
         let all = Language.allCases
         let index = all.firstIndex(of: self)!
         return all[(index + 1) % all.count]
+    }
+
+    /// Next language in the cycle, restricted to the given enabled set.
+    /// If the current language is not in the enabled set, returns the first enabled language.
+    /// Falls back to self if the enabled set is empty.
+    func next(in enabledLanguages: [Language]) -> Language {
+        guard !enabledLanguages.isEmpty else { return self }
+        guard let currentIndex = enabledLanguages.firstIndex(of: self) else {
+            return enabledLanguages[0]
+        }
+        return enabledLanguages[(currentIndex + 1) % enabledLanguages.count]
     }
 }

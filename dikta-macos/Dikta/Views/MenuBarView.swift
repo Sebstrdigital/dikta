@@ -149,12 +149,15 @@ struct WriteInMenu: View {
     var body: some View {
         Menu("Write in: \(viewModel.configService.language.displayName)") {
             ForEach(Language.allCases, id: \.self) { language in
+                let isEnabled = viewModel.configService.isLanguageEnabled(language)
+                let isActive = viewModel.configService.language == language
                 Button(action: {
                     viewModel.setLanguage(language)
                 }) {
                     HStack {
                         Text(language.displayName)
-                        if viewModel.configService.language == language {
+                            .foregroundColor(isEnabled ? .primary : .secondary)
+                        if isActive {
                             Spacer()
                             Image(systemName: "checkmark")
                         }
