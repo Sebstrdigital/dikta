@@ -14,6 +14,7 @@ struct AppConfig: Codable {
     var muteSounds: Bool
     var muteNotifications: Bool
     var diagnosticLogging: Bool
+    var enabledLanguages: [Language]
 
     struct HotkeyConfigs: Codable {
         var toggle: HotkeyConfig
@@ -57,6 +58,7 @@ struct AppConfig: Codable {
         case muteSounds = "mute_sounds"
         case muteNotifications = "mute_notifications"
         case diagnosticLogging = "diagnostic_logging"
+        case enabledLanguages = "enabled_languages"
     }
 
     static let defaultCustomPrompt = "Clean up this dictation. Fix grammar, punctuation, and remove filler words. Output only the cleaned text."
@@ -78,14 +80,15 @@ struct AppConfig: Codable {
         micSensitivity: .normal,
         muteSounds: false,
         muteNotifications: false,
-        diagnosticLogging: false
+        diagnosticLogging: false,
+        enabledLanguages: [.english, .swedish, .indonesian]
     )
 
     /// Maximum history items to keep
     static let historyLimit = 5
 
     /// Memberwise initializer
-    init(version: Int, hotkeys: HotkeyConfigs, outputMode: OutputMode, history: [HistoryItem], whisperModel: String, llmModel: String, language: Language, customPrompt: String = defaultCustomPrompt, micSensitivity: MicSensitivity = .normal, muteSounds: Bool = false, muteNotifications: Bool = false, diagnosticLogging: Bool = false) {
+    init(version: Int, hotkeys: HotkeyConfigs, outputMode: OutputMode, history: [HistoryItem], whisperModel: String, llmModel: String, language: Language, customPrompt: String = defaultCustomPrompt, micSensitivity: MicSensitivity = .normal, muteSounds: Bool = false, muteNotifications: Bool = false, diagnosticLogging: Bool = false, enabledLanguages: [Language] = [.english, .swedish, .indonesian]) {
         self.version = version
         self.hotkeys = hotkeys
         self.outputMode = outputMode
@@ -98,6 +101,7 @@ struct AppConfig: Codable {
         self.muteSounds = muteSounds
         self.muteNotifications = muteNotifications
         self.diagnosticLogging = diagnosticLogging
+        self.enabledLanguages = enabledLanguages
     }
 
     /// Handle missing fields from old configs (v2 configs with active_mode are handled gracefully —
@@ -132,5 +136,6 @@ struct AppConfig: Codable {
         muteSounds = try container.decodeIfPresent(Bool.self, forKey: .muteSounds) ?? false
         muteNotifications = try container.decodeIfPresent(Bool.self, forKey: .muteNotifications) ?? false
         diagnosticLogging = try container.decodeIfPresent(Bool.self, forKey: .diagnosticLogging) ?? false
+        enabledLanguages = try container.decodeIfPresent([Language].self, forKey: .enabledLanguages) ?? [.english, .swedish, .indonesian]
     }
 }

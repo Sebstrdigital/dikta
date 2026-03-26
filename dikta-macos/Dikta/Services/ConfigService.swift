@@ -186,4 +186,46 @@ final class ConfigService: ObservableObject {
             save()
         }
     }
+
+    // MARK: - Enabled Languages
+
+    var enabledLanguages: [Language] {
+        config.enabledLanguages
+    }
+
+    func isLanguageEnabled(_ language: Language) -> Bool {
+        config.enabledLanguages.contains(language)
+    }
+
+    /// Toggle a language's enabled state. Enforces a minimum of 1 enabled language.
+    func toggleLanguage(_ language: Language) {
+        var updated = config.enabledLanguages
+        if let index = updated.firstIndex(of: language) {
+            // Only remove if at least 1 language would remain
+            guard updated.count > 1 else { return }
+            updated.remove(at: index)
+        } else {
+            updated.append(language)
+        }
+        config.enabledLanguages = updated
+        objectWillChange.send()
+        save()
+    }
+
+    /// Enable a language (no-op if already enabled).
+    func enableLanguage(_ language: Language) {
+        guard !config.enabledLanguages.contains(language) else { return }
+        config.enabledLanguages.append(language)
+        objectWillChange.send()
+        save()
+    }
+
+    /// Disable a language. Enforces a minimum of 1 enabled language.
+    func disableLanguage(_ language: Language) {
+        guard config.enabledLanguages.count > 1,
+              let index = config.enabledLanguages.firstIndex(of: language) else { return }
+        config.enabledLanguages.remove(at: index)
+        objectWillChange.send()
+        save()
+    }
 }
