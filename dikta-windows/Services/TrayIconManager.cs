@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 using DiktaWindows.Models;
+using DiktaWindows.Views;
 
 namespace DiktaWindows.Services;
 
@@ -12,10 +13,15 @@ public class TrayIconManager : IDisposable
     private readonly TranscriberService _transcriber;
     private readonly AudioFeedback _audioFeedback;
     private readonly HistoryService _history;
+    private readonly ModelDownloader _modelDownloader;
 
     private NotifyIcon? _notifyIcon;
+    private ToolStripMenuItem? _languageMenu;
+    private Icon? _idleIcon;
+    private Icon? _recordingIcon;
     private bool _isRecording;
     private bool _processing;
+    private SettingsWindow? _settingsWindow;
 
     public TrayIconManager(ConfigService configService, HotkeyManager hotkeyManager)
     {
@@ -25,19 +31,39 @@ public class TrayIconManager : IDisposable
         _transcriber = new TranscriberService(configService);
         _audioFeedback = new AudioFeedback(configService);
         _history = new HistoryService();
+        _modelDownloader = new ModelDownloader();
     }
 
     public void Initialize()
     {
+        _idleIcon      = TrayIconFactory.CreateIdleIcon();
+        _recordingIcon = TrayIconFactory.CreateRecordingIcon();
+
         _notifyIcon = new NotifyIcon
         {
-            Icon = SystemIcons.Application, // TODO: custom icon
+            Icon = _idleIcon,
             Visible = true,
-            Text = "Dikta",
+            Text = BuildTooltip(),
             ContextMenuStrip = BuildContextMenu()
         };
 
         _hotkeyManager.HotkeyPressed += OnHotkeyPressed;
+
+        if (_configService.WasReset)
+            _notifyIcon.ShowBalloonTip(3000, "Dikta", "Config was unreadable — reset to defaults.", ToolTipIcon.Warning);
+    }
+
+    private string BuildTooltip()
+    {
+        var lang = Language.FromCode(_configService.Config.Language);
+        return $"Dikta — {lang.DisplayName}";
+    }
+
+    private void UpdateTrayState()
+    {
+        if (_notifyIcon is null) return;
+        _notifyIcon.Icon = _isRecording ? _recordingIcon : _idleIcon;
+        _notifyIcon.Text = BuildTooltip();
     }
 
     private ContextMenuStrip BuildContextMenu()
@@ -48,6 +74,13 @@ public class TrayIconManager : IDisposable
         var historyMenu = new ToolStripMenuItem("History");
         UpdateHistoryMenu(historyMenu);
         menu.Items.Add(historyMenu);
+
+        menu.Items.Add(new ToolStripSeparator());
+
+        // Language submenu
+        _languageMenu = new ToolStripMenuItem("Language");
+        BuildLanguageMenu(_languageMenu);
+        menu.Items.Add(_languageMenu);
 
         menu.Items.Add(new ToolStripSeparator());
 
@@ -64,6 +97,28 @@ public class TrayIconManager : IDisposable
         });
 
         return menu;
+    }
+
+    private void BuildLanguageMenu(ToolStripMenuItem languageMenu)
+    {
+        languageMenu.DropDownItems.Clear();
+
+        var current = _configService.Config.Language;
+        foreach (var lang in Language.All)
+        {
+            var item = new ToolStripMenuItem(lang.DisplayName)
+            {
+                Checked = lang.WhisperCode == current,
+                CheckOnClick = false
+            };
+            item.Click += (s, e) =>
+            {
+                _configService.Config.Language = lang.WhisperCode;
+                _configService.Save();
+                BuildLanguageMenu(languageMenu);
+            };
+            languageMenu.DropDownItems.Add(item);
+        }
     }
 
     private void UpdateHistoryMenu(ToolStripMenuItem historyMenu)
@@ -100,6 +155,7 @@ public class TrayIconManager : IDisposable
                 _audioFeedback.PlayStop();
                 var audioPath = await _recorder.StopRecordingAsync();
                 _isRecording = false;
+                UpdateTrayState();
 
                 // Transcribe
                 var text = await _transcriber.TranscribeAsync(audioPath);
@@ -117,35 +173,92 @@ public class TrayIconManager : IDisposable
                 // Start recording
                 if (!_transcriber.IsModelAvailable())
                 {
-                    System.Windows.MessageBox.Show(
-                        $"Whisper model not found.\n\nPlease download the model file to:\n{ConfigService.ModelsDir}",
-                        "Dikta — Model Missing",
-                        System.Windows.MessageBoxButton.OK,
-                        System.Windows.MessageBoxImage.Warning);
-                    return;
+                    var result = System.Windows.MessageBox.Show(
+                        "The Whisper model is not downloaded yet.\n\nDownload model now? (~150 MB)",
+                        "Dikta — Download Model",
+                        System.Windows.MessageBoxButton.YesNo,
+                        System.Windows.MessageBoxImage.Question);
+
+                    if (result != System.Windows.MessageBoxResult.Yes)
+                        return;
+
+                    _processing = true;
+                    var modelName = _configService.Config.WhisperModel;
+                    var destPath = System.IO.Path.Combine(ConfigService.ModelsDir, $"ggml-{modelName}.bin");
+                    bool downloadSucceeded = false;
+
+                    while (!downloadSucceeded)
+                    {
+                        var progressWindow = new DownloadProgressWindow();
+                        progressWindow.Show();
+                        try
+                        {
+                            await _modelDownloader.DownloadModelAsync(modelName, destPath, progressWindow.Progress, progressWindow.Token);
+                            progressWindow.MarkCompleted();
+                            downloadSucceeded = true;
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            progressWindow.Close();
+                            _processing = false;
+                            return;
+                        }
+                        catch (Exception dlEx)
+                        {
+                            progressWindow.Close();
+                            var retry = System.Windows.MessageBox.Show(
+                                $"Model download failed:\n{dlEx.Message}\n\nRetry?",
+                                "Dikta — Download Error",
+                                System.Windows.MessageBoxButton.YesNo,
+                                System.Windows.MessageBoxImage.Error);
+                            if (retry != System.Windows.MessageBoxResult.Yes)
+                            {
+                                _processing = false;
+                                return;
+                            }
+                        }
+                    }
+                    _processing = false;
                 }
 
                 _audioFeedback.PlayStart();
                 _recorder.StartRecording();
                 _isRecording = true;
+                UpdateTrayState();
             }
         }
         catch (Exception ex)
         {
             _processing = false;
             _isRecording = false;
-            System.Diagnostics.Debug.WriteLine($"OnHotkeyPressed error: {ex}");
+            UpdateTrayState();
+            var message = ex is InvalidOperationException && ex.Message == "No microphone found"
+                ? "No microphone found"
+                : "Transcription failed. Please try again.";
+            _notifyIcon?.ShowBalloonTip(3000, "Dikta", message, ToolTipIcon.Error);
         }
     }
 
     private void OpenSettings()
     {
-        // TODO: implement settings window
+        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        {
+            if (_settingsWindow != null)
+            {
+                _settingsWindow.Activate();
+                return;
+            }
+            _settingsWindow = new SettingsWindow(_configService, _hotkeyManager);
+            _settingsWindow.Closed += (s, e) => _settingsWindow = null;
+            _settingsWindow.Show();
+        });
     }
 
     public void Dispose()
     {
         _notifyIcon?.Dispose();
+        _idleIcon?.Dispose();
+        _recordingIcon?.Dispose();
         _recorder.Dispose();
     }
 }

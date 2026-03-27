@@ -1,4 +1,6 @@
 using System.IO;
+using System.Text.RegularExpressions;
+using DiktaWindows.Models;
 using Whisper.net;
 
 namespace DiktaWindows.Services;
@@ -23,7 +25,7 @@ public class TranscriberService
         {
             using var factory = WhisperFactory.FromPath(modelPath);
 
-            var language = _configService.Config.Language == "sv" ? "sv" : "en";
+            var language = Language.FromCode(_configService.Config.Language).WhisperCode;
 
             using var processor = factory.CreateBuilder()
                 .WithLanguage(language)
@@ -35,6 +37,8 @@ public class TranscriberService
             await foreach (var segment in processor.ProcessAsync(fileStream))
             {
                 var text = segment.Text.Trim();
+                // Strip bracket noise tokens like [BLANK_AUDIO], [Music], etc.
+                text = Regex.Replace(text, @"\[[^\]]+\]", "").Trim();
                 if (!string.IsNullOrEmpty(text))
                     result.Add(text);
             }

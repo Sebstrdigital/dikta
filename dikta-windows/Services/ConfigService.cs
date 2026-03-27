@@ -13,6 +13,7 @@ public class ConfigService
     private static readonly string ConfigPath = Path.Combine(AppDataDir, "config.json");
 
     public AppConfig Config { get; private set; } = new();
+    public bool WasReset { get; private set; }
 
     public ConfigService()
     {
@@ -24,8 +25,16 @@ public class ConfigService
     {
         if (!File.Exists(ConfigPath)) return;
 
-        var json = File.ReadAllText(ConfigPath);
-        Config = JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
+        try
+        {
+            var json = File.ReadAllText(ConfigPath);
+            Config = JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
+        }
+        catch
+        {
+            Config = new AppConfig();
+            WasReset = true;
+        }
     }
 
     public void Save()

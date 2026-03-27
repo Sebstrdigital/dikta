@@ -1,0 +1,86 @@
+<Window x:Class="DiktaWindows.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Dikta — Settings"
+        Width="400" Height="420"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="ToolWindow">
+    <Grid Margin="16,14,16,14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="8"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="8"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Hotkey section header -->
+        <TextBlock Grid.Row="0" Text="Dictation Hotkey" FontWeight="SemiBold" FontSize="13"/>
+
+        <!-- Modifiers + Key controls -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="Modifiers" FontSize="11" Foreground="Gray" Margin="0,0,0,4"/>
+                <ListBox x:Name="ModifiersList"
+                         SelectionMode="Multiple"
+                         Height="78" Width="160"
+                         FontSize="12">
+                    <ListBoxItem Content="Ctrl"/>
+                    <ListBoxItem Content="Shift"/>
+                    <ListBoxItem Content="Alt"/>
+                    <ListBoxItem Content="Win"/>
+                </ListBox>
+            </StackPanel>
+
+            <StackPanel Grid.Column="2">
+                <TextBlock Text="Key" FontSize="11" Foreground="Gray" Margin="0,0,0,4"/>
+                <ComboBox x:Name="KeyCombo" Width="100" HorizontalAlignment="Left" FontSize="12"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Audio & Advanced settings -->
+        <StackPanel Grid.Row="4" Margin="0,8,0,0">
+            <TextBlock Text="Audio" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,8"/>
+            <CheckBox x:Name="MuteSoundsCheckBox"
+                      Content="Mute sounds"
+                      FontSize="12"
+                      Margin="0,0,0,0"/>
+
+            <!-- Language -->
+            <Separator Margin="0,12,0,12"/>
+            <TextBlock Text="Language &amp; Model" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,8"/>
+            <TextBlock Text="Language" FontSize="11" Foreground="Gray" Margin="0,0,0,4"/>
+            <ComboBox x:Name="LanguageCombo"
+                      Width="200" HorizontalAlignment="Left"
+                      FontSize="12" Margin="0,0,0,12"/>
+
+            <!-- Model -->
+            <TextBlock Text="Whisper model" FontSize="11" Foreground="Gray" Margin="0,0,0,4"/>
+            <ComboBox x:Name="ModelCombo"
+                      Width="280" HorizontalAlignment="Left"
+                      FontSize="12"/>
+        </StackPanel>
+
+        <!-- Save / Cancel buttons -->
+        <StackPanel Grid.Row="6"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right">
+            <Button x:Name="CancelButton" Content="Cancel"
+                    Width="80" Height="28" Margin="0,0,8,0"
+                    Click="CancelButton_Click"/>
+            <Button x:Name="SaveButton" Content="Save"
+                    Width="80" Height="28"
+                    IsDefault="True"
+                    Click="SaveButton_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

@@ -14,6 +14,9 @@ public class AudioRecorder : IDisposable
 
     public string StartRecording()
     {
+        if (WaveIn.DeviceCount == 0)
+            throw new InvalidOperationException("No microphone found");
+
         _tempFilePath = Path.Combine(Path.GetTempPath(), $"dikta_{Guid.NewGuid()}.wav");
 
         // 16kHz mono 16-bit — what Whisper expects

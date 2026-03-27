@@ -1,0 +1,27 @@
+<Window x:Class="DiktaWindows.Views.DownloadProgressWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Downloading Whisper Model"
+        Width="420" Height="150"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="ToolWindow">
+    <Grid Margin="16,14,16,14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="10"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="6"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" x:Name="StatusText" Text="Preparing download&#x2026;" FontSize="13"/>
+        <ProgressBar Grid.Row="2" x:Name="DownloadProgressBar" Height="16" Minimum="0" Maximum="100" Value="0"/>
+        <TextBlock Grid.Row="4" x:Name="SizeText" Text="" FontSize="11" Foreground="Gray"/>
+        <Button Grid.Row="6" x:Name="CancelButton" Content="Cancel"
+                HorizontalAlignment="Right" Width="80" Height="28"
+                Click="CancelButton_Click"/>
+    </Grid>
+</Window>
