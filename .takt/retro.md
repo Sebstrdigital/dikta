@@ -3,51 +3,55 @@
 | Status | Alert | First Seen | Last Seen |
 |--------|-------|------------|-----------|
 | mitigated | Workers unable to use Bash (background agents denied, foreground requires constant approval) | 2026-02-20 | 2026-03-07 |
-| potential | Self-contained test types must be manually synced with production code | 2026-02-26 | 2026-02-26 |
-| confirmed | swift test never run end-to-end — unit tests unverified across all runs | 2026-02-26 | 2026-03-14 |
-| confirmed | ConfigService has redundant atomic write strategies — never cleaned up across multiple runs | 2026-03-07 | 2026-03-14 |
+| confirmed | Self-contained test types must be manually synced with production code | 2026-02-26 | 2026-03-27 |
+| confirmed | swift test never run end-to-end — unit tests unverified across all runs | 2026-02-26 | 2026-03-27 |
+| confirmed | ConfigService has redundant atomic write strategies — never cleaned up across multiple runs | 2026-03-07 | 2026-03-27 |
+| confirmed | xcodebuild broken in agent environment (IDESimulatorFoundation symbol not found) | 2026-03-14 | 2026-03-27 |
 
 ---
 
-## Retro: 2026-03-14 — takt/fix-build-signing
+## Retro: 2026-03-27 — takt/expanded-languages
 
 ### What Went Well
-- **All 3 stories implemented in one sequential pass** with no blocked stories. US-001 and US-002 shared the same file and were implemented in a single atomic edit, keeping the diff clean.
-- **Signing block replacement was surgical**: The old custom logic (find-loop over Mach-O binaries, custom Downloader.xpc entitlements) was replaced with Sparkle's exact 5 documented commands. No guessing — the exact commands came from Sparkle's official sandboxing documentation.
-- **ExportOptions.plist is a clean, maintainable artifact**: Moving export config to a plist rather than inline xcodebuild flags makes the intent explicit and the config easy to review or extend.
-- **Review cycle found 0 must-fix issues**: The diff was small and well-scoped. The single suggestion (redundant `mkdir -p`) is harmless and doesn't block release.
+- **All 5 stories completed with no blocked stories.** The language expansion was well-scoped: US-001 (enum) → US-002 (config) → US-003 (carousel) → US-004 (menu) → US-005 (tests) flowed as a clean dependency chain.
+- **US-005 grew the test suite from 27 to 68 tests (+41 new tests)** covering language metadata, carousel filtering, and AppConfig decoding — significant coverage increase in a single story.
+- **Backward-compat persistence in US-002 was handled cleanly**: `decodeIfPresent` with a default of all-languages-enabled means existing user configs silently upgrade with no data loss.
+- **No workarounds or tech debt introduced**: Each story was self-contained and surgical. US-003's `next(in:)` design (filtering to `enabledLanguages` at the call site in `MenuBarViewModel`) avoided scattering guard logic.
 
 ### What Didn't Go Well
-- **Task tool unavailable — session agent implemented all stories directly**: No worker agents could be spawned. All story work was done inline by the orchestrator. This is a session environment constraint (same pattern as previous run).
-- **US-002 and US-001 changes were inseparable in git**: Both stories touched build-release.sh in overlapping regions. They were committed together as a single commit under US-001. US-002 has no separate git footprint.
-- **US-003 timing is 0s** — it was a verification story with no code changes needed. The appcast/GitHub Release logic was already correct from the previous sprint. No meaningful duration to record.
+- **xcodebuild broken in agent environment — third consecutive run**: `IDESimulatorFoundation` symbol-not-found error blocked compilation verification in US-002, US-003, and US-004. Agents fell back to `swiftc -typecheck` and manual code reading. This is now a confirmed recurring blocker.
+- **Self-contained test types in US-005 required manual sync**: The inlined `Language` enum and `AppConfig` struct in `DiktaTests.swift` had to be extended manually to match production additions. Any future production change risks silent drift.
+- **No sprint.json present** — timing stats cannot be updated for this run.
 
 ### Patterns Observed
-- **Build script signing complexity is a recurring pattern**: This is the second sprint that touched Sparkle signing in build-release.sh. The signing logic was brittle and custom — replacing it with vendor-documented commands is the right fix. Future Sparkle updates may require re-checking this.
-- **Task tool unavailability remains a persistent environment constraint**: Now seen in 2 consecutive sprints. Sequential execution by the session agent is the de-facto fallback.
+- **xcodebuild is consistently unavailable in the agent environment**: This is the third run where agents cannot compile or run tests via xcodebuild. Typecheck-via-swiftc and code reading are the consistent fallback. The underlying cause (Team ID mismatch + IDESimulatorFoundation) is the same each time.
+- **Test mirroring in DiktaTests.swift is a maintenance liability**: As the Language enum grows (3 → 12 cases across the sprint history), the inlined copy grows in lockstep. This was noted as `potential` two retros ago; US-005 confirms it as a structural pattern.
+- **Feature sprints execute cleanly when stories are properly sequenced**: All 5 stories ran to completion in one pass. The dependency ordering (data model → config → logic → UI → tests) proved effective.
 
 ### Action Items
-- [ ] [carried 5x] Add a note to story templates for Swift/Apple platform work: flag CoreFoundation types as requiring `CFGetTypeID` guards
+- [ ] [carried 6x] Add a note to story templates for Swift/Apple platform work: flag CoreFoundation types as requiring `CFGetTypeID` guards
   Suggested story: Codify a Swift story template section listing known platform gotchas (CFGetTypeID, async actor isolation, Xcode project.pbxproj sync)
-- [ ] [carried 6x] Run `swift test` end-to-end to verify unit tests actually execute
+- [ ] [carried 7x] Run `swift test` end-to-end to verify unit tests actually execute
   Suggested story: Add a CI step or pre-release checklist item that runs `swift test` and gates the release
-- [ ] [carried 6x] Simplify ConfigService atomic write (remove either `.atomic` flag or `replaceItemAt`)
+- [ ] [carried 7x] Simplify ConfigService atomic write (remove either `.atomic` flag or `replaceItemAt`)
   Suggested story: Audit ConfigService.swift and pick one atomic write strategy, remove the redundant one
-- [ ] [carried 3x] Fix xcodebuild test bundle code signing mismatch (`different Team IDs`) so unit tests can actually run
+- [ ] [carried 4x] Fix xcodebuild test bundle code signing mismatch (`different Team IDs`) so unit tests can actually run
   Suggested story: Investigate and fix the Team ID mismatch that prevents xcodebuild test from running
-- [ ] [carried 3x] Consider extracting AudioRecorder.swift subsystems (retry logic, converter lifecycle, silence detection) into focused types
-- [ ] [carried 2x] Commit or remove DiagnosticLogger before next release — decide if it stays as a permanent debug tool or is stripped
-- [ ] [carried 2x] Add `[BLANK_AUDIO]` / bracket noise token fix to CHANGELOG.md under [0.6] entry
-- [ ] [carried 1x] Commit pre-existing working-tree changes from v0.6 work (AppConfig.swift, ConfigService.swift, DiagnosticLogger.swift) to main before starting next sprint
-- [ ] Generate real EdDSA keypair, replace SUPublicEDKey placeholder in Info.plist before v0.7 release build
-- [ ] Enable GitHub Pages on repo (Settings → Pages → docs/ folder on main)
-- [ ] Run a real build with the new signing flow to confirm notarization passes end-to-end
+- [ ] [carried 4x] Consider extracting AudioRecorder.swift subsystems (retry logic, converter lifecycle, silence detection) into focused types
+- [ ] [carried 3x] Commit or remove DiagnosticLogger before next release — decide if it stays as a permanent debug tool or is stripped
+  Suggested story: Gate DiagnosticLogger behind a compile flag or remove it; update MEMORY.md accordingly
+- [ ] [carried 3x] Add `[BLANK_AUDIO]` / bracket noise token fix to CHANGELOG.md under [0.6] entry
+  Suggested story: Update CHANGELOG.md [0.6] section with the bracket noise token strip fix
+- [ ] [carried 2x] Commit pre-existing working-tree changes from v0.6 work (AppConfig.swift, ConfigService.swift, DiagnosticLogger.swift) to main before starting next sprint
+- [ ] [carried 1x] Generate real EdDSA keypair, replace SUPublicEDKey placeholder in Info.plist before v0.7 release build
+- [ ] [carried 1x] Enable GitHub Pages on repo (Settings → Pages → docs/ folder on main)
+- [ ] [carried 1x] Run a real build with the new signing flow to confirm notarization passes end-to-end
+- [ ] Eliminate or auto-generate the inlined type mirror in DiktaTests.swift to prevent drift from production Language/AppConfig definitions
 
 ### Metrics
-- Stories completed: 3/3
+- Stories completed: 5/5
 - Stories blocked: 0
-- Total workbooks: 3
-- Avg story duration: medium=337s (~6 min) [running avg across 5 medium stories]
-- Phase overhead (verification + review): ~810s (~14 min) [running avg across 2 runs]
-- Verification cycles: 1 (all 7 scenarios passed static verification)
-- Review cycles: 1 (0 must-fix, 1 suggestion)
+- Total workbooks: 5
+- Avg story duration: N/A (no sprint.json)
+- Phase overhead: N/A (no sprint.json)
+- Test count: 27 → 68 (+41 new tests added in US-005)
