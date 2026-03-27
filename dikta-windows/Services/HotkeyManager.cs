@@ -122,13 +122,11 @@ public class HotkeyManager : IDisposable
 
         if (!RegisterHotKey(_source.Handle, HOTKEY_ID, newMods, newKey))
         {
-            var error = Marshal.GetLastWin32Error();
-            System.Diagnostics.Debug.WriteLine($"ReregisterHotkey failed with error code: {error}");
+            throw new InvalidOperationException(
+                $"Failed to register hotkey {modifiers}+{key}. It may be in use by another application.");
         }
-        else
-        {
-            _registered = true;
-        }
+
+        _registered = true;
     }
 
     private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)

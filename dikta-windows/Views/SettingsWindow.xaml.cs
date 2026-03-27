@@ -122,7 +122,16 @@ public partial class SettingsWindow : Window
 
         var key = KeyCombo.SelectedItem?.ToString() ?? _configService.Config.HotkeyKey;
 
-        _hotkeyManager.ReregisterHotkey(modifierString, key);
+        try
+        {
+            _hotkeyManager.ReregisterHotkey(modifierString, key);
+        }
+        catch (InvalidOperationException ex)
+        {
+            MessageBox.Show(ex.Message, "Hotkey Registration Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
         _configService.Config.HotkeyModifiers = modifierString;
         _configService.Config.HotkeyKey = key;
         _configService.Config.MuteSounds = MuteSoundsCheckBox.IsChecked ?? false;
