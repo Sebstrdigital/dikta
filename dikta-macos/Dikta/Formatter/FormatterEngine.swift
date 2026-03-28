@@ -6,8 +6,7 @@ struct FormatterEngine {
         case .message:
             return MessageFormatter().format(text)
         case .structure:
-            // TODO: Phase 3
-            return text 
+            return StructuredTextFormatter().format(text)
         }
     }
 }
