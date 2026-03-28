@@ -4,8 +4,7 @@ struct FormatterEngine {
     func format(_ text: String, style: FormatterStyle) -> String {
         switch style {
         case .message:
-            // TODO: Phase 2
-            return text
+            return MessageFormatter().format(text)
         case .structure:
             // TODO: Phase 3
             return text 
