@@ -98,6 +98,7 @@ struct FormatterEngine {
 // takt agents: update this when you change production code.
 
 struct StructuredTextFormatter: TextFormatter {
+
     enum ContentType {
         case bulletList(items: [String], preamble: String?)
         case numberedList(items: [String], preamble: String?)
@@ -105,93 +106,342 @@ struct StructuredTextFormatter: TextFormatter {
         case paragraphs(groups: [[String]])
         case noChange
     }
+
     func format(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty { return "" }
+        if trimmed.isEmpty { return ""  }
+
+        // Already formatted?
         if trimmed.contains("\n- ") || trimmed.contains("\n1.") { return trimmed }
+
         let sentences = splitSentences(trimmed)
+
         let contentType = analyze(sentences, fullText: trimmed)
+
         switch contentType {
-        case .bulletList(let items, let preamble): return formatBullets(items, preamble: preamble)
-        case .numberedList(let items, let preamble): return formatNumbered(items, preamble: preamble)
-        case .sections(let groups): return formatSections(groups)
-        case .paragraphs(let groups): return formatParagraphs(groups)
-        case .noChange: return trimmed
+        case .bulletList(let items, let preamble):
+            return formatBullets(items, preamble: preamble)
+        case .numberedList(let items, let preamble):
+            return formatNumbered(items, preamble: preamble)
+        case .sections(let groups):
+            return formatSections(groups)
+        case .paragraphs(let groups):
+            return formatParagraphs(groups)
+        case .noChange:
+            return trimmed
         }
     }
+
     private func analyze(_ sentences: [String], fullText: String) -> ContentType {
-        let orderedMarkers = ["first", "firstly", "first of all", "second", "secondly", "third", "thirdly", "then", "next", "after that", "finally", "lastly", "last", "step one", "step two", "step three", "number one", "number two", "start by"]
-        let unorderedMarkers = ["also", "another", "another thing", "in addition", "plus", "on top of that"]
-        var orderedCount = 0, unorderedCount = 0, markerIndices: [Int] = []
+
+        // Check A - Explicit enumeration
+
+        let orderedMarkers = [
+            "first", "firstly", "first of all",
+            "second", "secondly", "third", "thirdly",
+            "then", "next", "after that",
+            "finally", "lastly", "last",
+            "step one", "step two", "step three",
+            "number one", "number two",
+            "start by"
+        ]
+
+        let unorderedMarkers = [
+            "also", "another", "another thing",
+            "in addition", "plus", "on top of that"
+        ]
+
+        var orderedCount = 0
+
+        var unorderedCount = 0
+        var markerIndices: [Int] = []
+
         for (i, sentence) in sentences.enumerated() {
+
             let lower = sentence.lowercased()
-            if orderedMarkers.contains(where: { lower.hasPrefix($0) }) { orderedCount += 1; markerIndices.append(i) }
-            else if unorderedMarkers.contains(where: { lower.hasPrefix($0) }) { unorderedCount += 1; markerIndices.append(i) }
+
+            if orderedMarkers.contains(where: { lower.hasPrefix($0) }) {
+
+                orderedCount += 1
+                markerIndices.append(i)
+            } else if unorderedMarkers.contains(where: { lower.hasPrefix($0) }) {
+
+                unorderedCount += 1
+                markerIndices.append(i)
+            }
         }
-        if orderedCount + unorderedCount >= 3 {
+
+        let totalMarkers = orderedCount + unorderedCount
+        if totalMarkers >= 3 {
             let startIndex = markerIndices.first ?? 0
+
             let items = markerIndices.map { sentences[$0] }
             let preamble = findPreamble(sentences, beforeIndex: startIndex)
-            return orderedCount > unorderedCount ? .numberedList(items: items, preamble: preamble) : .bulletList(items: items, preamble: preamble)
+
+            if orderedCount > unorderedCount {
+
+                return .numberedList(items: items, preamble: preamble)
+            } else {
+
+                return .bulletList(items: items, preamble: preamble)
+            }
         }
+
+        // Check for "and then" chains in a single sentence
+
         if sentences.count <= 2 {
             let joined = sentences.joined(separator: " ")
-            if joined.components(separatedBy: " and then ").count >= 3 { return .numberedList(items: joined.components(separatedBy: " and then "), preamble: nil) }
-            if joined.components(separatedBy: ", then ").count >= 3 { return .numberedList(items: joined.components(separatedBy: ", then "), preamble: nil) }
+
+            let parts = joined.components(separatedBy: " and then ")
+            if parts.count >= 3 {
+
+                return .numberedList(items: parts, preamble: nil)
+            }
+
+            let commaParts = joined.components(separatedBy: ", then ")
+            if commaParts.count >= 3 {
+
+                return .numberedList(items: commaParts, preamble: nil)
+            }
         }
+
+        // Check B - Colon-list
+
         if let colonIndex = fullText.firstIndex(of: ":") {
-            let afterColon = String(fullText[fullText.index(after: colonIndex)...]).trimmingCharacters(in: .whitespaces)
+            let afterColon = String(fullText[fullText.index(after: colonIndex)...])
+
+                .trimmingCharacters(in: .whitespaces)
+
             let beforeColon = String(fullText[..<colonIndex])
-            let items = afterColon.trimmingCharacters(in: CharacterSet(charactersIn: ".")).components(separatedBy: ",")
+
+            // Check if what follows is a comma-seperated list ending the sentence
+            let items = afterColon
+
+                .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+
+                .components(separatedBy: ",")
                 .map { $0.trimmingCharacters(in: .whitespaces) }
-                .map { item -> String in var c = item; for p in ["and ", "or "] { if c.lowercased().hasPrefix(p) { c = String(c.dropFirst(p.count)) } }; return c }
+
+                .map { item -> String in
+
+                    var cleaned = item
+                    for prefix in ["and ", "or "] {
+
+                        if cleaned.lowercased().hasPrefix(prefix) {
+                            cleaned = String(cleaned.dropFirst(prefix.count))
+
+                        }
+                    }
+
+                    return cleaned
+                }
                 .filter { !$0.isEmpty }
-            if items.count >= 3 { return .bulletList(items: items, preamble: beforeColon + ":") }
+            if items.count >= 3 {
+
+                return .bulletList(items: items, preamble: beforeColon + ":")
+            }
+
         }
-        let topicShiftPrefixes = ["how about","by the way","on another note","on a different note","on the other hand","one more thing","besides that","apart from that","moving on","additionally","furthermore","moreover","separately","regarding","as for","however","that said","anyway","also"]
-        let hasTopicShift = sentences.contains { s in let lower = s.lowercased(); return topicShiftPrefixes.contains(where: { lower.hasPrefix($0) }) }
+
+        // Check C - Homogeneous short sentences
+        // Skip if any sentence starts with a topic-shift transition phrase — those should
+        // be handled by the paragraph-splitting pass below instead.
+        let topicShiftPrefixes = [
+            "how about", "by the way", "on another note", "on a different note",
+            "on the other hand", "one more thing", "besides that", "apart from that",
+            "moving on", "additionally", "furthermore", "moreover", "separately",
+            "regarding", "as for", "however", "that said", "anyway", "also"
+        ]
+        let hasTopicShift = sentences.contains { s in
+            let lower = s.lowercased()
+            return topicShiftPrefixes.contains(where: { lower.hasPrefix($0) })
+        }
+
         let allShort = sentences.allSatisfy { $0.components(separatedBy: " ").count < 15 }
         if allShort && sentences.count >= 3 && !hasTopicShift {
-            let nonVerbStarts: Set<String> = ["i","we","he","she","it","they","you","my","our","his","her","its","their","the","a","an","in","on","at","for","with","to","from","by","of","about","and","but","or","so","yet","this","that","these","those","one","two","first","second","each","all","most","some","many","every","several","both","neither","either"]
-            let imperativeCount = sentences.filter { let w = $0.components(separatedBy: " ").first?.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".!?,")) ?? ""; return !nonVerbStarts.contains(w) }.count
+
+            let nonVerbStarts: Set<String> = [
+                "i", "we", "he", "she", "it", "they", "you",
+                "my", "our", "his", "her", "its", "their",
+                "the", "a", "an", "in", "on", "at", "for", "with", "to",
+                "from", "by", "of", "about", "and", "but", "or", "so", "yet",
+                "this", "that", "these", "those", "one", "two", "first",
+                "second", "each", "all", "most", "some", "many", "every",
+                "several", "both", "neither", "either"
+            ]
+
+            let imperativeCount = sentences.filter { sentence in
+
+                let firstWord = sentence.components(separatedBy: " ").first?
+                    .lowercased()
+
+                    .trimmingCharacters(in: CharacterSet(charactersIn: ".!?,")) ?? ""
+                return !nonVerbStarts.contains(firstWord)
+
+            }.count
+
             let ratio = Double(imperativeCount) / Double(sentences.count)
-            if ratio >= 0.6 { return .numberedList(items: sentences, preamble: nil) }
-            else if sentences.count < 5 { return .bulletList(items: sentences, preamble: nil) }
-            // For 5+ sentences with low imperative ratio, fall through to paragraph splitting.
+
+            if ratio >= 0.6 {
+                return .numberedList(items: sentences, preamble: nil)
+            } else if sentences.count < 5 {
+                return .bulletList(items: sentences, preamble: nil)
+            }
+            // For 5+ sentences with low imperative ratio, fall through to
+            // paragraph splitting / long-text fallback below.
+
         }
-        let transitionPhrases = ["how about","by the way","another thing","on another note","on a different note","on the other hand","in addition","one more thing","besides that","apart from that","moving on","additionally","furthermore","moreover","separately","regarding","as for","also","however","that said","anyway"]
+
+        // Check D - Sections / Paragraph Splitting
+        let transitionPhrases = [
+            "how about",
+            "by the way", "another thing", "on another note",
+            "on a different note", "on the other hand",
+            "in addition", "one more thing", "besides that",
+            "apart from that", "moving on",
+            "additionally", "furthermore", "moreover",
+            "separately", "regarding", "as for",
+            "also", "however", "that said", "anyway"
+        ]
+
         var groups: [[String]] = [[]]
+
         for sentence in sentences {
             let lower = sentence.lowercased()
-            if transitionPhrases.contains(where: { lower.hasPrefix($0) }) && !groups.last!.isEmpty { groups.append([sentence]) }
-            else { groups[groups.count - 1].append(sentence) }
-        }
-        if groups.count >= 2 && groups.count <= 8 && !groups[0].isEmpty {
-            if groups.allSatisfy({ $0.count >= 2 }) {
-                return .sections(groups: groups.map { (heading: extractHeading(from: $0[0]), body: $0.joined(separator: " ")) })
+
+            let isTransition = transitionPhrases.contains { lower.hasPrefix($0) }
+
+            if isTransition && !groups.last!.isEmpty {
+                groups.append([sentence])
+
+            } else {
+                groups[groups.count - 1].append(sentence)
             }
+        }
+
+        if groups.count >= 2 && groups.count <= 8 && !groups[0].isEmpty {
+            // Use rich section format when all groups have multiple sentences
+            if groups.allSatisfy({ $0.count >= 2 }) {
+                let sectionGroups = groups.map { group -> (heading: String, body: String) in
+                    let heading = extractHeading(from: group[0])
+                    let body = group.joined(separator: " ")
+                    return (heading: heading, body: body)
+                }
+                return .sections(groups: sectionGroups)
+            }
+            // Otherwise use plain paragraph breaks
             return .paragraphs(groups: groups)
         }
+
+        // Check E - Long-text fallback: split at midpoint when many sentences
         if sentences.count >= 5 {
             let mid = sentences.count / 2
-            return .paragraphs(groups: [Array(sentences[0..<mid]), Array(sentences[mid...])])
+            let firstHalf = Array(sentences[0..<mid])
+            let secondHalf = Array(sentences[mid...])
+            return .paragraphs(groups: [firstHalf, secondHalf])
         }
+
+        // Check F - No pattern
         return .noChange
     }
+
     private func extractHeading(from sentence: String) -> String {
-        let skip: Set<String> = ["the","a","an","we","i","our","my","need","should","must","have","is","are","to","for","of","in","on","at","by","with","regarding","as","also","however","additionally","furthermore","moreover","separately","anyway","by the way","on a different note","on another note","that said","moving on"]
-        let words = sentence.trimmingCharacters(in: CharacterSet(charactersIn: ".,!?")).components(separatedBy: " ").filter { !skip.contains($0.lowercased()) }
-        let hw = Array(words.prefix(2))
-        if hw.isEmpty { return "Section" }
-        return hw.map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
+
+        let skipWords: Set<String> = [
+            "the", "a", "an", "we", "i", "our", "my",
+            "need", "should", "must", "have", "is", "are",
+            "to", "for", "of", "in", "on", "at", "by", "with",
+            "regarding", "as", "also", "however", "additionally",
+            "furthermore", "moreover", "separately", "anyway",
+            "by the way", "on a different note", "on another note",
+            "that said", "moving on"
+        ]
+
+        let words = sentence
+            .trimmingCharacters(in: CharacterSet(charactersIn: ".,!?"))
+            .components(separatedBy: " ")
+
+            .filter { !skipWords.contains($0.lowercased()) }
+
+        let headingWords = Array(words.prefix(2))
+
+        if headingWords.isEmpty { return "Section" }
+
+        return headingWords
+
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
     }
-    private let sequenceMarkers = ["first, ","firstly, ","first of all, ","second, ","secondly, ","third, ","thirdly, ","also, ","also ","another thing, ","another thing is ","in addition, ","plus, ","plus ","next, ","next ","finally, ","lastly, ","last, ","on top of that, ","then, ","then ","after that, ","after that ","start by ","step one, ","step two, ","step three, ","number one, ","number two, "]
-    private func stripMarker(_ text: String) -> String { let l = text.lowercased(); for m in sequenceMarkers { if l.hasPrefix(m) { return String(text.dropFirst(m.count)) } }; return text }
-    private func stripFiller(_ text: String) -> String { let l = text.lowercased(); for f in ["you need to ","you should ","you have to ","you can ","you "] { if l.hasPrefix(f) { return String(text.dropFirst(f.count)) } }; return text }
-    private func formatBullets(_ items: [String], preamble: String?) -> String { var r = ""; if let p = preamble { r += p + "\n\n" }; r += items.map { "- " + trimItem(stripMarker($0)) }.joined(separator: "\n"); return r }
-    private func formatNumbered(_ items: [String], preamble: String?) -> String { var r = ""; if let p = preamble { r += p + "\n\n" }; r += items.enumerated().map { "\($0.0 + 1). " + trimItem(stripFiller(stripMarker($0.1))) }.joined(separator: "\n"); return r }
-    private func formatSections(_ groups: [(heading: String, body: String)]) -> String { groups.map { "## \($0.heading)\n\n\($0.body)" }.joined(separator: "\n\n") }
-    private func formatParagraphs(_ groups: [[String]]) -> String { groups.filter { !$0.isEmpty }.map { $0.joined(separator: " ") }.joined(separator: "\n\n") }
+
+    private let sequenceMarkers = [
+        "first, ", "firstly, ", "first of all, ",
+        "second, ", "secondly, ", "third, ", "thirdly, ",
+        "also, ", "also ", "another thing, ", "another thing is ",
+        "in addition, ", "plus, ", "plus ", "next, ", "next ",
+        "finally, ", "lastly, ", "last, ", "on top of that, ",
+        "then, ", "then ", "after that, ", "after that ",
+        "start by ", "step one, ", "step two, ", "step three, ",
+        "number one, ", "number two, "
+    ]
+
+    private func stripMarker(_ text: String) -> String {
+        let lower = text.lowercased()
+        for marker in sequenceMarkers {
+            if lower.hasPrefix(marker) {
+                return String(text.dropFirst(marker.count))
+            }
+        }
+        return text
+    }
+
+    private func stripFiller(_ text: String) -> String {
+        let lower = text.lowercased()
+        let fillers = [
+            "you need to ", "you should ", "you have to ",
+            "you can ", "you "
+        ]
+        for filler in fillers {
+            if lower.hasPrefix(filler) {
+                return String(text.dropFirst(filler.count))
+            }
+        }
+        return text
+    }
+
+    private func formatBullets(_ items: [String], preamble: String?) -> String {
+        var result = ""
+        if let p = preamble {
+            result += p + "\n\n"
+        }
+        let bullets = items.map { "- " + trimItem(stripMarker($0)) }
+        result += bullets.joined(separator: "\n")
+        return result
+    }
+
+    private func formatNumbered(_ items: [String], preamble: String?) -> String {
+        var result = ""
+        if let p = preamble {
+            result += p + "\n\n"
+        }
+        let steps = items.enumerated().map { (i, item) in
+            "\(i + 1). " + trimItem(stripFiller(stripMarker(item)))
+        }
+        result += steps.joined(separator: "\n")
+        return result
+    }
+
+    private func formatSections(_ groups: [(heading: String, body: String)]) -> String {
+        return groups.map { "## \($0.heading)\n\n\($0.body)" }
+                     .joined(separator: "\n\n")
+    }
+
+    private func formatParagraphs(_ groups: [[String]]) -> String {
+        return groups
+            .filter { !$0.isEmpty }
+            .map { $0.joined(separator: " ") }
+            .joined(separator: "\n\n")
+    }
+
 }
 
 // -- MessageFormatter.swift --
@@ -202,118 +452,290 @@ struct MessageFormatter: TextFormatter {
     func format(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return "" }
+
         let sentences = splitSentences(trimmed)
         if sentences.count <= 1 { return trimmed }
+
+        // 6-zone extraction: greeting → opening pleasantry → body → closing pleasantry → sign-off → name
         let (greeting, afterGreeting) = extractGreeting(trimmed)
         let (openingPleasantry, afterOpening) = extractOpeningPleasantry(afterGreeting)
         let (signOff, afterSignOffExtracted) = extractSignOff(afterOpening)
         let (closingPleasantry, body) = extractClosingPleasantry(afterSignOffExtracted)
         let structuredBody = StructuredTextFormatter().format(body)
+
         var parts: [String] = []
         if let g = greeting { parts.append(g) }
         if let op = openingPleasantry { parts.append(op) }
         if !structuredBody.isEmpty { parts.append(structuredBody) }
         if let cp = closingPleasantry { parts.append(cp) }
         if let s = signOff { parts.append(s) }
+
         return parts.joined(separator: "\n\n")
     }
+
+    // MARK: - Zone 1: Greeting
+
     private func extractGreeting(_ text: String) -> (greeting: String?, remaining: String) {
         let lower = text.lowercased()
-        let greetingPhrases = ["to whom it may concern","good morning","good afternoon","good evening","hello there","hey there","hi there","dear","hello","hey","hi","greetings"]
+
+        let greetingPhrases = [
+            "to whom it may concern",
+            "good morning", "good afternoon", "good evening",
+            "hello there", "hey there", "hi there",
+            "dear", "hello", "hey", "hi", "greetings"
+        ]
+
         var matchedPhrase: String? = nil
-        for phrase in greetingPhrases { if lower.hasPrefix(phrase) { matchedPhrase = phrase; break } }
-        guard let phrase = matchedPhrase else { return (nil, text) }
-        var remaining = String(text.dropFirst(phrase.count)).trimmingCharacters(in: .whitespaces)
+        for phrase in greetingPhrases {
+            if lower.hasPrefix(phrase) {
+                matchedPhrase = phrase
+                break
+            }
+        }
+
+        guard let phrase = matchedPhrase else {
+            return (nil, text)
+        }
+
+        var remaining = String(text.dropFirst(phrase.count))
+            .trimmingCharacters(in: .whitespaces)
+
+        // Handle comma or exclamation after greeting phrase
         if remaining.hasPrefix(",") || remaining.hasPrefix("!") {
             let terminator = String(remaining.prefix(1))
             remaining = String(remaining.dropFirst()).trimmingCharacters(in: .whitespaces)
+
+            // Check if next word is a name (capitalized) — capture it
             let firstWord = remaining.components(separatedBy: " ").first ?? ""
             if firstWord.first?.isUppercase == true {
                 let (nameWords, afterName) = captureNameWords(remaining)
                 let originalPhrase = String(text.prefix(phrase.count))
                 if !nameWords.isEmpty {
-                    let nameStr = nameWords.joined(separator: " ").trimmingCharacters(in: CharacterSet(charactersIn: ",!"))
+                    let nameStr = nameWords.joined(separator: " ")
+                        .trimmingCharacters(in: CharacterSet(charactersIn: ",!"))
                     let greetingEnd = terminator == "!" ? "!" : ","
                     return (originalPhrase + " " + nameStr + greetingEnd, afterName)
                 }
             }
-            return (String(text.prefix(phrase.count)) + terminator, remaining)
+
+            // No name — bare greeting like "Hi," or "Hello!"
+            let originalPhrase = String(text.prefix(phrase.count))
+            return (originalPhrase + terminator, remaining)
         }
+
+        // No punctuation — capture name words then add comma (e.g., "Dear Mr. Johnson")
         let (nameWords, afterName) = captureNameWords(remaining)
+
         let originalPhrase = String(text.prefix(phrase.count))
         var greetingLine = originalPhrase
-        if !nameWords.isEmpty { greetingLine += " " + nameWords.joined(separator: " ").trimmingCharacters(in: CharacterSet(charactersIn: ",!")) }
+        if !nameWords.isEmpty {
+            let nameStr = nameWords.joined(separator: " ")
+                .trimmingCharacters(in: CharacterSet(charactersIn: ",!"))
+            greetingLine += " " + nameStr
+        }
+
+        // Check if name ended with ! (e.g., "Hi Rickard!")
         let lastNameWord = nameWords.last ?? ""
-        if !lastNameWord.hasSuffix("!") && !greetingLine.hasSuffix(",") && !greetingLine.hasSuffix("!") { greetingLine += "," }
+        if lastNameWord.hasSuffix("!") {
+            // Already has punctuation from name capture
+        } else if !greetingLine.hasSuffix(",") && !greetingLine.hasSuffix("!") {
+            greetingLine += ","
+        }
+
         remaining = afterName
-        if !remaining.isEmpty { remaining = remaining.prefix(1).uppercased() + remaining.dropFirst() }
+        if !remaining.isEmpty {
+            remaining = remaining.prefix(1).uppercased() + remaining.dropFirst()
+        }
+
         return (greetingLine, remaining)
     }
+
     private func captureNameWords(_ text: String) -> (nameWords: [String], remaining: String) {
-        let titles: Set<String> = ["Mr.","Mrs.","Ms.","Dr.","Prof."]
-        let nonNameWords: Set<String> = ["so","the","i","we","he","she","it","they","you","my","our","his","her","its","their","your","this","that","these","those","but","and","or","if","when","while","since","because","just","also","anyway","actually","basically","well","regarding","about","concerning","please","thanks","thank","hope","wanted","need","could","would","should","can","will","shall","as","at","by","for","from","in","of","on","to","with","how","what","where","why","which","who","do","does","did","have","has","had","am","is","are","was","were","not","no","yes","yeah","okay","ok"]
-        var nameWords: [String] = []; var temp = text
+        let titles: Set<String> = ["Mr.", "Mrs.", "Ms.", "Dr.", "Prof."]
+        // Common words that are capitalized at sentence start but are NOT names
+        let nonNameWords: Set<String> = [
+            "so", "the", "i", "we", "he", "she", "it", "they", "you",
+            "my", "our", "his", "her", "its", "their", "your",
+            "this", "that", "these", "those",
+            "but", "and", "or", "if", "when", "while", "since", "because",
+            "just", "also", "anyway", "actually", "basically", "well",
+            "regarding", "about", "concerning",
+            "please", "thanks", "thank", "hope", "wanted", "need",
+            "could", "would", "should", "can", "will", "shall",
+            "as", "at", "by", "for", "from", "in", "of", "on", "to", "with",
+            "how", "what", "where", "why", "which", "who",
+            "do", "does", "did", "have", "has", "had", "am", "is", "are", "was", "were",
+            "not", "no", "yes", "yeah", "okay", "ok"
+        ]
+        var nameWords: [String] = []
+        var temp = text
+
         for _ in 0..<3 {
             let words = temp.components(separatedBy: " ")
             guard let first = words.first, !first.isEmpty else { break }
+
+            // Strip trailing punctuation for checking
             let cleaned = first.trimmingCharacters(in: CharacterSet(charactersIn: ",!."))
-            if nonNameWords.contains(cleaned.lowercased()) && !titles.contains(first) { break }
-            if titles.contains(first) || first.first?.isUppercase == true {
+
+            let isTitle = titles.contains(first)
+            let isCapitalized = first.first?.isUppercase == true
+            let isNonName = nonNameWords.contains(cleaned.lowercased())
+
+            // Stop if this is a common word, not a name
+            if isNonName && !isTitle { break }
+
+            if isTitle || isCapitalized {
                 nameWords.append(first)
-                temp = words.dropFirst().joined(separator: " ").trimmingCharacters(in: .whitespaces)
-                if first.hasSuffix(",") || first.hasSuffix("!") { break }
-            } else { break }
+                temp = words.dropFirst().joined(separator: " ")
+                    .trimmingCharacters(in: .whitespaces)
+
+                // Name ends at comma, exclamation, or period
+                if first.hasSuffix(",") || first.hasSuffix("!") {
+                    break
+                }
+            } else {
+                break
+            }
         }
+
         return (nameWords, temp.trimmingCharacters(in: .whitespaces))
     }
+
+    // MARK: - Zone 2: Opening Pleasantry
+
     private func extractOpeningPleasantry(_ text: String) -> (pleasantry: String?, remaining: String) {
         let sentences = splitSentences(text)
         guard let first = sentences.first else { return (nil, text) }
+
         let lower = first.lowercased()
-        let patterns = ["hope you","hope this","hope your","i hope","how are you","how are things","how's everything","how's it going","how have you been","how's your","thanks for reaching","thank you for your","thank you for getting","great seeing you","nice to hear from","good to hear from","i hope you had","hope you had","trust you are","trust this finds"]
-        if patterns.contains(where: { lower.contains($0) }) && first.components(separatedBy: " ").count <= 20 {
-            return (first, sentences.dropFirst().joined(separator: " ").trimmingCharacters(in: .whitespaces))
+
+        let pleasantryPatterns = [
+            "hope you", "hope this", "hope your", "i hope",
+            "how are you", "how are things", "how's everything", "how's it going",
+            "how have you been", "how's your",
+            "thanks for reaching", "thank you for your", "thank you for getting",
+            "great seeing you", "nice to hear from", "good to hear from",
+            "i hope you had", "hope you had",
+            "trust you are", "trust this finds"
+        ]
+
+        let isPleasantry = pleasantryPatterns.contains { lower.contains($0) }
+
+        // Must be short (under ~20 words) and not substantive
+        let wordCount = first.components(separatedBy: " ").count
+        if isPleasantry && wordCount <= 20 {
+            let remaining = sentences.dropFirst().map { $0 }.joined(separator: " ")
+            return (first, remaining.trimmingCharacters(in: .whitespaces))
         }
+
         return (nil, text)
     }
+
+    // MARK: - Zone 4: Closing Pleasantry
+
     private func extractClosingPleasantry(_ text: String) -> (pleasantry: String?, body: String) {
         let sentences = splitSentences(text)
-        guard sentences.count >= 2, let last = sentences.last else { return (nil, text) }
+        guard sentences.count >= 2 else { return (nil, text) }
+
+        let last = sentences.last!
         let lower = last.lowercased()
-        let patterns = ["have a good","have a great","have a nice","have a wonderful","enjoy the rest","enjoy your","looking forward","look forward to","i look forward","don't hesitate","do not hesitate","let me know if you have any","let me know if there","please don't hesitate","please do not hesitate","hope to hear from you","hope to see you","talk soon","speak soon","take care"]
-        if patterns.contains(where: { lower.contains($0) }) {
+
+        let closingPatterns = [
+            "have a good", "have a great", "have a nice", "have a wonderful",
+            "enjoy the rest", "enjoy your",
+            "looking forward", "look forward to", "i look forward",
+            "don't hesitate", "do not hesitate",
+            "let me know if you have any", "let me know if there",
+            "please don't hesitate", "please do not hesitate",
+            "hope to hear from you", "hope to see you",
+            "talk soon", "speak soon", "take care"
+        ]
+
+        let isClosing = closingPatterns.contains { lower.contains($0) }
+
+        if isClosing {
             let body = sentences.dropLast().joined(separator: " ")
-            var closing = last.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: ".,"))
+            // Clean up the closing — ensure it ends with a period
+            var closing = last.trimmingCharacters(in: .whitespaces)
+                .trimmingCharacters(in: CharacterSet(charactersIn: ".,"))
             closing += "."
             return (closing, body.trimmingCharacters(in: .whitespaces))
         }
+
         return (nil, text)
     }
+
+    // MARK: - Zone 5+6: Sign-off + Name
+
     private func extractSignOff(_ text: String) -> (signOff: String?, body: String) {
         let words = text.components(separatedBy: " ")
         if words.count < 2 { return (nil, text) }
-        let signOffPhrases = ["with kind regards","with best regards","best regards","kind regards","warm regards","yours sincerely","yours truly","yours faithfully","all the best","many thanks","thanks a lot","thank you","regards","sincerely","respectfully","thanks","cheers","best","warmly","cordially"]
+
+        let signOffPhrases = [
+            "with kind regards", "with best regards",
+            "best regards", "kind regards", "warm regards",
+            "yours sincerely", "yours truly", "yours faithfully",
+            "all the best",
+            "many thanks", "thanks a lot", "thank you",
+            "regards", "sincerely", "respectfully",
+            "thanks", "cheers", "best", "warmly", "cordially"
+        ]
+
+        // Only search in the last 30 words
         let searchStart = max(0, words.count - 30)
         let searchArea = words[searchStart...].joined(separator: " ")
         let searchLower = searchArea.lowercased()
+
         for phrase in signOffPhrases {
             guard let range = searchLower.range(of: phrase) else { continue }
-            let afterPhrase = String(searchArea[range.upperBound...]).trimmingCharacters(in: .whitespaces)
-            let afterWords = afterPhrase.trimmingCharacters(in: CharacterSet(charactersIn: ".,")).components(separatedBy: " ").filter { !$0.isEmpty }
-            let allCap = afterWords.allSatisfy { $0.first?.isUppercase == true }
-            if afterWords.count > 3 || (!allCap && !afterWords.isEmpty) { continue }
-            let originalPhrase = String(searchArea[range.lowerBound...].prefix(phrase.count))
+
+            let afterPhrase = String(searchArea[range.upperBound...])
+                .trimmingCharacters(in: .whitespaces)
+
+            // Check what comes after the sign-off phrase
+            let afterWords = afterPhrase
+                .trimmingCharacters(in: CharacterSet(charactersIn: ".,"))
+                .components(separatedBy: " ")
+                .filter { !$0.isEmpty }
+
+            // If 4+ words follow, or non-capitalized words follow, it's not a sign-off
+            let allCapitalized = afterWords.allSatisfy { $0.first?.isUppercase == true }
+            if afterWords.count > 3 || (!allCapitalized && !afterWords.isEmpty) {
+                continue
+            }
+
+            // Build the sign-off block
+            let phraseStart = searchArea[range.lowerBound...]
+            let originalPhrase = String(phraseStart.prefix(phrase.count))
             var signOffBlock = originalPhrase
-            if !signOffBlock.hasSuffix(",") { signOffBlock += "," }
-            if !afterWords.isEmpty && allCap { signOffBlock += "\n" + afterWords.joined(separator: " ") }
-            let bodyEnd = text.range(of: searchArea[range.lowerBound...].prefix(phrase.count), options: .backwards)
+            if !signOffBlock.hasSuffix(",") {
+                signOffBlock += ","
+            }
+
+            // Name directly below sign-off (no blank line between them)
+            if !afterWords.isEmpty && allCapitalized {
+                let name = afterWords.joined(separator: " ")
+                signOffBlock += "\n" + name
+            }
+
+            // Extract body (everything before this sign-off)
+            let bodyEnd = text.range(of: searchArea[range.lowerBound...].prefix(phrase.count),
+                                        options: .backwards)
             let body: String
-            if let bodyEnd = bodyEnd { body = String(text[..<bodyEnd.lowerBound]).trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: ".,")) }
-            else { body = text }
+            if let bodyEnd = bodyEnd {
+                body = String(text[..<bodyEnd.lowerBound])
+                    .trimmingCharacters(in: .whitespaces)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: ".,"))
+            } else {
+                body = text
+            }
+
             return (signOffBlock, body)
         }
+
         return (nil, text)
     }
+
 }
 
 // =============================================================================
