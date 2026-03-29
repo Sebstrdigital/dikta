@@ -251,7 +251,8 @@ struct StructuredTextFormatter: TextFormatter {
             "how about", "by the way", "on another note", "on a different note",
             "on the other hand", "one more thing", "besides that", "apart from that",
             "moving on", "additionally", "furthermore", "moreover", "separately",
-            "regarding", "as for", "however", "that said", "anyway", "also"
+            "regarding", "as for", "however", "that said", "anyway", "also",
+            "okay", "ok", "yeah", "alright"
         ]
         let hasTopicShift = sentences.contains { s in
             let lower = s.lowercased()
@@ -302,7 +303,8 @@ struct StructuredTextFormatter: TextFormatter {
             "apart from that", "moving on",
             "additionally", "furthermore", "moreover",
             "separately", "regarding", "as for",
-            "also", "however", "that said", "anyway"
+            "also", "however", "that said", "anyway",
+            "okay", "ok", "yeah", "alright"
         ]
 
         var groups: [[String]] = [[]]
@@ -541,15 +543,12 @@ struct MessageFormatter: TextFormatter {
         // Check if name ended with ! (e.g., "Hi Rickard!")
         let lastNameWord = nameWords.last ?? ""
         if lastNameWord.hasSuffix("!") {
-            // Already has punctuation from name capture
+            greetingLine += "!"
         } else if !greetingLine.hasSuffix(",") && !greetingLine.hasSuffix("!") {
             greetingLine += ","
         }
 
         remaining = afterName
-        if !remaining.isEmpty {
-            remaining = remaining.prefix(1).uppercased() + remaining.dropFirst()
-        }
 
         return (greetingLine, remaining)
     }
@@ -569,7 +568,8 @@ struct MessageFormatter: TextFormatter {
             "as", "at", "by", "for", "from", "in", "of", "on", "to", "with",
             "how", "what", "where", "why", "which", "who",
             "do", "does", "did", "have", "has", "had", "am", "is", "are", "was", "were",
-            "not", "no", "yes", "yeah", "okay", "ok"
+            "not", "no", "yes", "yeah", "okay", "ok",
+            "i'm", "i've", "i'd", "i'll", "i've", "i'd", "i'll"
         ]
         var nameWords: [String] = []
         var temp = text

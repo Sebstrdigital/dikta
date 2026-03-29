@@ -154,7 +154,8 @@ struct StructuredTextFormatter: TextFormatter {
             "how about", "by the way", "on another note", "on a different note",
             "on the other hand", "one more thing", "besides that", "apart from that",
             "moving on", "additionally", "furthermore", "moreover", "separately",
-            "regarding", "as for", "however", "that said", "anyway", "also"
+            "regarding", "as for", "however", "that said", "anyway", "also",
+            "okay", "ok", "yeah", "alright"
         ]
         let hasTopicShift = sentences.contains { s in
             let lower = s.lowercased()
@@ -205,7 +206,8 @@ struct StructuredTextFormatter: TextFormatter {
             "apart from that", "moving on",
             "additionally", "furthermore", "moreover",
             "separately", "regarding", "as for",
-            "also", "however", "that said", "anyway"
+            "also", "however", "that said", "anyway",
+            "okay", "ok", "yeah", "alright"
         ]
 
         var groups: [[String]] = [[]]

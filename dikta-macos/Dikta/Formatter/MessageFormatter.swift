@@ -92,15 +92,12 @@ struct MessageFormatter: TextFormatter {
         // Check if name ended with ! (e.g., "Hi Rickard!")
         let lastNameWord = nameWords.last ?? ""
         if lastNameWord.hasSuffix("!") {
-            // Already has punctuation from name capture
+            greetingLine += "!"
         } else if !greetingLine.hasSuffix(",") && !greetingLine.hasSuffix("!") {
             greetingLine += ","
         }
 
         remaining = afterName
-        if !remaining.isEmpty {
-            remaining = remaining.prefix(1).uppercased() + remaining.dropFirst()
-        }
 
         return (greetingLine, remaining)
     }
@@ -120,7 +117,8 @@ struct MessageFormatter: TextFormatter {
             "as", "at", "by", "for", "from", "in", "of", "on", "to", "with",
             "how", "what", "where", "why", "which", "who",
             "do", "does", "did", "have", "has", "had", "am", "is", "are", "was", "were",
-            "not", "no", "yes", "yeah", "okay", "ok"
+            "not", "no", "yes", "yeah", "okay", "ok",
+            "i'm", "i've", "i'd", "i'll", "i've", "i'd", "i'll"
         ]
         var nameWords: [String] = []
         var temp = text
