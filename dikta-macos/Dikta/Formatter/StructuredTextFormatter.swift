@@ -15,7 +15,8 @@ struct StructuredTextFormatter: TextFormatter {
         if trimmed.isEmpty { return ""  }
 
         // Already formatted?
-        if trimmed.contains("\n- ") || trimmed.contains("\n1.") { return trimmed }
+        if trimmed.contains("\n- ") || trimmed.hasPrefix("- ")
+            || trimmed.contains("\n1.") || trimmed.hasPrefix("1. ") { return trimmed }
         
         let sentences = splitSentences(trimmed)
 

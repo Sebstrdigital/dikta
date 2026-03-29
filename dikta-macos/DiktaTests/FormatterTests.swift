@@ -112,7 +112,8 @@ struct StructuredTextFormatter: TextFormatter {
         if trimmed.isEmpty { return ""  }
 
         // Already formatted?
-        if trimmed.contains("\n- ") || trimmed.contains("\n1.") { return trimmed }
+        if trimmed.contains("\n- ") || trimmed.hasPrefix("- ")
+            || trimmed.contains("\n1.") || trimmed.hasPrefix("1. ") { return trimmed }
 
         let sentences = splitSentences(trimmed)
 
@@ -452,6 +453,9 @@ struct MessageFormatter: TextFormatter {
     func format(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return "" }
+
+        // Already formatted (contains paragraph breaks) — return as-is for idempotency
+        if trimmed.contains("\n\n") { return trimmed }
 
         let sentences = splitSentences(trimmed)
         if sentences.count <= 1 { return trimmed }

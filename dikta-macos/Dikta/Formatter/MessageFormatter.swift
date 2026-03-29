@@ -5,6 +5,9 @@ struct MessageFormatter: TextFormatter {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return "" }
 
+        // Already formatted (contains paragraph breaks) — return as-is for idempotency
+        if trimmed.contains("\n\n") { return trimmed }
+
         let sentences = splitSentences(trimmed)
         if sentences.count <= 1 { return trimmed }
 
