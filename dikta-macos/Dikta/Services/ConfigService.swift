@@ -58,6 +58,7 @@ final class ConfigService: ObservableObject {
         case .pushToTalk: return config.hotkeys.pushToTalk
         case .textToSpeech: return config.hotkeys.textToSpeech
         case .languageToggle: return config.hotkeys.languageToggle
+        case .formatSelection: return config.hotkeys.formatSelection
         }
     }
 
@@ -71,6 +72,8 @@ final class ConfigService: ObservableObject {
             config.hotkeys.textToSpeech = hotkey
         case .languageToggle:
             config.hotkeys.languageToggle = hotkey
+        case .formatSelection:
+            config.hotkeys.formatSelection = hotkey
         }
         objectWillChange.send()
         save()

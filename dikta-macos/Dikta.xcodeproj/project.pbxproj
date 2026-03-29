@@ -31,6 +31,14 @@
 		100000000000000000000028 /* DiagnosticLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000028 /* DiagnosticLogger.swift */; };
 		100000000000000000000029 /* SparkleController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000029 /* SparkleController.swift */; };
 
+		/* Formatter */
+		100000000000000000000081 /* FormatterEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000081 /* FormatterEngine.swift */; };
+		100000000000000000000082 /* FormatterStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000082 /* FormatterStyle.swift */; };
+		100000000000000000000083 /* MessageFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000083 /* MessageFormatter.swift */; };
+		100000000000000000000084 /* StructuredTextFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000084 /* StructuredTextFormatter.swift */; };
+		100000000000000000000085 /* TextHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000085 /* TextHelpers.swift */; };
+		100000000000000000000086 /* TextFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000086 /* TextFormatter.swift */; };
+
 		/* ViewModels */
 		100000000000000000000021 /* MenuBarViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000021 /* MenuBarViewModel.swift */; };
 
@@ -82,6 +90,14 @@
 		200000000000000000000027 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		200000000000000000000028 /* DiagnosticLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticLogger.swift; sourceTree = "<group>"; };
 		200000000000000000000029 /* SparkleController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleController.swift; sourceTree = "<group>"; };
+
+		/* Formatter */
+		200000000000000000000081 /* FormatterEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatterEngine.swift; sourceTree = "<group>"; };
+		200000000000000000000082 /* FormatterStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatterStyle.swift; sourceTree = "<group>"; };
+		200000000000000000000083 /* MessageFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageFormatter.swift; sourceTree = "<group>"; };
+		200000000000000000000084 /* StructuredTextFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StructuredTextFormatter.swift; sourceTree = "<group>"; };
+		200000000000000000000085 /* TextHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextHelpers.swift; sourceTree = "<group>"; };
+		200000000000000000000086 /* TextFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextFormatter.swift; sourceTree = "<group>"; };
 
 		/* ViewModels */
 		200000000000000000000021 /* MenuBarViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModel.swift; sourceTree = "<group>"; };
@@ -143,11 +159,25 @@
 				200000000000000000000041 /* DiktaApp.swift */,
 				600000000000000000000002 /* Models */,
 				600000000000000000000003 /* Services */,
+				600000000000000000000008 /* Formatter */,
 				600000000000000000000004 /* ViewModels */,
 				600000000000000000000005 /* Views */,
 				600000000000000000000006 /* Resources */,
 			);
 			path = Dikta;
+			sourceTree = "<group>";
+		};
+		600000000000000000000008 /* Formatter */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000081 /* FormatterEngine.swift */,
+				200000000000000000000082 /* FormatterStyle.swift */,
+				200000000000000000000083 /* MessageFormatter.swift */,
+				200000000000000000000084 /* StructuredTextFormatter.swift */,
+				200000000000000000000085 /* TextHelpers.swift */,
+				200000000000000000000086 /* TextFormatter.swift */,
+			);
+			path = Formatter;
 			sourceTree = "<group>";
 		};
 		600000000000000000000007 /* DiktaTests */ = {
@@ -379,6 +409,12 @@
 				100000000000000000000029 /* SparkleController.swift in Sources */,
 				100000000000000000000032 /* HotkeyRecordingWindow.swift in Sources */,
 				100000000000000000000033 /* OnboardingWindow.swift in Sources */,
+				100000000000000000000081 /* FormatterEngine.swift in Sources */,
+				100000000000000000000082 /* FormatterStyle.swift in Sources */,
+				100000000000000000000083 /* MessageFormatter.swift in Sources */,
+				100000000000000000000084 /* StructuredTextFormatter.swift in Sources */,
+				100000000000000000000085 /* TextHelpers.swift in Sources */,
+				100000000000000000000086 /* TextFormatter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
