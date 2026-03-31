@@ -1,9 +1,9 @@
 {
-  "runs": 4,
+  "runs": 5,
   "stories": {
     "bySize": {
-      "large": { "count": 3, "fastest": 517, "slowest": 720, "avg": 631 },
-      "medium": { "count": 7, "fastest": 8, "slowest": 600, "avg": 306 },
+      "large": { "count": 5, "fastest": 436, "slowest": 930, "avg": 652 },
+      "medium": { "count": 9, "fastest": 8, "slowest": 600, "avg": 286 },
       "small": { "count": 5, "fastest": 94, "slowest": 354, "avg": 236 }
     }
   },
