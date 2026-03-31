@@ -5,7 +5,6 @@ struct StructuredTextFormatter: TextFormatter {
     enum ContentType {
         case bulletList(items: [String], preamble: String?)
         case numberedList(items: [String], preamble: String?)
-        case sections(groups: [(heading: String, body: String)])
         case paragraphs(groups: [[String]])
         case noChange
     }
@@ -27,8 +26,6 @@ struct StructuredTextFormatter: TextFormatter {
             return formatBullets(items, preamble: preamble)
         case .numberedList(let items, let preamble):
             return formatNumbered(items, preamble: preamble)
-        case .sections(let groups):
-            return formatSections(groups)
         case .paragraphs(let groups):
             return formatParagraphs(groups)
         case .noChange:
@@ -226,16 +223,6 @@ struct StructuredTextFormatter: TextFormatter {
         }
 
         if groups.count >= 2 && groups.count <= 8 && !groups[0].isEmpty {
-            // Use rich section format when all groups have multiple sentences
-            if groups.allSatisfy({ $0.count >= 2 }) {
-                let sectionGroups = groups.map { group -> (heading: String, body: String) in
-                    let heading = extractHeading(from: group[0])
-                    let body = group.joined(separator: " ")
-                    return (heading: heading, body: body)
-                }
-                return .sections(groups: sectionGroups)
-            }
-            // Otherwise use plain paragraph breaks
             return .paragraphs(groups: groups)
         }
 
@@ -249,34 +236,6 @@ struct StructuredTextFormatter: TextFormatter {
 
         // Check F - No pattern
         return .noChange
-    }
-
-    private func extractHeading(from sentence: String) -> String {
-        
-        let skipWords: Set<String> = [
-            "the", "a", "an", "we", "i", "our", "my",
-            "need", "should", "must", "have", "is", "are",
-            "to", "for", "of", "in", "on", "at", "by", "with",
-            "regarding", "as", "also", "however", "additionally",
-            "furthermore", "moreover", "separately", "anyway",
-            "by the way", "on a different note", "on another note",
-            "that said", "moving on"
-        ]
-
-        let words = sentence
-            .trimmingCharacters(in: CharacterSet(charactersIn: ".,!?"))
-            .components(separatedBy: " ")
-
-            .filter { !skipWords.contains($0.lowercased()) }
-
-        let headingWords = Array(words.prefix(2))
-
-        if headingWords.isEmpty { return "Section" }
-
-        return headingWords
-
-            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
-            .joined(separator: " ")
     }
 
     private let sequenceMarkers = [
@@ -334,11 +293,6 @@ struct StructuredTextFormatter: TextFormatter {
         }
         result += steps.joined(separator: "\n")
         return result
-    }
-
-    private func formatSections(_ groups: [(heading: String, body: String)]) -> String {
-        return groups.map { "## \($0.heading)\n\n\($0.body)" }
-                     .joined(separator: "\n\n")
     }
 
     private func formatParagraphs(_ groups: [[String]]) -> String {
