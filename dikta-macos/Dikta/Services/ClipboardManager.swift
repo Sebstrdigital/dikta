@@ -71,7 +71,7 @@ final class ClipboardManager {
     }
 
     /// Copy selection, format it, paste it back
-    func formatSelection(style: FormatterStyle) {
+    func formatSelection(style: FormatterStyle, language: Language = .english) {
         // Save current pasteboard to restore if needed
         let previousContents = getText()
         let previousChangeCount = NSPasteboard.general.changeCount
@@ -92,7 +92,7 @@ final class ClipboardManager {
             }
 
             // Format
-            let formatted = FormatterEngine().format(selectedText, style: style)
+            let formatted = FormatterEngine().format(selectedText, style: style, language: language)
 
             // Write formatter text to pasteboard
             copy(formatted)

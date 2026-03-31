@@ -42,6 +42,20 @@ enum Language: String, Codable, CaseIterable {
         rawValue
     }
 
+    /// Whether MiniLM-L12-v2 reliably supports this language for embedding-based paragraph splitting.
+    ///
+    /// MiniLM-L12-v2 was trained primarily on English with some multilingual capability for
+    /// closely related European languages. Nordic/Finnic languages and Indonesian/Japanese
+    /// lack reliable coverage and fall back to heuristic-only splitting.
+    var supportsEmbeddings: Bool {
+        switch self {
+        case .english, .spanish, .french, .german, .portuguese, .italian, .dutch:
+            return true
+        case .swedish, .indonesian, .finnish, .norwegian, .danish:
+            return false
+        }
+    }
+
     /// Next language in the cycle (all languages)
     var next: Language {
         let all = Language.allCases

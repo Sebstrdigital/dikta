@@ -560,7 +560,8 @@ extension MenuBarViewModel: HotkeyManagerDelegate {
     
     nonisolated func formatHotkeyPressed() {
         Task { @MainActor in
-            clipboardManager.formatSelection(style: .message) // Hardcoded for now
+            let currentLanguage = configService.language
+            clipboardManager.formatSelection(style: .message, language: currentLanguage)
         }
     }
 
