@@ -410,6 +410,7 @@ final class MenuBarViewModel: ObservableObject {
         )
         hotkeyManager.updateTtsConfig(configService.ttsHotkey)
         hotkeyManager.updateLanguageConfig(configService.languageToggleHotkey)
+        hotkeyManager.updateFormatConfig(configService.getHotkey(for: .formatSelection))
     }
 
     // MARK: - Text-to-Speech
@@ -554,6 +555,12 @@ extension MenuBarViewModel: HotkeyManagerDelegate {
             }
 
             applyHotkey(hotkey, for: mode)
+        }
+    }
+    
+    nonisolated func formatHotkeyPressed() {
+        Task { @MainActor in
+            clipboardManager.formatSelection(style: .message) // Hardcoded for now
         }
     }
 

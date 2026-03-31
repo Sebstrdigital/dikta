@@ -48,4 +48,60 @@ final class ClipboardManager {
         typeText(text)
         AppLogger.general.debug("Typed \(text.count) characters directly")
     }
+
+    /// Simulate Cmd+C keystroke to copy selection
+    func simulateCopy() {
+        simulateKeystroke(keyCode: 8, modifierFlags: .maskCommand) // 8 = "c"
+    }
+
+    /// Simulate Cmd+V keystroke to paste clipboard
+    func simulatePaste() {
+        simulateKeystroke(keyCode: 9, modifierFlags: .maskCommand) // 9 = "v"
+    }
+
+    private func simulateKeystroke(keyCode: CGKeyCode, modifierFlags: CGEventFlags) {
+        let source = CGEventSource(stateID: .hidSystemState)
+
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else { return }
+        keyDown.flags = modifierFlags
+        keyUp.flags = modifierFlags
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+    }
+
+    /// Copy selection, format it, paste it back
+    func formatSelection(style: FormatterStyle) {
+        // Save current pasteboard to restore if needed
+        let previousContents = getText()
+        let previousChangeCount = NSPasteboard.general.changeCount
+
+        // Simulate Cmd+C
+        simulateCopy()
+
+        // Wait for pasteboard to update
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [self] in
+            let newChangeCount = NSPasteboard.general.changeCount
+
+            // Check if pasteboard actually changed (something was selected)
+            guard newChangeCount != previousChangeCount,
+                    let selectedText = getText(),
+                    !selectedText.isEmpty else {
+                AppLogger.general.debug("Format: no text selected")
+                return
+            }
+
+            // Format
+            let formatted = FormatterEngine().format(selectedText, style: style)
+
+            // Write formatter text to pasteboard
+            copy(formatted)
+
+            // Small delay then paste
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                self.simulatePaste()
+                AppLogger.general.debug("Formatted \(selectedText.count) -> \(formatted.count) chars")
+            }
+        }
+    }
 }

@@ -6,6 +6,7 @@ struct StructuredTextFormatter: TextFormatter {
         case bulletList(items: [String], preamble: String?)
         case numberedList(items: [String], preamble: String?)
         case sections(groups: [(heading: String, body: String)])
+        case paragraphs(groups: [[String]])
         case noChange
     }
 
@@ -14,7 +15,8 @@ struct StructuredTextFormatter: TextFormatter {
         if trimmed.isEmpty { return ""  }
 
         // Already formatted?
-        if trimmed.contains("\n- ") || trimmed.contains("\n1.") { return trimmed }
+        if trimmed.contains("\n- ") || trimmed.hasPrefix("- ")
+            || trimmed.contains("\n1.") || trimmed.hasPrefix("1. ") { return trimmed }
         
         let sentences = splitSentences(trimmed)
 
@@ -27,6 +29,8 @@ struct StructuredTextFormatter: TextFormatter {
             return formatNumbered(items, preamble: preamble)
         case .sections(let groups):
             return formatSections(groups)
+        case .paragraphs(let groups):
+            return formatParagraphs(groups)
         case .noChange:
             return trimmed
         }
@@ -144,21 +148,35 @@ struct StructuredTextFormatter: TextFormatter {
         }
 
         // Check C - Homogeneous short sentences
+        // Skip if any sentence starts with a topic-shift transition phrase — those should
+        // be handled by the paragraph-splitting pass below instead.
+        let topicShiftPrefixes = [
+            "how about", "by the way", "on another note", "on a different note",
+            "on the other hand", "one more thing", "besides that", "apart from that",
+            "moving on", "additionally", "furthermore", "moreover", "separately",
+            "regarding", "as for", "however", "that said", "anyway", "also",
+            "okay", "ok", "yeah", "alright"
+        ]
+        let hasTopicShift = sentences.contains { s in
+            let lower = s.lowercased()
+            return topicShiftPrefixes.contains(where: { lower.hasPrefix($0) })
+        }
 
         let allShort = sentences.allSatisfy { $0.components(separatedBy: " ").count < 15 }
-        if allShort && sentences.count >= 3 {
-            
+        if allShort && sentences.count >= 3 && !hasTopicShift {
+
             let nonVerbStarts: Set<String> = [
                 "i", "we", "he", "she", "it", "they", "you",
                 "my", "our", "his", "her", "its", "their",
                 "the", "a", "an", "in", "on", "at", "for", "with", "to",
                 "from", "by", "of", "about", "and", "but", "or", "so", "yet",
                 "this", "that", "these", "those", "one", "two", "first",
-                "second"
+                "second", "each", "all", "most", "some", "many", "every",
+                "several", "both", "neither", "either"
             ]
 
             let imperativeCount = sentences.filter { sentence in
-                
+
                 let firstWord = sentence.components(separatedBy: " ").first?
                     .lowercased()
 
@@ -171,22 +189,25 @@ struct StructuredTextFormatter: TextFormatter {
 
             if ratio >= 0.6 {
                 return .numberedList(items: sentences, preamble: nil)
-
-            } else {
+            } else if sentences.count < 5 {
                 return .bulletList(items: sentences, preamble: nil)
             }
+            // For 5+ sentences with low imperative ratio, fall through to
+            // paragraph splitting / long-text fallback below.
 
         }
 
-        // Check D - Sections
+        // Check D - Sections / Paragraph Splitting
         let transitionPhrases = [
+            "how about",
             "by the way", "another thing", "on another note",
-            "on a different note",  "on the other hand",
+            "on a different note", "on the other hand",
             "in addition", "one more thing", "besides that",
             "apart from that", "moving on",
             "additionally", "furthermore", "moreover",
             "separately", "regarding", "as for",
-            "also", "however", "that said", "anyway"
+            "also", "however", "that said", "anyway",
+            "okay", "ok", "yeah", "alright"
         ]
 
         var groups: [[String]] = [[]]
@@ -198,26 +219,35 @@ struct StructuredTextFormatter: TextFormatter {
 
             if isTransition && !groups.last!.isEmpty {
                 groups.append([sentence])
-            
+
             } else {
                 groups[groups.count - 1].append(sentence)
             }
         }
 
-        if groups.count >= 2 && groups.count <= 5
-            && groups.allSatisfy({ $0.count >= 2 }) {
-            let sectionGroups = groups.map { group -> (heading: String, body: String) in 
-                let heading = extractHeading(from: group[0])
-
-                let body = group.joined(separator: " ")
-
-                return (heading: heading, body: body)
+        if groups.count >= 2 && groups.count <= 8 && !groups[0].isEmpty {
+            // Use rich section format when all groups have multiple sentences
+            if groups.allSatisfy({ $0.count >= 2 }) {
+                let sectionGroups = groups.map { group -> (heading: String, body: String) in
+                    let heading = extractHeading(from: group[0])
+                    let body = group.joined(separator: " ")
+                    return (heading: heading, body: body)
+                }
+                return .sections(groups: sectionGroups)
             }
-
-            return .sections(groups: sectionGroups)
+            // Otherwise use plain paragraph breaks
+            return .paragraphs(groups: groups)
         }
 
-        // Check E - No pattern
+        // Check E - Long-text fallback: split at midpoint when many sentences
+        if sentences.count >= 5 {
+            let mid = sentences.count / 2
+            let firstHalf = Array(sentences[0..<mid])
+            let secondHalf = Array(sentences[mid...])
+            return .paragraphs(groups: [firstHalf, secondHalf])
+        }
+
+        // Check F - No pattern
         return .noChange
     }
 
@@ -309,6 +339,13 @@ struct StructuredTextFormatter: TextFormatter {
     private func formatSections(_ groups: [(heading: String, body: String)]) -> String {
         return groups.map { "## \($0.heading)\n\n\($0.body)" }
                      .joined(separator: "\n\n")
+    }
+
+    private func formatParagraphs(_ groups: [[String]]) -> String {
+        return groups
+            .filter { !$0.isEmpty }
+            .map { $0.joined(separator: " ") }
+            .joined(separator: "\n\n")
     }
 
 }
