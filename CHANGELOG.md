@@ -2,6 +2,22 @@
 
 All notable changes to Dikta will be documented in this file.
 
+## [1.2] - 2026-03-31
+
+### Features
+- **Deterministic text formatter** — format dictated text with Cmd+Shift+F. Six-zone message extraction (greeting, opening pleasantry, body, closing pleasantry, sign-off, name) with automatic paragraph splitting and list detection
+- **Embedding-based paragraph splitting (experimental)** — bundled MiniLM-L12-v2 (33MB CoreML model) detects semantic topic shifts in dictated messages using sentence embeddings and depth-score thresholding. Supplements heuristic transition-word detection for unmarked topic changes (e.g. work discussion → personal questions)
+- **Language-aware model fallback** — embedding-based splitting used for English, Spanish, French, German, Portuguese, Italian, Dutch; heuristic-only fallback for Finnish, Norwegian, Danish, Indonesian, Swedish
+- **Lazy model loading** — embedding model loads on first format hotkey press, not at app startup
+
+### Fixes
+- Greeting punctuation preserved — "Hello, Reino!" no longer becomes "Hello Reino,"
+- Removed spurious markdown headings (## So, Some) from paragraph-split output
+- FormatterTests.swift registered in Xcode test target — 215 tests now run (was 68)
+
+### Tests
+- 215 unit tests (129 formatter + 12 embedding splitter + 6 regression + 68 existing)
+
 ## [1.1] - 2026-03-27
 
 ### Features

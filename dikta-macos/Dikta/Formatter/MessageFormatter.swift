@@ -1,6 +1,8 @@
 import Foundation
 
 struct MessageFormatter: TextFormatter {
+    var embeddingSplitter: EmbeddingParagraphSplitter?
+
     func format(_ text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty { return "" }
@@ -16,7 +18,9 @@ struct MessageFormatter: TextFormatter {
         let (openingPleasantry, afterOpening) = extractOpeningPleasantry(afterGreeting)
         let (signOff, afterSignOffExtracted) = extractSignOff(afterOpening)
         let (closingPleasantry, body) = extractClosingPleasantry(afterSignOffExtracted)
-        let structuredBody = StructuredTextFormatter().format(body)
+        var structuredFormatter = StructuredTextFormatter()
+        structuredFormatter.embeddingSplitter = embeddingSplitter
+        let structuredBody = structuredFormatter.format(body)
 
         var parts: [String] = []
         if let g = greeting { parts.append(g) }
