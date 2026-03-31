@@ -31,14 +31,16 @@ struct FormatterEngine {
     // MARK: - Public API
 
     func format(_ text: String, style: FormatterStyle, language: Language = .english) -> String {
+        let splitter = language.supportsEmbeddings ? FormatterEngine.embeddingSplitter() : nil
+
         switch style {
         case .message:
-            return MessageFormatter().format(text)
+            var formatter = MessageFormatter()
+            formatter.embeddingSplitter = splitter
+            return formatter.format(text)
         case .structure:
             var formatter = StructuredTextFormatter()
-            if language.supportsEmbeddings {
-                formatter.embeddingSplitter = FormatterEngine.embeddingSplitter()
-            }
+            formatter.embeddingSplitter = splitter
             return formatter.format(text)
         }
     }
