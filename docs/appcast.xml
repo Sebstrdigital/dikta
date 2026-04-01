@@ -20,19 +20,6 @@
             />
         </item>
         <item>
-            <title>Dikta 1.2</title>
-            <pubDate>Sun, 29 Mar 2026 11:08:05 +0000</pubDate>
-            <sparkle:version>1.2</sparkle:version>
-            <sparkle:shortVersionString>1.2</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure
-                url="https://github.com/Sebstrdigital/dikta/releases/download/v1.2/Dikta-1.2.dmg"
-                sparkle:edSignature="eagHjv2tY+r3zaHmGvksTircs6NmAkbvn42wSi9BwJRnrKVYpoE9kOWc4Sxm8lVpkhLorHwFw9Ne55YL+NA2CA=="
-                length="453907532"
-                type="application/octet-stream"
-            />
-        </item>
-        <item>
             <title>Dikta 1.1</title>
             <pubDate>Fri, 27 Mar 2026 02:31:12 +0000</pubDate>
             <sparkle:version>1.1</sparkle:version>

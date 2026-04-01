@@ -35,6 +35,21 @@ WORK_DIR=$(mktemp -d /tmp/Dikta-build.XXXXXX)
 EXPORT_PATH="${WORK_DIR}/export"
 trap 'rm -rf "${WORK_DIR}"' EXIT
 
+# Pre-flight: verify MARKETING_VERSION and CURRENT_PROJECT_VERSION match
+PBXPROJ="${PROJECT_DIR}/Dikta.xcodeproj/project.pbxproj"
+MARKETING_VER=$(grep 'MARKETING_VERSION' "${PBXPROJ}" | head -1 | sed 's/.*= *\(.*\);/\1/')
+BUILD_VER=$(grep 'CURRENT_PROJECT_VERSION' "${PBXPROJ}" | head -1 | sed 's/.*= *\(.*\);/\1/')
+if [ "${MARKETING_VER}" != "${BUILD_VER}" ]; then
+    echo "ERROR: Version mismatch in project.pbxproj!"
+    echo "  MARKETING_VERSION = ${MARKETING_VER}"
+    echo "  CURRENT_PROJECT_VERSION = ${BUILD_VER}"
+    echo ""
+    echo "Both must match before building a release."
+    echo "Update CURRENT_PROJECT_VERSION in project.pbxproj (both Debug and Release configs)."
+    exit 1
+fi
+echo "==> Version check OK: ${MARKETING_VER} (build ${BUILD_VER})"
+
 echo "==> Cleaning previous build..."
 rm -rf "${PROJECT_DIR}/build"
 mkdir -p "${PROJECT_DIR}/build"
@@ -282,19 +297,27 @@ NEW_ITEM="        <item>
         </item>"
 
 if [ -f "${APPCAST_PATH}" ] && grep -q '<item>' "${APPCAST_PATH}" 2>/dev/null; then
-    # Appcast already has entries — insert new item before first existing <item>
+    # Appcast already has entries — replace existing entry for same version, or insert new
     # Use Python for reliable XML-safe insertion (available on macOS by default)
-    python3 - "${APPCAST_PATH}" "${NEW_ITEM}" << 'PYEOF'
+    python3 - "${APPCAST_PATH}" "${NEW_ITEM}" "${APP_VERSION}" << 'PYEOF'
 import sys, re
 
 appcast_path = sys.argv[1]
 new_item = sys.argv[2]
+version = sys.argv[3]
 
 with open(appcast_path, 'r') as f:
     content = f.read()
 
-# Insert new item before the first existing <item>
-content = content.replace('<item>', new_item + '\n        <item>', 1)
+# Remove any existing <item> blocks for this version (prevents duplicates on re-release)
+pattern = r'\s*<item>\s*<title>Dikta ' + re.escape(version) + r'</title>.*?</item>'
+content = re.sub(pattern, '', content, flags=re.DOTALL)
+
+# Insert new item before the first remaining <item>, or before </channel> if none left
+if '<item>' in content:
+    content = content.replace('<item>', new_item + '\n        <item>', 1)
+else:
+    content = content.replace('</channel>', new_item + '\n    </channel>')
 
 with open(appcast_path, 'w') as f:
     f.write(content)
