@@ -285,5 +285,6 @@ public class TrayIconManager : IDisposable
         _idleIcon?.Dispose();
         _recordingIcon?.Dispose();
         _recorder.Dispose();
+        _transcriber.Dispose();
     }
 }
