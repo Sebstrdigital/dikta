@@ -11,17 +11,23 @@ public partial class SettingsWindow : Window
     private readonly ConfigService _configService;
     private readonly HotkeyManager _hotkeyManager;
 
+    private string _pendingModifiers = "";
+    private string _pendingKey = "";
+
     public SettingsWindow(ConfigService configService, HotkeyManager hotkeyManager)
     {
         InitializeComponent();
         _configService = configService;
         _hotkeyManager = hotkeyManager;
 
-        PopulateKeyCombo();
         PopulateLanguageCombo();
         PopulateModelCombo();
         PopulateMicSensitivityCombo();
-        LoadCurrentHotkey();
+        LoadCurrentSettings();
+
+        _pendingModifiers = _configService.Config.HotkeyModifiers;
+        _pendingKey = _configService.Config.HotkeyKey;
+        CurrentHotkeyLabel.Text = FormatHotkey(_pendingModifiers, _pendingKey);
     }
 
     private void PopulateMicSensitivityCombo()
@@ -42,32 +48,8 @@ public partial class SettingsWindow : Window
         }
     }
 
-    private void PopulateKeyCombo()
+    private void LoadCurrentSettings()
     {
-        for (char c = 'A'; c <= 'Z'; c++)
-            KeyCombo.Items.Add(c.ToString());
-        for (char c = '0'; c <= '9'; c++)
-            KeyCombo.Items.Add(c.ToString());
-    }
-
-    private void LoadCurrentHotkey()
-    {
-        var currentMods = _configService.Config.HotkeyModifiers
-            .Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-            .Select(m => m.ToLowerInvariant())
-            .ToHashSet();
-
-        foreach (ListBoxItem item in ModifiersList.Items)
-        {
-            if (currentMods.Contains(item.Content.ToString()!.ToLowerInvariant()))
-                ModifiersList.SelectedItems.Add(item);
-        }
-
-        var currentKey = _configService.Config.HotkeyKey.ToUpperInvariant();
-        KeyCombo.SelectedItem = currentKey;
-        if (KeyCombo.SelectedItem == null && KeyCombo.Items.Count > 0)
-            KeyCombo.SelectedIndex = 0;
-
         MuteSoundsCheckBox.IsChecked = _configService.Config.MuteSounds;
 
         var currentLang = _configService.Config.Language;
@@ -107,6 +89,29 @@ public partial class SettingsWindow : Window
             MicSensitivityCombo.SelectedIndex = 0;
     }
 
+    private static string FormatHotkey(string modifiers, string key)
+    {
+        var parts = modifiers
+            .Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .ToList();
+        if (!string.IsNullOrEmpty(key))
+            parts.Add(key);
+        return string.Join(" + ", parts);
+    }
+
+    private void ChangeHotkeyButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new HotkeyRecordingWindow(_hotkeyManager) { Owner = this };
+        var result = dialog.ShowDialog();
+
+        if (result == true)
+        {
+            _pendingModifiers = dialog.CapturedModifiers;
+            _pendingKey = dialog.CapturedKey;
+            CurrentHotkeyLabel.Text = FormatHotkey(_pendingModifiers, _pendingKey);
+        }
+    }
+
     private void PopulateLanguageCombo()
     {
         foreach (var lang in DiktaWindows.Models.Language.All)
@@ -142,20 +147,11 @@ public partial class SettingsWindow : Window
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
     {
-        var selectedMods = ModifiersList.SelectedItems
-            .Cast<ListBoxItem>()
-            .Select(i => i.Content.ToString()!)
-            .ToList();
-
-        var modifierString = selectedMods.Count > 0
-            ? string.Join("+", selectedMods)
-            : string.Empty;
-
-        var key = KeyCombo.SelectedItem?.ToString() ?? _configService.Config.HotkeyKey;
-
+        // Safety double-check: re-register in case dialog's registration was lost.
+        // This is idempotent if the binding already matches.
         try
         {
-            _hotkeyManager.ReregisterHotkey(modifierString, key);
+            _hotkeyManager.ReregisterHotkey(_pendingModifiers, _pendingKey);
         }
         catch (InvalidOperationException ex)
         {
@@ -163,8 +159,8 @@ public partial class SettingsWindow : Window
             return;
         }
 
-        _configService.Config.HotkeyModifiers = modifierString;
-        _configService.Config.HotkeyKey = key;
+        _configService.Config.HotkeyModifiers = _pendingModifiers;
+        _configService.Config.HotkeyKey = _pendingKey;
         _configService.Config.MuteSounds = MuteSoundsCheckBox.IsChecked ?? false;
 
         if (LanguageCombo.SelectedItem is ComboBoxItem langItem)
@@ -193,11 +189,37 @@ public partial class SettingsWindow : Window
             return;
         }
 
+        _saved = true;
         Close();
     }
 
     private void CancelButton_Click(object sender, RoutedEventArgs e)
     {
+        // Close() will fire OnWindowClosing which handles the restore.
         Close();
     }
+
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        // Covers every close path: Cancel button, title-bar X, Alt+F4, system menu.
+        // If user changed the hotkey via the dialog but never saved, the dialog's
+        // pre-save test already re-registered the new binding — restore the persisted one
+        // to keep runtime + config in sync.
+        if (!_saved &&
+            (_pendingModifiers != _configService.Config.HotkeyModifiers ||
+             _pendingKey != _configService.Config.HotkeyKey))
+        {
+            try
+            {
+                _hotkeyManager.ReregisterHotkey(
+                    _configService.Config.HotkeyModifiers,
+                    _configService.Config.HotkeyKey);
+            }
+            catch { /* best-effort restore */ }
+        }
+
+        base.OnClosing(e);
+    }
+
+    private bool _saved;
 }

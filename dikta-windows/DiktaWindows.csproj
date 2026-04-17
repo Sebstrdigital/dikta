@@ -1,5 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    Diagnostic logging is compiled out of Release builds by default.
+    To produce a tester build with the rolling file logger enabled
+    (see Services/DiagnosticLogger.cs), build with:
+        dotnet build -c Release -p:DefineConstants=DIAGNOSTICS
+    or:
+        dotnet publish -c Release -p:DefineConstants=DIAGNOSTICS -r win-x64 -p:SelfContained=false
+    All public DiagnosticLogger methods carry [Conditional("DIAGNOSTICS")]
+    so call sites compile to no-op when the symbol is not defined.
+  -->
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>

@@ -106,6 +106,23 @@ public class TrayIconManager : IDisposable
 
         menu.Items.Add(new ToolStripSeparator());
 
+#if DIAGNOSTICS
+        menu.Items.Add("Open logs folder", null, (s, e) =>
+        {
+            var logsPath = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Dikta",
+                "logs");
+            try
+            {
+                System.IO.Directory.CreateDirectory(logsPath);
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", logsPath) { UseShellExecute = true });
+            }
+            catch { /* best-effort */ }
+        });
+        menu.Items.Add(new ToolStripSeparator());
+#endif
+
         // Quit
         menu.Items.Add("Quit", null, (s, e) =>
         {

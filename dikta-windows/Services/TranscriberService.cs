@@ -40,6 +40,9 @@ public class TranscriberService : IDisposable
             _cachedModelPath = modelPath;
         }
 
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        long audioSize = File.Exists(audioFilePath) ? new FileInfo(audioFilePath).Length : 0;
+
         try
         {
             var language = Language.FromCode(_configService.Config.Language).WhisperCode;
@@ -62,6 +65,9 @@ public class TranscriberService : IDisposable
                 if (!string.IsNullOrEmpty(text))
                     result.Add(text);
             }
+
+            sw.Stop();
+            DiagnosticLogger.Info($"Transcription complete. Lang={language}, AudioBytes={audioSize}, DurationMs={sw.ElapsedMilliseconds}, OutputChars={(result.Count > 0 ? string.Join(" ", result).Length : 0)}");
 
             return result.Count > 0 ? string.Join(" ", result) : string.Empty;
         }

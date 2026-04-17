@@ -49,6 +49,8 @@ public class AudioRecorder : IDisposable
         _waveIn.StartRecording();
         IsRecording = true;
 
+        DiagnosticLogger.Info($"Recording started. TempFile={_tempFilePath}");
+
         return _tempFilePath;
     }
 
@@ -63,6 +65,8 @@ public class AudioRecorder : IDisposable
 
     private void OnRecordingStopped(object? sender, StoppedEventArgs e)
     {
+        DiagnosticLogger.Info($"Recording stopped. TempFile={_tempFilePath}, StoppedArgsException={e.Exception?.Message ?? "none"}");
+
         _writer?.Dispose();
         _writer = null;
 

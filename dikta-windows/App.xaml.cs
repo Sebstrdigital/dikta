@@ -1,4 +1,5 @@
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -70,6 +71,7 @@ public partial class App : Application
         // Wire unhandled-exception handlers so crashes are logged and surfaced.
         DispatcherUnhandledException += (_, ex) =>
         {
+            DiagnosticLogger.Exception("UI thread crash", ex.Exception);
             WriteCrashLog(ex.Exception);
             ShowCrashBalloon(ex.Exception.Message);
             ex.Handled = true;
@@ -80,6 +82,7 @@ public partial class App : Application
         {
             var exception = ex.ExceptionObject as Exception
                 ?? new Exception(ex.ExceptionObject?.ToString() ?? "Unknown exception");
+            DiagnosticLogger.Exception("AppDomain crash", exception);
             WriteCrashLog(exception);
             ShowCrashBalloon(exception.Message);
             // CLR will terminate the process after this handler returns for fatal exceptions.
@@ -87,6 +90,7 @@ public partial class App : Application
 
         TaskScheduler.UnobservedTaskException += (_, ex) =>
         {
+            DiagnosticLogger.Exception("Unobserved task exception", ex.Exception);
             WriteCrashLog(ex.Exception);
             ShowCrashBalloon(ex.Exception.Message);
             ex.SetObserved(); // Prevent the default escalation policy from terminating the process.
@@ -94,7 +98,13 @@ public partial class App : Application
 
         base.OnStartup(e);
 
+        DiagnosticLogger.Info($"App startup. Version={Assembly.GetExecutingAssembly().GetName().Version}, OS={Environment.OSVersion}, Runtime={RuntimeInformation.FrameworkDescription}");
+
         _configService = new ConfigService();
+
+        var modelPath = Path.Combine(ConfigService.ModelsDir, $"ggml-{_configService.Config.WhisperModel}.bin");
+        DiagnosticLogger.Info($"Config loaded. ModelPath={modelPath}, ModelExists={File.Exists(modelPath)}");
+
         _hotkeyManager = new HotkeyManager(_configService);
         _trayIcon = new TrayIconManager(_configService, _hotkeyManager);
 

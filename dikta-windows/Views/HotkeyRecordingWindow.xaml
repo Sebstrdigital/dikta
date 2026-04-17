@@ -1,0 +1,60 @@
+<Window x:Class="DiktaWindows.Views.HotkeyRecordingWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Record Hotkey"
+        Width="400" Height="200"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="ToolWindow">
+    <Grid Margin="20,16,20,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="12"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="8"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Heading -->
+        <TextBlock Grid.Row="0"
+                   Text="Press your hotkey combination&#x2026;"
+                   FontSize="13"/>
+
+        <!-- Live preview -->
+        <TextBlock Grid.Row="2"
+                   x:Name="PreviewLabel"
+                   Text="&#x2014;"
+                   FontSize="18"
+                   FontWeight="Bold"
+                   HorizontalAlignment="Center"/>
+
+        <!-- Validation / status line -->
+        <TextBlock Grid.Row="4"
+                   x:Name="StatusLabel"
+                   Text=""
+                   FontSize="11"
+                   Foreground="Gray"
+                   TextWrapping="Wrap"
+                   HorizontalAlignment="Center"/>
+
+        <!-- OK / Cancel buttons -->
+        <StackPanel Grid.Row="6"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right">
+            <Button x:Name="OkButton"
+                    Content="OK"
+                    IsDefault="True"
+                    IsEnabled="False"
+                    Width="80" Height="28"
+                    Margin="0,0,8,0"
+                    Click="OkButton_Click"/>
+            <Button x:Name="CancelButton"
+                    Content="Cancel"
+                    IsCancel="True"
+                    Width="80" Height="28"
+                    Click="CancelButton_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

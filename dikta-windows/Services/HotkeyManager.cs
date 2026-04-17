@@ -81,11 +81,13 @@ public class HotkeyManager : IDisposable
         {
             var error = Marshal.GetLastWin32Error();
             System.Diagnostics.Debug.WriteLine($"RegisterHotKey failed with error code: {error}");
+            DiagnosticLogger.Warning($"Hotkey registration failed: {_configService.Config.HotkeyModifiers}+{_configService.Config.HotkeyKey}, Win32 error={error}");
             RegistrationFailedOnStartup = true;
             RegistrationFailed?.Invoke();
         }
         else
         {
+            DiagnosticLogger.Info($"Hotkey registered: {_configService.Config.HotkeyModifiers}+{_configService.Config.HotkeyKey}");
             _registered = true;
         }
     }
