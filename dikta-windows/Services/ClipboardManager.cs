@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
 
@@ -62,6 +63,9 @@ public static class ClipboardManager
     [DllImport("user32.dll")]
     private static extern uint MapVirtualKey(uint uCode, uint uMapType);
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetOpenClipboardWindow();
+
     public static async Task CopyAndPasteAsync(string text)
     {
         // Set clipboard on UI thread using WinForms clipboard (avoids CLIPBRD_E_CANT_OPEN)
@@ -70,8 +74,14 @@ public static class ClipboardManager
             System.Windows.Forms.Clipboard.SetText(text);
         });
 
-        // Brief delay to ensure clipboard is ready
-        await Task.Delay(50);
+        // Wait until the clipboard is idle (no other window holds it open) or 500 ms elapses.
+        // This avoids a fixed delay while still handling slow apps that take time to release
+        // the clipboard after SetText returns.
+        var sw = Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < 500 && GetOpenClipboardWindow() != IntPtr.Zero)
+        {
+            await Task.Delay(10);
+        }
 
         // Simulate Ctrl+V atomically via SendInput.
         // Use VK_LCONTROL (left Ctrl) so apps that track left/right modifier keys see the
