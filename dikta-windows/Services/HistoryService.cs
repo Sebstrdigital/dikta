@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Text.Json;
 using DiktaWindows.Models;
@@ -71,10 +72,52 @@ public class HistoryService
     {
         lock (_lock)
         {
-            var json = JsonSerializer.Serialize(_items.ToList(), new JsonSerializerOptions { WriteIndented = true });
-            var tmpPath = ConfigService.HistoryPath + ".tmp";
-            File.WriteAllText(tmpPath, json);
-            File.Move(tmpPath, ConfigService.HistoryPath, overwrite: true);
+            try
+            {
+                var json = JsonSerializer.Serialize(_items.ToList(), new JsonSerializerOptions { WriteIndented = true });
+                var tmpPath = ConfigService.HistoryPath + ".tmp";
+                File.WriteAllText(tmpPath, json);
+                File.Move(tmpPath, ConfigService.HistoryPath, overwrite: true);
+            }
+            catch (IOException ex)
+            {
+                DiagnosticLogger.Warning($"HistoryService.Save failed. Path={ConfigService.HistoryPath}, Exception={ex.GetType().Name}: {ex.Message}");
+                // Clean up any lingering .tmp file (best-effort)
+                try
+                {
+                    var tmpPath = ConfigService.HistoryPath + ".tmp";
+                    if (File.Exists(tmpPath))
+                        File.Delete(tmpPath);
+                }
+                catch { /* best-effort cleanup */ }
+                // Do NOT rethrow — transcription succeeded; history persistence failure should not surface as user error
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                DiagnosticLogger.Warning($"HistoryService.Save failed. Path={ConfigService.HistoryPath}, Exception={ex.GetType().Name}: {ex.Message}");
+                // Clean up any lingering .tmp file (best-effort)
+                try
+                {
+                    var tmpPath = ConfigService.HistoryPath + ".tmp";
+                    if (File.Exists(tmpPath))
+                        File.Delete(tmpPath);
+                }
+                catch { /* best-effort cleanup */ }
+                // Do NOT rethrow — transcription succeeded; history persistence failure should not surface as user error
+            }
+            catch (JsonException ex)
+            {
+                DiagnosticLogger.Warning($"HistoryService.Save failed. Path={ConfigService.HistoryPath}, Exception={ex.GetType().Name}: {ex.Message}");
+                // Clean up any lingering .tmp file (best-effort)
+                try
+                {
+                    var tmpPath = ConfigService.HistoryPath + ".tmp";
+                    if (File.Exists(tmpPath))
+                        File.Delete(tmpPath);
+                }
+                catch { /* best-effort cleanup */ }
+                // Do NOT rethrow — transcription succeeded; history persistence failure should not surface as user error
+            }
         }
     }
 }
