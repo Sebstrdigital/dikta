@@ -62,21 +62,12 @@ public class ModelDownloader
             throw;
         }
 
-        // Atomic rename: only promote to .bin after successful completion
-        if (File.Exists(destinationPath))
-            File.Delete(destinationPath);
-        File.Move(tmpPath, destinationPath);
-
-        // Validate file size after successful download
-        ValidateModelFile(modelName, destinationPath);
-    }
-
-    private void ValidateModelFile(string modelName, string filePath)
-    {
+        // Validate file size BEFORE moving to final destination (US-002)
+        // On validation failure, keep the .tmp file for debugging
         if (!_expectedModelSizes.TryGetValue(modelName, out var expectedSize))
             throw new ArgumentException($"Unknown model size: {modelName}");
 
-        var fileInfo = new FileInfo(filePath);
+        var fileInfo = new FileInfo(tmpPath);
         var actualSize = fileInfo.Length;
 
         // Allow 1% tolerance for file size variations
@@ -86,19 +77,14 @@ public class ModelDownloader
 
         if (actualSize < minSize || actualSize > maxSize)
         {
-            // Delete corrupt file
-            try
-            {
-                File.Delete(filePath);
-            }
-            catch
-            {
-                // Ignore errors during cleanup
-            }
-
-            throw new InvalidOperationException(
-                $"Downloaded model file is corrupt. Expected size: ~{expectedSize / (1024 * 1024)} MB, " +
-                $"but got {actualSize / (1024 * 1024)} MB. File has been deleted. Please try again.");
+            // IMPORTANT: Do NOT delete .tmp on validation failure — keep for debugging
+            throw new InvalidDataException(
+                $"Downloaded model size mismatch: expected ~{expectedSize:N0} bytes (±1%), got {actualSize:N0} bytes. Partial file kept at {tmpPath} for debugging.");
         }
+
+        // Atomic rename: only promote to .bin after successful size validation
+        if (File.Exists(destinationPath))
+            File.Delete(destinationPath);
+        File.Move(tmpPath, destinationPath);
     }
 }
