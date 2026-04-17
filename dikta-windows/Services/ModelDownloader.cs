@@ -1,11 +1,12 @@
 using System.IO;
 using System.Net.Http;
+using System.Threading;
 
 namespace DiktaWindows.Services;
 
 public class ModelDownloader
 {
-    private static readonly HttpClient _httpClient = new();
+    private static readonly HttpClient _httpClient = new() { Timeout = Timeout.InfiniteTimeSpan };
     private const string BaseUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/";
 
     // Expected model sizes in bytes (with 1% tolerance)
