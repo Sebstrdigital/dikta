@@ -49,6 +49,7 @@ public class TrayIconManager : IDisposable
         };
 
         _hotkeyManager.HotkeyPressed += OnHotkeyPressed;
+        _hotkeyManager.ShowOnboardingRequested += OpenOnboarding;
         _configService.SaveFailed += OnConfigSaveFailed;
 
         if (_configService.WasReset)
@@ -304,6 +305,7 @@ public class TrayIconManager : IDisposable
 
     public void Dispose()
     {
+        _hotkeyManager.ShowOnboardingRequested -= OpenOnboarding;
         _configService.SaveFailed -= OnConfigSaveFailed;
         _notifyIcon?.Dispose();
         _idleIcon?.Dispose();
