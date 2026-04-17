@@ -1,5 +1,7 @@
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using DiktaWindows.Services;
 
@@ -8,6 +10,10 @@ namespace DiktaWindows;
 public partial class App : Application
 {
     private const string MutexName = @"Global\Dikta-SingleInstance";
+    private static readonly string CrashLogPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "Dikta",
+        "last-crash.log");
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern uint RegisterWindowMessage(string lpString);
@@ -47,6 +53,31 @@ public partial class App : Application
             return;
         }
 
+        // Wire unhandled-exception handlers so crashes are logged and surfaced.
+        DispatcherUnhandledException += (_, ex) =>
+        {
+            WriteCrashLog(ex.Exception);
+            ShowCrashBalloon(ex.Exception.Message);
+            ex.Handled = true;
+            Shutdown(1);
+        };
+
+        AppDomain.CurrentDomain.UnhandledException += (_, ex) =>
+        {
+            var exception = ex.ExceptionObject as Exception
+                ?? new Exception(ex.ExceptionObject?.ToString() ?? "Unknown exception");
+            WriteCrashLog(exception);
+            ShowCrashBalloon(exception.Message);
+            // CLR will terminate the process after this handler returns for fatal exceptions.
+        };
+
+        TaskScheduler.UnobservedTaskException += (_, ex) =>
+        {
+            WriteCrashLog(ex.Exception);
+            ShowCrashBalloon(ex.Exception.Message);
+            ex.SetObserved(); // Prevent the default escalation policy from terminating the process.
+        };
+
         base.OnStartup(e);
 
         _configService = new ConfigService();
@@ -62,6 +93,40 @@ public partial class App : Application
         }
 
         _trayIcon.Initialize();
+    }
+
+    private static void WriteCrashLog(Exception ex)
+    {
+        try
+        {
+            string? dir = Path.GetDirectoryName(CrashLogPath);
+            if (dir != null)
+                Directory.CreateDirectory(dir);
+
+            string content =
+                $"UTC: {DateTime.UtcNow:O}\r\n" +
+                $"Type: {ex.GetType().FullName}\r\n" +
+                $"Message: {ex.Message}\r\n" +
+                $"StackTrace:\r\n{ex.StackTrace}\r\n";
+
+            File.WriteAllText(CrashLogPath, content);
+        }
+        catch
+        {
+            // Best-effort: if we can't write the log, there is nothing more we can do.
+        }
+    }
+
+    private void ShowCrashBalloon(string message)
+    {
+        try
+        {
+            _trayIcon?.ShowBalloon("Dikta crashed", $"Dikta crashed: {message}. Please report this.");
+        }
+        catch
+        {
+            // Best-effort: tray may not be initialised yet for very early crashes.
+        }
     }
 
     private void OnShowOnboardingRequested()

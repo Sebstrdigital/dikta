@@ -20,7 +20,7 @@ public class TrayIconManager : IDisposable
     private Icon? _idleIcon;
     private Icon? _recordingIcon;
     private bool _isRecording;
-    private bool _processing;
+    private int _processingFlag; // 0 = idle, 1 = processing; guarded via Interlocked
     private SettingsWindow? _settingsWindow;
 
     public TrayIconManager(ConfigService configService, HotkeyManager hotkeyManager)
@@ -153,14 +153,15 @@ public class TrayIconManager : IDisposable
 
     private async void OnHotkeyPressed()
     {
-        if (_processing) return;
+        // Atomically claim the processing slot (0→1). If the flag was already 1, another press
+        // is in flight — return immediately so we never enter the transcription path twice.
+        if (System.Threading.Interlocked.CompareExchange(ref _processingFlag, 1, 0) != 0)
+            return;
 
         try
         {
             if (_isRecording)
             {
-                _processing = true;
-
                 // Stop recording
                 _audioFeedback.PlayStop();
                 var audioPath = await _recorder.StopRecordingAsync();
@@ -175,8 +176,6 @@ public class TrayIconManager : IDisposable
                     await ClipboardManager.CopyAndPasteAsync(text);
                     _history.Add(text, _configService.Config.Language);
                 }
-
-                _processing = false;
             }
             else
             {
@@ -198,7 +197,6 @@ public class TrayIconManager : IDisposable
                     if (result != System.Windows.MessageBoxResult.Yes)
                         return;
 
-                    _processing = true;
                     var destPath = System.IO.Path.Combine(ConfigService.ModelsDir, $"ggml-{modelName}.bin");
                     bool downloadSucceeded = false;
 
@@ -215,7 +213,6 @@ public class TrayIconManager : IDisposable
                         catch (OperationCanceledException)
                         {
                             progressWindow.Close();
-                            _processing = false;
                             return;
                         }
                         catch (Exception dlEx)
@@ -227,13 +224,9 @@ public class TrayIconManager : IDisposable
                                 System.Windows.MessageBoxButton.YesNo,
                                 System.Windows.MessageBoxImage.Error);
                             if (retry != System.Windows.MessageBoxResult.Yes)
-                            {
-                                _processing = false;
                                 return;
-                            }
                         }
                     }
-                    _processing = false;
                 }
 
                 _audioFeedback.PlayStart();
@@ -244,7 +237,6 @@ public class TrayIconManager : IDisposable
         }
         catch (Exception ex)
         {
-            _processing = false;
             _isRecording = false;
             UpdateTrayState();
             var message = ex is InvalidOperationException && ex.Message == "No microphone found"
@@ -252,6 +244,17 @@ public class TrayIconManager : IDisposable
                 : "Transcription failed. Please try again.";
             _notifyIcon?.ShowBalloonTip(3000, "Dikta", message, ToolTipIcon.Error);
         }
+        finally
+        {
+            // Always return to idle — covers normal exit, early return, and unhandled throw.
+            System.Threading.Interlocked.Exchange(ref _processingFlag, 0);
+        }
+    }
+
+    /// <summary>Shows a tray balloon. Best-effort: silently ignored if the tray icon is not yet initialised.</summary>
+    public void ShowBalloon(string title, string message)
+    {
+        _notifyIcon?.ShowBalloonTip(5000, title, message, ToolTipIcon.Error);
     }
 
     private void OnConfigSaveFailed(Exception ex)
