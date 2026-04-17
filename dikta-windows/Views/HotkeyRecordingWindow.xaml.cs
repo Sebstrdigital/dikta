@@ -22,8 +22,15 @@ public partial class HotkeyRecordingWindow : Window
         (ModifierKeys.Windows, Key.L),
         (ModifierKeys.Windows, Key.D),
         (ModifierKeys.Windows, Key.Tab),
+        (ModifierKeys.Windows, Key.E),
+        (ModifierKeys.Windows, Key.R),
+        (ModifierKeys.Windows, Key.X),
+        (ModifierKeys.Windows, Key.S),
         (ModifierKeys.Control, Key.Escape),
         (ModifierKeys.Control | ModifierKeys.Alt, Key.Delete),
+        (ModifierKeys.Alt, Key.Tab),
+        (ModifierKeys.Alt, Key.F4),
+        (ModifierKeys.Control | ModifierKeys.Shift, Key.Escape),
     };
 
     public HotkeyRecordingWindow(HotkeyManager hotkeyManager)
@@ -169,10 +176,27 @@ public partial class HotkeyRecordingWindow : Window
         return string.Join("+", parts);
     }
 
-    /// <summary>Formats a Key as a display string, e.g. Key.D → "D", Key.F5 → "F5".</summary>
+    /// <summary>
+    /// Formats a Key as a config-compatible string.
+    /// OEM punctuation keys are mapped to their literal characters so ParseKey can round-trip them.
+    /// Alphanumeric and F-keys use Key.ToString() which already round-trips cleanly.
+    /// </summary>
     private static string FormatKey(Key key)
     {
-        // Key.ToString() gives "D", "F5", "Space", "Return", etc.
-        return key.ToString();
+        return key switch
+        {
+            Key.OemPeriod        => ".",
+            Key.OemComma         => ",",
+            Key.OemSemicolon     => ";",
+            Key.OemQuotes        => "'",
+            Key.OemOpenBrackets  => "[",
+            Key.OemCloseBrackets => "]",
+            Key.OemMinus         => "-",
+            Key.OemPlus          => "=",
+            Key.OemQuestion      => "/",
+            Key.OemPipe          => "\\",
+            Key.OemBackslash     => "\\",
+            _                    => key.ToString(),
+        };
     }
 }
