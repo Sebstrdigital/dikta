@@ -6,7 +6,7 @@
     (see Services/DiagnosticLogger.cs), build with:
         dotnet build -c Release -p:DefineConstants=DIAGNOSTICS
     or:
-        dotnet publish -c Release -p:DefineConstants=DIAGNOSTICS -r win-x64 --self-contained false
+        dotnet publish -c Release -p:DefineConstants=DIAGNOSTICS -r win-x64 -p:SelfContained=false
     All public DiagnosticLogger methods carry [Conditional("DIAGNOSTICS")]
     so call sites compile to no-op when the symbol is not defined.
   -->
