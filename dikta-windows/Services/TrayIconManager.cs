@@ -207,10 +207,17 @@ public class TrayIconManager : IDisposable
                 if (!_transcriber.IsModelAvailable())
                 {
                     var modelName = _configService.Config.WhisperModel;
-                    var sizeBytes = ModelDownloader.ExpectedModelSizes[modelName];
-                    var sizeDisplay = sizeBytes >= 1_073_741_824
-                        ? (sizeBytes / 1_073_741_824.0).ToString("F1") + " GB"
-                        : (sizeBytes / 1_048_576.0).ToString("F0") + " MB";
+                    string sizeDisplay;
+                    if (ModelDownloader.ExpectedModelSizes.TryGetValue(modelName, out var sizeBytes) && sizeBytes > 0)
+                    {
+                        sizeDisplay = sizeBytes >= 1_073_741_824
+                            ? (sizeBytes / 1_073_741_824.0).ToString("F1") + " GB"
+                            : (sizeBytes / 1_048_576.0).ToString("F0") + " MB";
+                    }
+                    else
+                    {
+                        sizeDisplay = "unknown size";
+                    }
 
                     var result = System.Windows.MessageBox.Show(
                         $"The Whisper model is not downloaded yet.\n\nDownload model now? (~{sizeDisplay})",
@@ -324,6 +331,7 @@ public class TrayIconManager : IDisposable
 
     public void Dispose()
     {
+        _hotkeyManager.HotkeyPressed -= OnHotkeyPressed;
         _hotkeyManager.ShowOnboardingRequested -= OpenOnboarding;
         _configService.SaveFailed -= OnConfigSaveFailed;
         _notifyIcon?.Dispose();

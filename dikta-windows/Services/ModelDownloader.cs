@@ -30,9 +30,12 @@ public class ModelDownloader
 
         Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
 
-        // Clean up any previous partial download
+        // Preserve any previous validation-failure artefact for post-mortem inspection.
+        // A plain .tmp that survived means validation failed last time — rename it to
+        // .tmp.failed so the developer can inspect it, then start a fresh download.
+        // Only keep the most recent failure (overwrite any older .tmp.failed).
         if (File.Exists(tmpPath))
-            File.Delete(tmpPath);
+            File.Move(tmpPath, tmpPath + ".failed", overwrite: true);
 
         using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         response.EnsureSuccessStatusCode();

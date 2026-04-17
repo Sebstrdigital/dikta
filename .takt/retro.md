@@ -15,70 +15,72 @@
 | confirmed | Windows build never verified end-to-end on actual Windows hardware | 2026-04-17 | 2026-04-17 |
 | potential | Account usage limit hit mid-sprint — spawned workers terminated, session agent completed remaining stories | 2026-04-17 | 2026-04-17 |
 | mitigated | DiagnosticLogger never gated or removed before release | 2026-03-27 | 2026-04-17 |
+| confirmed | WithNoSpeechThreshold method name unverified — Whisper.net 1.9.0 may use different API | 2026-04-17 | 2026-04-17 |
+| potential | Worker agents create files that already exist, clobbering prior sprint work — no existence check before write | 2026-04-17 | 2026-04-17 |
 
 ---
 
-## Retro: 2026-04-17 — takt/windows-v12-sprint-3
+## Retro: 2026-04-17 — takt/windows-v12-sprint-4
 
 ### What Went Well
-- **All 8 stories delivered, 0 blocked.** Sprint covered F-5 (Hotkey Recording Window) and F-6 (Diagnostic Logging) across 3 waves.
-- **HotkeyRecordingWindow is cleanly layered**: US-001 through US-004 build a coherent press-to-bind feature — OS-reserved blocklist (US-002), pre-save registration test (US-003), and SettingsWindow integration (US-004) all landed without blockers or merge conflicts.
-- **Pre-save registration test reused existing API**: US-003 found `HotkeyManager.ReregisterHotkey` already present with the exact required signature — zero HotkeyManager changes needed. Good prior sprint design paying off.
-- **Diagnostic logging design is solid**: US-005 created a clean static `DiagnosticLogger` with `[Conditional("DIAGNOSTICS")]` on all methods; US-006 documented the compile-flag usage in `DiktaWindows.csproj`; US-007 added lifecycle instrumentation with privacy-safe output (no transcribed text); US-008 added tray menu access behind `#if DIAGNOSTICS`. Four stories, zero blockers.
-- **DiagnosticLogger gated correctly this sprint** — the long-standing action item about gating/removing the logger is now addressed for the Windows codebase.
+- **All 5 stories delivered, 0 blocked.** Polish sprint rolling up 13 deferred review suggestions into 5 targeted stories — all completed cleanly.
+- **Zero blockers across all stories.** US-001 through US-005 all report no blockers encountered. Surgical, well-scoped stories continue to be a strength.
+- **US-004 three-state mic probe is solid design.** NAudio MMDeviceEnumerator distinguishes hardware-absent from permission-denied with a COM fallback; grant button correctly hidden when no hardware present.
+- **US-005 rename-to-.tmp.failed approach.** Cleaner than delete-on-success — preservation intent expressed at one site (top of next attempt), not scattered across failure/success paths.
+- **US-003 OEM key round-trip complete.** FormatKey now covers all 10 OEM keys present in ParseKey; OemPipe/OemBackslash VK_OEM_5 identity handled correctly.
 
 ### What Didn't Go Well
-- **Build verification still impossible in agent environment**: All 8 stories validated by code inspection only. No Windows hardware run performed. This is the fourth consecutive Windows sprint without a real build.
-- **SettingsWindow XAML removal of old controls is not verifiable**: US-004 removed the ListBox+ComboBox hotkey controls and replaced with TextBlock+Button — correct by inspection, but any XAML binding issues will only surface on a live build.
-- **Wave timing continues to produce grouping artifacts**: Wave 1 = 111s, Wave 2 = 170s, Wave 3 = 175s — durations reflect wave parallelism, not individual story effort.
+- **Worker attempted to create DiagnosticLogger.cs as a stub, clobbering the Sprint 3 implementation.** US-001 workbook lists DiagnosticLogger.cs as a "new file" — but Sprint 3 already built the full implementation. Session agent caught the conflict and restored from main before commit. No production code was lost, but the incident required manual intervention.
+- **Build verification still impossible in agent environment.** Fifth consecutive Windows sprint validated by code inspection only. No Windows hardware run.
+- **Wave timing produces shared timestamps.** All 5 stories share startTime=1776426706 / endTime=1776426885 — individual per-story durations are not extractable from sprint-snapshot.
 
 ### Patterns Observed
-- **F-5 (HotkeyRecordingWindow) is the first Windows feature where every story had zero blockers**: All prior sprints had at least one story with a partial blocker or trade-off. Clean dependency chain via `dependsOn` continues to work well.
-- **Diagnostic logging completes a remote-debug loop**: With F-6 done, a tester can receive a DIAGNOSTICS build, reproduce an issue, and open the logs folder from the tray. This is a meaningful diagnostic capability added in one sprint.
-- **TrayIconManager.cs is a recurring hotspot**: US-008 touched it again (Sprint 3); Sprint 2 US-005/US-006 touched it; Sprint 1 had 4 stories touch it. The file is accumulating feature additions and should eventually be reviewed for cohesion.
-- **The no-build gap is compounding**: Four Windows sprints of code-inspection-only acceptance. Each sprint adds more surface area that has never been exercised.
+- **Worker file-creation risk confirmed.** Worker for US-001 treated DiagnosticLogger.cs as a missing file and wrote a stub. Worker prompts have no existence check before `Write` — they rely on task description accuracy. This is a repeatable failure mode for any sprint that touches files created in a prior sprint.
+- **Polish sprints are highly reliable.** Sprint 4 was unplanned (rolled up from review suggestions) and had 0 blockers, 0 rework. Small, well-specified polish stories are a sweet spot for autonomous agents.
+- **HistoryService error handling pattern applies broadly.** US-001's swallow-and-log approach (try/catch IOException + JsonException, DiagnosticLogger.Warning, no rethrow) is the correct pattern for non-fatal persistence operations throughout the Windows codebase.
+- **TrayIconManager.cs hotspot continues.** Sprint 4 US-002 touched it again (Dispose symmetry, balloon dispatch, safe model lookup). 10+ stories across 4 sprints. Cohesion review still warranted.
 
 ### Action Items
-- [ ] [carried 12x] Add a note to story templates for Swift/Apple platform work: flag CoreFoundation types as requiring `CFGetTypeID` guards
+- [ ] [carried 13x] Add a note to story templates for Swift/Apple platform work: flag CoreFoundation types as requiring `CFGetTypeID` guards
   Suggested story: Codify a Swift story template section listing known platform gotchas (CFGetTypeID, async actor isolation, Xcode project.pbxproj sync)
-- [ ] [carried 13x] Run `swift test` end-to-end to verify unit tests actually execute
+- [ ] [carried 14x] Run `swift test` end-to-end to verify unit tests actually execute
   Suggested story: Add a CI step or pre-release checklist item that runs `swift test` and gates the release
-- [ ] [carried 13x] Simplify ConfigService atomic write (remove either `.atomic` flag or `replaceItemAt`)
+- [ ] [carried 14x] Simplify ConfigService atomic write (remove either `.atomic` flag or `replaceItemAt`)
   Suggested story: Audit ConfigService.swift and pick one atomic write strategy, remove the redundant one
-- [ ] [carried 10x] Fix xcodebuild test bundle code signing mismatch (`different Team IDs`) so unit tests can actually run
+- [ ] [carried 11x] Fix xcodebuild test bundle code signing mismatch (`different Team IDs`) so unit tests can actually run
   Suggested story: Investigate and fix the Team ID mismatch that prevents xcodebuild test from running
-- [ ] [carried 10x] Consider extracting AudioRecorder.swift subsystems (retry logic, converter lifecycle, silence detection) into focused types
+- [ ] [carried 11x] Consider extracting AudioRecorder.swift subsystems (retry logic, converter lifecycle, silence detection) into focused types
   Suggested story: Refactor AudioRecorder.swift — split retry/backoff, AVAudioConverter lifecycle, and silence detection into separate structs or actors
-- [ ] [carried 9x] Add `[BLANK_AUDIO]` / bracket noise token fix to CHANGELOG.md under [0.6] entry
+- [ ] [carried 10x] Add `[BLANK_AUDIO]` / bracket noise token fix to CHANGELOG.md under [0.6] entry
   Suggested story: Update CHANGELOG.md [0.6] section with the bracket noise token strip fix
-- [ ] [carried 8x] Commit pre-existing working-tree changes from v0.6 work (AppConfig.swift, ConfigService.swift, DiagnosticLogger.swift) to main before starting next sprint
+- [ ] [carried 9x] Commit pre-existing working-tree changes from v0.6 work (AppConfig.swift, ConfigService.swift, DiagnosticLogger.swift) to main before starting next sprint
   Suggested story: Stage and commit the v0.6 working-tree files that were never committed (AppConfig.swift, ConfigService.swift, DiagnosticLogger.swift)
-- [ ] [carried 5x] Verify Windows build end-to-end on a Windows machine: `dotnet build`, `dotnet run`, hotkey registration, model download, transcription, and Inno Setup compilation
+- [ ] [carried 6x] Verify Windows build end-to-end on a Windows machine: `dotnet build`, `dotnet run`, hotkey registration, model download, transcription, and Inno Setup compilation
   Suggested story: Add a Windows smoke-test checklist to VERIFY.md or the release runbook; run it manually before every Windows release
-  Suggested story: Add a Windows smoke-test checklist to VERIFY.md or the release runbook; run it manually before every Windows release
-- [ ] [carried 5x] Add Windows verification step to release checklist (VERIFY.md or build-release.sh equivalent for Windows)
+- [ ] [carried 6x] Add Windows verification step to release checklist (VERIFY.md or build-release.sh equivalent for Windows)
   Suggested story: Create dikta-windows/RELEASE.md with build, smoke-test, and Inno Setup steps
-- [ ] [carried 5x] Eliminate the inline-copy pattern in FormatterTests.swift — either refactor tests to import production types directly or generate the inline via a build script
+- [ ] [carried 6x] Eliminate the inline-copy pattern in FormatterTests.swift — either refactor tests to import production types directly or generate the inline via a build script
   Suggested story: Refactor FormatterTests.swift to remove inlined StructuredTextFormatter and MessageFormatter structs, replacing with direct imports of production types
-- [ ] [carried 2x] Verify `WithNoSpeechThreshold` is the correct Whisper.net 1.9.0 method name — US-010 notes it may be `WithNoSpeechProb` or similar
+- [ ] [carried 3x] Verify `WithNoSpeechThreshold` is the correct Whisper.net 1.9.0 method name — US-010 notes it may be `WithNoSpeechProb` or similar
   Suggested story: On a Windows build machine, compile dikta-windows and confirm TranscriberService builds cleanly with the threshold wiring
-- [ ] Review TrayIconManager.cs for cohesion — 9+ stories across 3 sprints have added to it; consider splitting responsibilities
+- [ ] [takt finding] Add explicit file-existence check to worker prompts: "Do NOT create a file if it already exists — read it first and edit in place." Apply to all takt worker templates.
+  Suggested story: Audit takt worker prompt templates and add a pre-write guard: check file existence before any Write call, prefer Edit over Write for existing files
+- [ ] Review TrayIconManager.cs for cohesion — 10+ stories across 4 sprints have added to it; consider splitting responsibilities
   Suggested story: Audit TrayIconManager.cs, extract menu-building logic or DIAGNOSTICS-only items into a separate class if warranted
 
 ### Chronic Tech Debt
-- [ ] [carried 13x] Run `swift test` end-to-end to verify unit tests actually execute
+- [ ] [carried 14x] Run `swift test` end-to-end to verify unit tests actually execute
   Suggested story: Add a CI step or pre-release checklist item that runs `swift test` and gates the release
   This item should be included as a story in the next sprint, or explicitly dismissed with a reason.
-- [ ] [carried 13x] Simplify ConfigService atomic write (remove either `.atomic` flag or `replaceItemAt`)
+- [ ] [carried 14x] Simplify ConfigService atomic write (remove either `.atomic` flag or `replaceItemAt`)
   Suggested story: Audit ConfigService.swift and pick one atomic write strategy, remove the redundant one
   This item should be included as a story in the next sprint, or explicitly dismissed with a reason.
 
 ### Metrics
-- Stories completed: 8/8
+- Stories completed: 5/5
 - Stories blocked: 0
-- Total workbooks: 8
-- Sprint wall clock: 456s (1776424879 → 1776425335), 3 waves
-- Wave durations: Wave 1 = 111s (US-001, US-005), Wave 2 = 170s (US-002, US-003, US-006, US-007), Wave 3 = 175s (US-004, US-008)
-- Avg story duration: ~154s (wave-divided estimate)
-- Timing stats: updated (medium: avg 266s, n=15; small: avg 262s, n=26)
-- Phase overhead: unavailable — retro start timestamp not recorded in sprint-snapshot
+- Total workbooks: 5
+- Sprint wall clock: 179s (1776426706 → 1776426885), 1 wave (all stories parallel)
+- Per-story duration: unavailable — all stories share identical startTime/endTime in sprint-snapshot
+- Timing stats: small updated (avg 225s, n=31); overhead updated (avg 1024s, n=5)
+- Phase overhead: 1371s (gap between Sprint 3 endTime 1776425335 and Sprint 4 startTime 1776426706)

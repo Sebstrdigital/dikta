@@ -30,13 +30,6 @@ public class HotkeyManager : IDisposable
     private uint _showOnboardingMsg;
 
     /// <summary>
-    /// Raised when startup hotkey registration fails (e.g. the key combo is already claimed by
-    /// another app). Fired during construction — subscribers added after construction will not
-    /// receive the initial event; use <see cref="RegistrationFailedOnStartup"/> instead.
-    /// </summary>
-    public event Action? RegistrationFailed;
-
-    /// <summary>
     /// True when the hotkey could not be registered at startup. Checked by TrayIconManager
     /// after construction so it can surface a balloon even though it wasn't subscribed yet.
     /// </summary>
@@ -83,7 +76,6 @@ public class HotkeyManager : IDisposable
             System.Diagnostics.Debug.WriteLine($"RegisterHotKey failed with error code: {error}");
             DiagnosticLogger.Warning($"Hotkey registration failed: {_configService.Config.HotkeyModifiers}+{_configService.Config.HotkeyKey}, Win32 error={error}");
             RegistrationFailedOnStartup = true;
-            RegistrationFailed?.Invoke();
         }
         else
         {

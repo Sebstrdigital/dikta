@@ -153,7 +153,15 @@ public partial class App : Application
     {
         try
         {
-            _trayIcon?.ShowBalloon("Dikta crashed", $"Dikta crashed: {message}. Please report this.");
+            // ShowBalloonTip is a WinForms call that must run on the UI thread.
+            // Dispatcher.Invoke is safe even when already on the UI thread (no-ops to a direct call).
+            // If the Dispatcher is null (very early crash before the Application is fully initialised),
+            // fall through to the direct call inside the catch-all above.
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher != null)
+                dispatcher.Invoke(() => _trayIcon?.ShowBalloon("Dikta crashed", $"Dikta crashed: {message}. Please report this."));
+            else
+                _trayIcon?.ShowBalloon("Dikta crashed", $"Dikta crashed: {message}. Please report this.");
         }
         catch
         {
