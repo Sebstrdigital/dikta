@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Media;
+using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using DiktaWindows.Services;
 
@@ -62,18 +63,39 @@ public partial class OnboardingWindow : Window
 
     private void RefreshMicStatus()
     {
-        int deviceCount = WaveIn.DeviceCount;
-
-        if (deviceCount == 0)
+        bool hasAnyCaptureDevice;
+        try
         {
-            MicStatusLabel.Text = "Not granted";
+            using var enumerator = new MMDeviceEnumerator();
+            var devices = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
+            hasAnyCaptureDevice = devices.Count > 0;
+        }
+        catch
+        {
+            // MMDevice API unavailable / COM error — fall back to WaveIn-only heuristic.
+            hasAnyCaptureDevice = WaveIn.DeviceCount > 0;
+        }
+
+        int waveInCount = WaveIn.DeviceCount;
+
+        if (waveInCount >= 1)
+        {
+            MicStatusLabel.Text = "Granted";
+            MicStatusLabel.Foreground = Brushes.Green;
+            GrantButton.Visibility = Visibility.Collapsed;
+        }
+        else if (hasAnyCaptureDevice)
+        {
+            // Device exists but WaveIn cannot see it → permission denied
+            MicStatusLabel.Text = "Microphone access denied";
             MicStatusLabel.Foreground = Brushes.Red;
             GrantButton.Visibility = Visibility.Visible;
         }
         else
         {
-            MicStatusLabel.Text = "Granted";
-            MicStatusLabel.Foreground = Brushes.Green;
+            // No device detected at all → hardware issue
+            MicStatusLabel.Text = "No microphone detected";
+            MicStatusLabel.Foreground = Brushes.Red;
             GrantButton.Visibility = Visibility.Collapsed;
         }
     }
