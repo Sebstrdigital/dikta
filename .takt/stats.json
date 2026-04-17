@@ -1,12 +1,12 @@
 {
-  "runs": 6,
+  "runs": 7,
   "stories": {
     "bySize": {
       "large": { "count": 3, "fastest": 517, "slowest": 720, "avg": 631 },
-      "medium": { "count": 11, "fastest": 8, "slowest": 600, "avg": 311 },
-      "small": { "count": 22, "fastest": 94, "slowest": 1772, "avg": 279 }
+      "medium": { "count": 15, "fastest": 8, "slowest": 600, "avg": 266 },
+      "small": { "count": 26, "fastest": 94, "slowest": 1772, "avg": 262 }
     }
   },
   "overhead": { "avg": 937, "count": 4 },
-  "updatedAt": "2026-04-17T09:55:26Z"
+  "updatedAt": "2026-04-17T10:30:00Z"
 }

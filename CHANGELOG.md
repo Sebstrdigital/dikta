@@ -2,6 +2,8 @@
 
 All notable changes to Dikta will be documented in this file.
 
+- 2026-04-17: DiagnosticLogger (Windows) now correctly gated behind `[Conditional("DIAGNOSTICS")]` compile flag — release builds produce no log output
+
 ## [1.2] - 2026-03-31
 
 ### Features
