@@ -1,0 +1,47 @@
+name: Windows Build Check
+
+on:
+  push:
+    branches:
+      - main
+      - 'takt/**'
+    paths:
+      - 'dikta-windows/**'
+      - '.github/workflows/windows-build.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'dikta-windows/**'
+      - '.github/workflows/windows-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: dikta-windows
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build (Release)
+        run: dotnet build --configuration Release --no-restore --warnaserror
+
+      - name: Publish framework-dependent (smoke)
+        run: dotnet publish --configuration Release --no-build --runtime win-x64 --self-contained false -o publish
+
+      - name: Verify output
+        run: |
+          if (-not (Test-Path "publish/DiktaWindows.exe")) { throw "DiktaWindows.exe not found in publish output" }
+          Get-Item publish/DiktaWindows.exe | Select-Object Name,Length
