@@ -48,19 +48,33 @@ public class HistoryService
     {
         if (!File.Exists(ConfigService.HistoryPath)) return;
 
-        var json = File.ReadAllText(ConfigService.HistoryPath);
-        _items = JsonSerializer.Deserialize<List<HistoryItem>>(json) ?? new();
+        try
+        {
+            var json = File.ReadAllText(ConfigService.HistoryPath);
+            _items = JsonSerializer.Deserialize<List<HistoryItem>>(json) ?? new();
+        }
+        catch (JsonException)
+        {
+            _items = new();
+        }
+        catch (FileNotFoundException)
+        {
+            _items = new();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _items = new();
+        }
     }
 
     private void Save()
     {
-        List<HistoryItem> snapshot;
         lock (_lock)
         {
-            snapshot = _items.ToList();
+            var json = JsonSerializer.Serialize(_items.ToList(), new JsonSerializerOptions { WriteIndented = true });
+            var tmpPath = ConfigService.HistoryPath + ".tmp";
+            File.WriteAllText(tmpPath, json);
+            File.Move(tmpPath, ConfigService.HistoryPath, overwrite: true);
         }
-
-        var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(ConfigService.HistoryPath, json);
     }
 }
