@@ -20,7 +20,26 @@ public partial class SettingsWindow : Window
         PopulateKeyCombo();
         PopulateLanguageCombo();
         PopulateModelCombo();
+        PopulateMicSensitivityCombo();
         LoadCurrentHotkey();
+    }
+
+    private void PopulateMicSensitivityCombo()
+    {
+        var options = new[]
+        {
+            (DiktaWindows.Models.MicSensitivity.Normal,  "Normal (desk / laptop mic)"),
+            (DiktaWindows.Models.MicSensitivity.Headset, "Headset (Bluetooth / wired headset)"),
+        };
+
+        foreach (var (value, label) in options)
+        {
+            MicSensitivityCombo.Items.Add(new ComboBoxItem
+            {
+                Content = label,
+                Tag = value
+            });
+        }
     }
 
     private void PopulateKeyCombo()
@@ -74,6 +93,18 @@ public partial class SettingsWindow : Window
         }
         if (ModelCombo.SelectedItem == null && ModelCombo.Items.Count > 0)
             ModelCombo.SelectedIndex = 0;
+
+        var currentSensitivity = _configService.Config.Sensitivity;
+        foreach (ComboBoxItem item in MicSensitivityCombo.Items)
+        {
+            if (item.Tag is DiktaWindows.Models.MicSensitivity tag && tag == currentSensitivity)
+            {
+                MicSensitivityCombo.SelectedItem = item;
+                break;
+            }
+        }
+        if (MicSensitivityCombo.SelectedItem == null && MicSensitivityCombo.Items.Count > 0)
+            MicSensitivityCombo.SelectedIndex = 0;
     }
 
     private void PopulateLanguageCombo()
@@ -141,6 +172,9 @@ public partial class SettingsWindow : Window
 
         if (ModelCombo.SelectedItem is ComboBoxItem modelItem)
             _configService.Config.WhisperModel = modelItem.Tag?.ToString() ?? _configService.Config.WhisperModel;
+
+        if (MicSensitivityCombo.SelectedItem is ComboBoxItem sensItem && sensItem.Tag is DiktaWindows.Models.MicSensitivity sensValue)
+            _configService.Config.Sensitivity = sensValue;
 
         Exception? saveError = null;
         void OnSaveFailed(Exception ex) => saveError = ex;

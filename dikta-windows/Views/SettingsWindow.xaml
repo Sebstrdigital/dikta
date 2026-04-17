@@ -68,6 +68,14 @@
             <ComboBox x:Name="ModelCombo"
                       Width="280" HorizontalAlignment="Left"
                       FontSize="12"/>
+
+            <!-- Microphone sensitivity -->
+            <Separator Margin="0,12,0,12"/>
+            <TextBlock Text="Microphone" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,8"/>
+            <TextBlock Text="Mic sensitivity" FontSize="11" Foreground="Gray" Margin="0,0,0,4"/>
+            <ComboBox x:Name="MicSensitivityCombo"
+                      Width="280" HorizontalAlignment="Left"
+                      FontSize="12"/>
         </StackPanel>
 
         <!-- Save / Cancel buttons -->
