@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using DiktaWindows.Models;
 
 namespace DiktaWindows.Services;
@@ -32,7 +33,8 @@ public class ConfigService
         try
         {
             var json = File.ReadAllText(ConfigPath);
-            Config = JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
+            var opts = new JsonSerializerOptions { Converters = { new JsonStringEnumConverter() } };
+            Config = JsonSerializer.Deserialize<AppConfig>(json, opts) ?? new AppConfig();
         }
         catch
         {
@@ -57,7 +59,7 @@ public class ConfigService
         var tmpPath = ConfigPath + ".tmp";
         try
         {
-            var json = JsonSerializer.Serialize(Config, new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonSerializer.Serialize(Config, new JsonSerializerOptions { WriteIndented = true, Converters = { new JsonStringEnumConverter() } });
             File.WriteAllText(tmpPath, json);
 
             if (File.Exists(ConfigPath))
