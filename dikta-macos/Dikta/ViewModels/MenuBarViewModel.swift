@@ -30,10 +30,12 @@ final class MenuBarViewModel: ObservableObject {
     private let hotkeyManager: HotkeyManager
     private let ttsService: TextToSpeechService
     private let textSelectionService: TextSelectionService
+    private let muterRegistry: MuterRegistry
 
     // Track which mode initiated a recording (nil when not recording)
     private var activeRecordingMode: HotkeyMode? = nil
     private var recordingStartDate: Date?
+    private var activeMuteTokens: [MuteToken] = []
 
     // Hotkey recording state
     @Published var isRecordingHotkey = false
@@ -60,6 +62,7 @@ final class MenuBarViewModel: ObservableObject {
         self.hotkeyManager = HotkeyManager()
         self.ttsService = TextToSpeechService()
         self.textSelectionService = TextSelectionService(clipboardManager: clipboardManager)
+        self.muterRegistry = MuterRegistry()
 
         // Sync mute state from config
         audioFeedback.isMuted = configService.muteSounds
@@ -138,6 +141,7 @@ final class MenuBarViewModel: ObservableObject {
             self.activeRecordingMode = nil
             // Stop the engine and discard its result (we already have the samples)
             _ = self.audioRecorder.stopRecording()
+            self.unmuteMicTargets()
             self.appState = .processing
             Task {
                 await self.processAudio(samples)
@@ -145,6 +149,9 @@ final class MenuBarViewModel: ObservableObject {
         }
 
         Task {
+            let muteTokens = muterRegistry.muteAll()
+            activeMuteTokens = muteTokens
+
             do {
                 try await audioRecorder.startRecording(micSensitivity: configService.micSensitivity)
                 recordingStartDate = Date()
@@ -152,6 +159,7 @@ final class MenuBarViewModel: ObservableObject {
                 audioFeedback.beepOn()
                 DiagnosticLogger.shared.log("START | mic=\(configService.micSensitivity.displayName) | rate=\(audioRecorder.inputSampleRate)Hz")
             } catch {
+                unmuteMicTargets()
                 sendNotification(title: "Error", body: "Failed to start recording: \(error.localizedDescription)")
                 DiagnosticLogger.shared.log("START_FAILED | \(error.localizedDescription)")
             }
@@ -165,6 +173,7 @@ final class MenuBarViewModel: ObservableObject {
         activeRecordingMode = nil
         audioRecorder.onSilenceAutoStop = nil
         let audioSamples = audioRecorder.stopRecording()
+        unmuteMicTargets()
         appState = .processing
 
         Task {
@@ -458,6 +467,12 @@ final class MenuBarViewModel: ObservableObject {
     func stopSpeaking() {
         ttsService.stop()
         appState = .idle
+    }
+
+    private func unmuteMicTargets() {
+        guard !activeMuteTokens.isEmpty else { return }
+        muterRegistry.unmuteAll(activeMuteTokens)
+        activeMuteTokens = []
     }
 
     // MARK: - Notifications
