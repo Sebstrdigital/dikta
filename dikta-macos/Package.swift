@@ -28,7 +28,7 @@ let package = Package(
         ),
         .testTarget(
             name: "DiktaTests",
-            dependencies: [],
+            dependencies: ["Dikta"],
             path: "DiktaTests"
         )
     ]

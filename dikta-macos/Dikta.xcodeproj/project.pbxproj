@@ -30,6 +30,11 @@
 		100000000000000000000027 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000027 /* UpdateChecker.swift */; };
 		100000000000000000000028 /* DiagnosticLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000028 /* DiagnosticLogger.swift */; };
 		100000000000000000000029 /* SparkleController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000029 /* SparkleController.swift */; };
+		100000000000000000000095 /* MicMuter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000095 /* MicMuter.swift */; };
+		100000000000000000000096 /* FocusStash.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000096 /* FocusStash.swift */; };
+		100000000000000000000097 /* MuterRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000097 /* MuterRegistry.swift */; };
+		100000000000000000000098 /* GoogleMeetMuter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000098 /* GoogleMeetMuter.swift */; };
+		100000000000000000000075 /* MicMutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000075 /* MicMutingTests.swift */; };
 
 		/* Formatter */
 		100000000000000000000081 /* FormatterEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000081 /* FormatterEngine.swift */; };
@@ -96,6 +101,10 @@
 		200000000000000000000027 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		200000000000000000000028 /* DiagnosticLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticLogger.swift; sourceTree = "<group>"; };
 		200000000000000000000029 /* SparkleController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleController.swift; sourceTree = "<group>"; };
+		200000000000000000000095 /* MicMuter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicMuter.swift; sourceTree = "<group>"; };
+		200000000000000000000096 /* FocusStash.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusStash.swift; sourceTree = "<group>"; };
+		200000000000000000000097 /* MuterRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MuterRegistry.swift; sourceTree = "<group>"; };
+		200000000000000000000098 /* GoogleMeetMuter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleMeetMuter.swift; sourceTree = "<group>"; };
 
 		/* Formatter */
 		200000000000000000000081 /* FormatterEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatterEngine.swift; sourceTree = "<group>"; };
@@ -130,6 +139,7 @@
 		200000000000000000000071 /* DiktaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiktaTests.swift; sourceTree = "<group>"; };
 		200000000000000000000072 /* FormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatterTests.swift; sourceTree = "<group>"; };
 		200000000000000000000074 /* EmbeddingParagraphSplitterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmbeddingParagraphSplitterTests.swift; sourceTree = "<group>"; };
+		200000000000000000000075 /* MicMutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicMutingTests.swift; sourceTree = "<group>"; };
 
 		/* Product */
 		400000000000000000000001 /* Dikta.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Dikta.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -171,12 +181,24 @@
 				200000000000000000000041 /* DiktaApp.swift */,
 				600000000000000000000002 /* Models */,
 				600000000000000000000003 /* Services */,
+				600000000000000000000010 /* MicMuting */,
 				600000000000000000000008 /* Formatter */,
 				600000000000000000000004 /* ViewModels */,
 				600000000000000000000005 /* Views */,
 				600000000000000000000006 /* Resources */,
 			);
 			path = Dikta;
+			sourceTree = "<group>";
+		};
+		600000000000000000000010 /* MicMuting */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000095 /* MicMuter.swift */,
+				200000000000000000000096 /* FocusStash.swift */,
+				200000000000000000000097 /* MuterRegistry.swift */,
+				200000000000000000000098 /* GoogleMeetMuter.swift */,
+			);
+			path = MicMuting;
 			sourceTree = "<group>";
 		};
 		600000000000000000000008 /* Formatter */ = {
@@ -199,6 +221,7 @@
 				200000000000000000000071 /* DiktaTests.swift */,
 				200000000000000000000072 /* FormatterTests.swift */,
 				200000000000000000000074 /* EmbeddingParagraphSplitterTests.swift */,
+				200000000000000000000075 /* MicMutingTests.swift */,
 			);
 			path = DiktaTests;
 			sourceTree = "<group>";
@@ -399,6 +422,7 @@
 				100000000000000000000071 /* DiktaTests.swift in Sources */,
 				100000000000000000000073 /* FormatterTests.swift in Sources */,
 				100000000000000000000074 /* EmbeddingParagraphSplitterTests.swift in Sources */,
+				100000000000000000000075 /* MicMutingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -429,6 +453,10 @@
 				100000000000000000000027 /* UpdateChecker.swift in Sources */,
 				100000000000000000000028 /* DiagnosticLogger.swift in Sources */,
 				100000000000000000000029 /* SparkleController.swift in Sources */,
+				100000000000000000000095 /* MicMuter.swift in Sources */,
+				100000000000000000000096 /* FocusStash.swift in Sources */,
+				100000000000000000000097 /* MuterRegistry.swift in Sources */,
+				100000000000000000000098 /* GoogleMeetMuter.swift in Sources */,
 				100000000000000000000032 /* HotkeyRecordingWindow.swift in Sources */,
 				100000000000000000000033 /* OnboardingWindow.swift in Sources */,
 				100000000000000000000081 /* FormatterEngine.swift in Sources */,
