@@ -172,3 +172,8 @@ dist/
 .takt/
 stories.json
 tasks/
+
+# pi-team-lean
+dikta-feature-sprint.json
+.pi-team-lean/
+.claude/
