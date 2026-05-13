@@ -1,8 +1,18 @@
 final class MuterRegistry {
     private let muters: [any MicMuter]
 
-    init(muters: [any MicMuter] = [GoogleMeetMuter()]) {
+    init(muters: [any MicMuter] = [
+        GoogleMeetMuter(),
+        TeamsMuter(),
+        SlackMuter(),
+        WhatsAppMuter(),
+        UvenMuter(),
+    ]) {
         self.muters = muters
+    }
+
+    var registeredMuterIDs: [String] {
+        muters.map(\.muterID)
     }
 
     func muteAll() -> [MuteToken] {

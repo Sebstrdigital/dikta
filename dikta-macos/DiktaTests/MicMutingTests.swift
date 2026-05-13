@@ -2,6 +2,34 @@ import XCTest
 @testable import Dikta
 
 final class MicMutingTests: XCTestCase {
+    func testDefaultRegistryContainsAllMutersInOrder() {
+        let registry = MuterRegistry()
+
+        XCTAssertEqual(registry.registeredMuterIDs, [
+            "GoogleMeetMuter",
+            "TeamsMuter",
+            "SlackMuter",
+            "WhatsAppMuter",
+            "UvenMuter",
+        ])
+    }
+
+    func testTeamsMuterReturnsNilWhenTeamsNotRunning() {
+        XCTAssertNil(TeamsMuter().mute())
+    }
+
+    func testSlackMuterReturnsNilWhenSlackNotRunning() {
+        XCTAssertNil(SlackMuter().mute())
+    }
+
+    func testWhatsAppMuterReturnsNilWhenWhatsAppNotRunning() {
+        XCTAssertNil(WhatsAppMuter().mute())
+    }
+
+    func testUvenMuterReturnsNilWhenUvenNotRunning() {
+        XCTAssertNil(UvenMuter().mute())
+    }
+
     func testMuteAllCallsEachMuterOnceAndCollectsTokens() {
         let log = EventLog()
         let firstToken = MuteToken(muterID: "first")
