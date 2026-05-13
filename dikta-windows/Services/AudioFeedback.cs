@@ -22,4 +22,10 @@ public class AudioFeedback
         if (_configService.Config.MuteSounds) return;
         SystemSounds.Asterisk.Play();
     }
+
+    public void PlayComplete()
+    {
+        if (_configService.Config.MuteSounds) return;
+        SystemSounds.Exclamation.Play();
+    }
 }

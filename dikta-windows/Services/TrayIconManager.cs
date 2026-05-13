@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Windows.Forms;
+using System.Windows.Threading;
 using DiktaWindows.Models;
 using DiktaWindows.Views;
 
@@ -19,7 +20,11 @@ public class TrayIconManager : IDisposable
     private ToolStripMenuItem? _languageMenu;
     private Icon? _idleIcon;
     private Icon? _recordingIcon;
+    private Icon[]? _processingFrames;
+    private DispatcherTimer? _processingTimer;
+    private int _processingFrameIdx;
     private bool _isRecording;
+    private bool _isProcessing;
     private int _processingFlag; // 0 = idle, 1 = processing; guarded via Interlocked
     private SettingsWindow? _settingsWindow;
     private OnboardingWindow? _onboardingWindow;
@@ -37,8 +42,12 @@ public class TrayIconManager : IDisposable
 
     public void Initialize()
     {
-        _idleIcon      = TrayIconFactory.CreateIdleIcon();
-        _recordingIcon = TrayIconFactory.CreateRecordingIcon();
+        _idleIcon         = TrayIconFactory.CreateIdleIcon();
+        _recordingIcon    = TrayIconFactory.CreateRecordingIcon();
+        _processingFrames = TrayIconFactory.CreateProcessingFrames();
+
+        _processingTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
+        _processingTimer.Tick += OnProcessingTick;
 
         _notifyIcon = new NotifyIcon
         {
@@ -68,14 +77,34 @@ public class TrayIconManager : IDisposable
     private string BuildTooltip()
     {
         var lang = Language.FromCode(_configService.Config.Language);
-        return $"Dikta — {lang.DisplayName}";
+        var state = _isRecording ? " — Recording…" : _isProcessing ? " — Transcribing…" : "";
+        return $"Dikta — {lang.DisplayName}{state}";
     }
 
     private void UpdateTrayState()
     {
         if (_notifyIcon is null) return;
-        _notifyIcon.Icon = _isRecording ? _recordingIcon : _idleIcon;
+
+        if (_isProcessing && _processingFrames is { Length: > 0 })
+        {
+            _notifyIcon.Icon = _processingFrames[_processingFrameIdx];
+            _processingTimer?.Start();
+        }
+        else
+        {
+            _processingTimer?.Stop();
+            _processingFrameIdx = 0;
+            _notifyIcon.Icon = _isRecording ? _recordingIcon : _idleIcon;
+        }
+
         _notifyIcon.Text = BuildTooltip();
+    }
+
+    private void OnProcessingTick(object? sender, EventArgs e)
+    {
+        if (_notifyIcon is null || _processingFrames is null || !_isProcessing) return;
+        _processingFrameIdx = (_processingFrameIdx + 1) % _processingFrames.Length;
+        _notifyIcon.Icon = _processingFrames[_processingFrameIdx];
     }
 
     private ContextMenuStrip BuildContextMenu()
@@ -186,10 +215,11 @@ public class TrayIconManager : IDisposable
         {
             if (_isRecording)
             {
-                // Stop recording
+                // Stop recording → enter processing state (spinner) until paste completes.
                 _audioFeedback.PlayStop();
                 var audioPath = await _recorder.StopRecordingAsync();
                 _isRecording = false;
+                _isProcessing = true;
                 UpdateTrayState();
 
                 // Transcribe
@@ -200,6 +230,10 @@ public class TrayIconManager : IDisposable
                     await ClipboardManager.CopyAndPasteAsync(text);
                     _history.Add(text, _configService.Config.Language);
                 }
+
+                _isProcessing = false;
+                UpdateTrayState();
+                _audioFeedback.PlayComplete();
             }
             else
             {
@@ -269,6 +303,7 @@ public class TrayIconManager : IDisposable
         catch (Exception ex)
         {
             _isRecording = false;
+            _isProcessing = false;
             UpdateTrayState();
             var message = ex is InvalidOperationException && ex.Message == "No microphone found"
                 ? "No microphone found"
@@ -334,9 +369,17 @@ public class TrayIconManager : IDisposable
         _hotkeyManager.HotkeyPressed -= OnHotkeyPressed;
         _hotkeyManager.ShowOnboardingRequested -= OpenOnboarding;
         _configService.SaveFailed -= OnConfigSaveFailed;
+        if (_processingTimer != null)
+        {
+            _processingTimer.Stop();
+            _processingTimer.Tick -= OnProcessingTick;
+            _processingTimer = null;
+        }
         _notifyIcon?.Dispose();
         _idleIcon?.Dispose();
         _recordingIcon?.Dispose();
+        if (_processingFrames != null)
+            foreach (var f in _processingFrames) f.Dispose();
         _recorder.Dispose();
         _transcriber.Dispose();
     }
