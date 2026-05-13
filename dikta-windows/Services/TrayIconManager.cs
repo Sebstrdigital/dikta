@@ -233,7 +233,6 @@ public class TrayIconManager : IDisposable
 
                 _isProcessing = false;
                 UpdateTrayState();
-                _audioFeedback.PlayComplete();
             }
             else
             {
