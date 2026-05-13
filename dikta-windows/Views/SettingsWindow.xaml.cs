@@ -128,9 +128,8 @@ public partial class SettingsWindow : Window
     {
         var models = new[]
         {
-            ("small",  "small (~500 MB)"),
+            ("small",  "small (~465 MB)"),
             ("medium", "medium (~1.5 GB)"),
-            ("large",  "large (~3 GB)"),
         };
 
         foreach (var (key, label) in models)
