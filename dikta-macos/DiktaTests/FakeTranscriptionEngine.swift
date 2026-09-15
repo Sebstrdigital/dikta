@@ -16,7 +16,22 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     /// Every model passed to `reload(model:)`, in call order.
     private(set) var reloadedModels: [WhisperModel] = []
 
+    /// When true, `load()` fails (leaves `isReady` false, sets `errorMessage`)
+    /// instead of its default succeed-unconditionally behavior. Used by
+    /// `MenuBarViewModel.setEngine` tests, where a fresh fake engine instance
+    /// per switch needs to simulate a failed switch.
+    var shouldFailLoad = false
+
+    /// Number of times `load()` was called.
+    private(set) var loadCallCount = 0
+
     func load() async {
+        loadCallCount += 1
+        if shouldFailLoad {
+            isReady = false
+            errorMessage = "Fake failure loading engine"
+            return
+        }
         isReady = true
     }
 
