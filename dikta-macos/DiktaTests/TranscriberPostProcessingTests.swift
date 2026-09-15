@@ -89,4 +89,14 @@ final class WhisperModelDecodingTests: XCTestCase {
         XCTAssertEqual(model.rawValue, "medium")
         XCTAssertEqual(model.variant, "openai_whisper-medium")
     }
+
+    func test_decode_turboRawValue() throws {
+        let json = "\"turbo\"".data(using: .utf8)!
+        let model = try JSONDecoder().decode(WhisperModel.self, from: json)
+        XCTAssertEqual(model, .turbo)
+        XCTAssertEqual(model.rawValue, "turbo")
+        XCTAssertEqual(model.variant, "openai_whisper-large-v3-v20240930_turbo_632MB")
+        XCTAssertEqual(model.repo, "argmaxinc/whisperkit-coreml")
+        XCTAssertTrue(model.isRecommended)
+    }
 }

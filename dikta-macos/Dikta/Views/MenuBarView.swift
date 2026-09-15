@@ -198,12 +198,12 @@ struct AdvancedMenu: View {
             Divider()
 
             Menu("Whisper Model: \(currentModel.displayName)") {
-                ForEach(WhisperModel.allCases, id: \.self) { model in
+                ForEach(WhisperModel.allCases.sorted(by: { $0.sortOrder < $1.sortOrder }), id: \.self) { model in
                     Button(action: {
                         viewModel.setWhisperModel(model)
                     }) {
                         HStack {
-                            Text(model.displayName)
+                            Text(model.isRecommended ? "\(model.displayName) ★" : model.displayName)
                             if currentModel == model {
                                 Spacer()
                                 Image(systemName: "checkmark")
