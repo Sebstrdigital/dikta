@@ -139,6 +139,24 @@ final class AppConfigDecodingTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(config.version, 3)
         XCTAssertEqual(config.hotkeys.languageToggle,
                        HotkeyConfig(modifiers: [.cmd, .ctrl], key: nil))
+        // A missing "engine" key (every config saved before Apple Dictation
+        // existed) must decode to Whisper, not fail to decode.
+        XCTAssertEqual(config.engine, .whisper)
+    }
+
+    /// A config that explicitly persisted "appleDictation" (from a later
+    /// engine switch) must round-trip back to that case, not silently reset.
+    func test_decode_engine_appleDictation() throws {
+        let json = """
+        {
+            "version": 3,
+            "hotkeys": {"toggle": {"modifiers":["shift","ctrl"]},"push_to_talk":{"modifiers":["cmd","shift"]}},
+            "output_mode": "general", "history": [], "whisper_model": "small", "llm_model": "gemma3",
+            "engine": "appleDictation"
+        }
+        """.data(using: .utf8)!
+        let config = try JSONDecoder().decode(AppConfig.self, from: json)
+        XCTAssertEqual(config.engine, .appleDictation)
     }
 
     func test_decode_migratesBaseWhisperModel() throws {
