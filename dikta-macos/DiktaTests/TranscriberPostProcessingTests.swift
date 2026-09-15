@@ -1,123 +1,73 @@
-/// TranscriberPostProcessingTests — Unit tests for Transcriber.cleanSegments.
-///
-/// Self-contained: inlines the production `TranscriptSegment` type and
-/// `Transcriber.cleanSegments` logic (same pattern as DiktaTests.swift), since the
-/// main Dikta target is an executable and cannot be @testable-imported via Swift
-/// Package Manager. When the production algorithm in Transcriber.swift changes,
-/// update the inlined copy here too.
+/// TranscriberPostProcessingTests — Unit tests for the real Transcriber.cleanSegments
+/// and WhisperModel, via `@testable import Dikta` (see DiktaTests.swift for why the
+/// hand-copied-type pattern is no longer used).
 ///
 /// Run via: cd dikta-macos && swift test --filter TranscriberPostProcessingTests
 
 import XCTest
+@testable import Dikta
 
-// MARK: - Inlined production types (mirrors Transcriber.swift)
+// MARK: - Transcriber.cleanSegments
 
-struct TranscriptSegment {
-    let text: String
-    let noSpeechProb: Float
-}
-
-/// Mirrors WhisperModel.swift. rawValue ("small"/"medium") is the persisted
-/// identifier in AppConfig and must stay stable across the engine-qualified
-/// `variant`/`repo` additions.
-enum WhisperModel: String, Codable, CaseIterable {
-    case small = "small"
-    case medium = "medium"
-
-    var repo: String {
-        "argmaxinc/whisperkit-coreml"
-    }
-
-    var variant: String {
-        switch self {
-        case .small: return "openai_whisper-small"
-        case .medium: return "openai_whisper-medium"
-        }
-    }
-}
-
-enum PostProcessing {
-    /// Mirrors Transcriber.cleanSegments.
-    static func cleanSegments(_ segments: [TranscriptSegment], noSpeechThreshold: Float) -> String {
-        let validSegments = segments.filter {
-            !$0.text.trimmingCharacters(in: .whitespaces).isEmpty && $0.noSpeechProb < noSpeechThreshold
-        }
-
-        return validSegments.map { segment in
-            segment.text
-                .replacingOccurrences(of: "<\\|[^|]+\\|>", with: "", options: .regularExpression)
-                .replacingOccurrences(of: "\\[\\s*(?:BLANK_AUDIO|silence|no speech)\\s*\\]", with: "", options: [.regularExpression, .caseInsensitive])
-                .trimmingCharacters(in: .whitespaces)
-        }.filter { !$0.isEmpty }.joined(separator: " ")
-    }
-}
-
-// MARK: - Tests
-
+// Transcriber is @MainActor, so cleanSegments (a static member) is too.
+@MainActor
 final class TranscriberPostProcessingTests: XCTestCase {
     func test_cleanSegments_stripsControlTokens() {
         let segments = [
-            TranscriptSegment(text: "<|startoftranscript|><|en|>Hello there<|endoftext|>", noSpeechProb: 0.0)
+            TranscriptSegment(text: "<|startoftranscript|><|en|>Hello there<|endoftext|>")
         ]
-        XCTAssertEqual(PostProcessing.cleanSegments(segments, noSpeechThreshold: 0.3), "Hello there")
+        XCTAssertEqual(Transcriber.cleanSegments(segments), "Hello there")
     }
 
     func test_cleanSegments_stripsBracketNoiseTokens() {
         let segments = [
-            TranscriptSegment(text: "[BLANK_AUDIO]", noSpeechProb: 0.0),
-            TranscriptSegment(text: "[ Silence ]", noSpeechProb: 0.0),
-            TranscriptSegment(text: "[silence]", noSpeechProb: 0.0),
-            TranscriptSegment(text: "[no speech]", noSpeechProb: 0.0),
-            TranscriptSegment(text: "Actual words", noSpeechProb: 0.0)
+            TranscriptSegment(text: "[BLANK_AUDIO]"),
+            TranscriptSegment(text: "[ Silence ]"),
+            TranscriptSegment(text: "[silence]"),
+            TranscriptSegment(text: "[no speech]"),
+            TranscriptSegment(text: "Actual words")
         ]
-        XCTAssertEqual(PostProcessing.cleanSegments(segments, noSpeechThreshold: 0.3), "Actual words")
+        XCTAssertEqual(Transcriber.cleanSegments(segments), "Actual words")
     }
 
     func test_cleanSegments_dropsEmptyAndWhitespaceSegments() {
         // Note: production trims with .whitespaces (spaces/tabs), not
         // .whitespacesAndNewlines, so only space/tab-only segments are covered here.
         let segments = [
-            TranscriptSegment(text: "", noSpeechProb: 0.0),
-            TranscriptSegment(text: "   ", noSpeechProb: 0.0),
-            TranscriptSegment(text: "\t\t", noSpeechProb: 0.0),
-            TranscriptSegment(text: "Real text", noSpeechProb: 0.0)
+            TranscriptSegment(text: ""),
+            TranscriptSegment(text: "   "),
+            TranscriptSegment(text: "\t\t"),
+            TranscriptSegment(text: "Real text")
         ]
-        XCTAssertEqual(PostProcessing.cleanSegments(segments, noSpeechThreshold: 0.3), "Real text")
-    }
-
-    func test_cleanSegments_filtersNoSpeechSegmentsByThreshold() {
-        let segments = [
-            TranscriptSegment(text: "Kept, below threshold", noSpeechProb: 0.1),
-            TranscriptSegment(text: "Dropped, at threshold", noSpeechProb: 0.3),
-            TranscriptSegment(text: "Dropped, above threshold", noSpeechProb: 0.9)
-        ]
-        XCTAssertEqual(PostProcessing.cleanSegments(segments, noSpeechThreshold: 0.3), "Kept, below threshold")
+        XCTAssertEqual(Transcriber.cleanSegments(segments), "Real text")
     }
 
     func test_cleanSegments_joinsNormalTextWithSpaces() {
         let segments = [
-            TranscriptSegment(text: "First segment.", noSpeechProb: 0.0),
-            TranscriptSegment(text: "Second segment.", noSpeechProb: 0.0),
-            TranscriptSegment(text: "Third segment.", noSpeechProb: 0.0)
+            TranscriptSegment(text: "First segment."),
+            TranscriptSegment(text: "Second segment."),
+            TranscriptSegment(text: "Third segment.")
         ]
         XCTAssertEqual(
-            PostProcessing.cleanSegments(segments, noSpeechThreshold: 0.3),
+            Transcriber.cleanSegments(segments),
             "First segment. Second segment. Third segment."
         )
     }
 
     func test_cleanSegments_emptyInputProducesEmptyString() {
-        XCTAssertEqual(PostProcessing.cleanSegments([], noSpeechThreshold: 0.3), "")
+        XCTAssertEqual(Transcriber.cleanSegments([]), "")
     }
 
     func test_cleanSegments_allSegmentsFilteredProducesEmptyString() {
         let segments = [
-            TranscriptSegment(text: "[BLANK_AUDIO]", noSpeechProb: 0.0),
-            TranscriptSegment(text: "Noisy", noSpeechProb: 0.95)
+            TranscriptSegment(text: "[BLANK_AUDIO]"),
+            TranscriptSegment(text: "   ")
         ]
-        XCTAssertEqual(PostProcessing.cleanSegments(segments, noSpeechThreshold: 0.3), "")
+        XCTAssertEqual(Transcriber.cleanSegments(segments), "")
     }
 }
+
+// MARK: - WhisperModel decoding
 
 /// Proves the persisted rawValues ("small"/"medium") still decode after
 /// WhisperModel gained engine-qualified `repo`/`variant` identity — a saved
