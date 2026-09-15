@@ -25,6 +25,12 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     /// Number of times `load()` was called.
     private(set) var loadCallCount = 0
 
+    /// Languages (by rawValue) whose `prepare(language:)` should fail.
+    var languagesThatFailPrepare: Set<String> = []
+
+    /// Every language passed to `prepare(language:)`, in call order.
+    private(set) var preparedLanguages: [Language] = []
+
     func load() async {
         loadCallCount += 1
         if shouldFailLoad {
@@ -33,6 +39,14 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
             return
         }
         isReady = true
+    }
+
+    func prepare(language: Language) async throws {
+        preparedLanguages.append(language)
+
+        if languagesThatFailPrepare.contains(language.rawValue) {
+            throw TranscriberError.reloadFailed("Fake failure preparing \(language.rawValue)")
+        }
     }
 
     func reload(model: WhisperModel) async throws {

@@ -376,44 +376,112 @@ final class MenuBarViewModel: ObservableObject {
 
     // MARK: - Language
 
-    func setLanguage(_ language: Language) {
-        // Auto-enable if the chosen language is currently disabled
-        configService.enableLanguage(language)
-        configService.language = language
-        sendNotification(title: "Write in", body: language.displayName, isRoutine: true)
+    /// Switches the active dictation language to `language`, `prepare`-ing
+    /// the active engine for it first (see `TranscriptionEngine.prepare(language:)`).
+    /// Matters for Apple Dictation, which must resolve/install the new
+    /// language's assets before `transcribe` can use it — without this step,
+    /// switching languages while Apple Dictation is active left `transcribe`
+    /// throwing `.assetsNotInstalled` until the app restarted. WhisperKit's
+    /// `Transcriber` no-ops `prepare` (it takes a language code per-call).
+    ///
+    /// Mirrors `setWhisperModel`/`setEngine`'s safe-switch pattern: only runs
+    /// when idle, goes `.loading` during the switch, and only persists the
+    /// new language once `prepare` has actually succeeded — on failure the
+    /// previous language stays configured and a notification explains why.
+    /// Returns the `Task` doing the work (nil if skipped — not idle, or
+    /// already on `language`) so tests can await completion instead of
+    /// polling `appState`; production callers can ignore the return value.
+    ///
+    /// - Parameters:
+    ///   - notifyOnSuccess: Whether to send a "Write in: <language>"
+    ///     notification once switched — existing callers only want that for
+    ///     a deliberate language pick, not `toggleLanguage`'s "cycle away
+    ///     from the language being disabled" step.
+    ///   - onSuccess: Runs after the language switch (and its notification)
+    ///     succeeds. `toggleLanguage` uses this to disable the old language
+    ///     only once cycling away from it has actually worked.
+    @discardableResult
+    private func activateLanguage(_ language: Language, notifyOnSuccess: Bool, onSuccess: (() -> Void)? = nil) -> Task<Void, Never>? {
+        guard appState == .idle else { return nil }
+        guard language != configService.language else { return nil }
+
+        let previousLanguage = configService.language
+        appState = .loading
+
+        return Task { @MainActor in
+            do {
+                try await withDownloadProgressPolling {
+                    try await transcriber.prepare(language: language)
+                }
+                // Only persist the new language once the engine has actually
+                // prepared for it.
+                configService.language = language
+                appState = .idle
+                if notifyOnSuccess {
+                    sendNotification(title: "Write in", body: language.displayName, isRoutine: true)
+                }
+                onSuccess?()
+            } catch {
+                // The engine couldn't prepare for the new language (e.g.
+                // Apple Dictation doesn't support it, or its assets failed to
+                // install) — keep the previous language active/configured
+                // rather than leaving transcribe() broken until restart.
+                appState = .idle
+                sendNotification(
+                    title: "Error",
+                    body: "Could not switch to \(language.displayName), kept \(previousLanguage.displayName). \(error.localizedDescription)"
+                )
+            }
+        }
     }
 
-    func cycleLanguage() {
+    @discardableResult
+    func setLanguage(_ language: Language) -> Task<Void, Never>? {
+        // Auto-enable if the chosen language is currently disabled
+        configService.enableLanguage(language)
+        return activateLanguage(language, notifyOnSuccess: true)
+    }
+
+    @discardableResult
+    func cycleLanguage() -> Task<Void, Never>? {
         let enabled = configService.enabledLanguages
         let next = configService.language.next(in: enabled)
-        setLanguage(next)
+        return setLanguage(next)
     }
 
     /// Toggle a language's enabled state in the carousel.
     /// - If enabling: also sets it as the active language.
     /// - If disabling and it was the active language: cycles to the next enabled language.
     /// - No-op if it is the last enabled language (enforced by ConfigService).
-    func toggleLanguage(_ language: Language) {
+    @discardableResult
+    func toggleLanguage(_ language: Language) -> Task<Void, Never>? {
         let wasEnabled = configService.isLanguageEnabled(language)
         let isActive = configService.language == language
         let isLastEnabled = configService.enabledLanguages.count == 1 && wasEnabled
 
-        guard !isLastEnabled else { return }
+        guard !isLastEnabled else { return nil }
 
         if wasEnabled {
-            // If disabling the active language, cycle away first
-            if isActive {
-                // Compute next among remaining enabled (excluding this one)
-                let remaining = configService.enabledLanguages.filter { $0 != language }
-                let nextLang = remaining.first ?? language
-                configService.language = nextLang
+            guard isActive else {
+                // Disabling a language that isn't the active one touches
+                // neither the active language nor the engine.
+                configService.disableLanguage(language)
+                return nil
             }
-            configService.disableLanguage(language)
+            // Disabling the active language: cycle to the next enabled one
+            // first, through the same prepare-before-persist path as
+            // `setLanguage`, and only disable `language` once that's
+            // actually succeeded — a failed engine prepare must not leave
+            // the carousel with no active language.
+            let remaining = configService.enabledLanguages.filter { $0 != language }
+            guard let nextLanguage = remaining.first else { return nil }
+            return activateLanguage(nextLanguage, notifyOnSuccess: false) { [weak self] in
+                self?.configService.disableLanguage(language)
+            }
         } else {
             // Enable and activate
             configService.enableLanguage(language)
-            configService.language = language
-            sendNotification(title: "Write in", body: language.displayName, isRoutine: true)
+            return activateLanguage(language, notifyOnSuccess: true)
         }
     }
 
