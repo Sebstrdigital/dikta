@@ -34,6 +34,10 @@
 		100000000000000000000096 /* FocusStash.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000096 /* FocusStash.swift */; };
 		100000000000000000000097 /* MuterRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000097 /* MuterRegistry.swift */; };
 		100000000000000000000098 /* GoogleMeetMuter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000098 /* GoogleMeetMuter.swift */; };
+		100000000000000000000099 /* TeamsMuter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000099 /* TeamsMuter.swift */; };
+		100000000000000000000100 /* SlackMuter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000100 /* SlackMuter.swift */; };
+		100000000000000000000101 /* WhatsAppMuter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000101 /* WhatsAppMuter.swift */; };
+		100000000000000000000102 /* UvenMuter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000102 /* UvenMuter.swift */; };
 		100000000000000000000075 /* MicMutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000075 /* MicMutingTests.swift */; };
 
 		/* Formatter */
@@ -105,6 +109,10 @@
 		200000000000000000000096 /* FocusStash.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusStash.swift; sourceTree = "<group>"; };
 		200000000000000000000097 /* MuterRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MuterRegistry.swift; sourceTree = "<group>"; };
 		200000000000000000000098 /* GoogleMeetMuter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleMeetMuter.swift; sourceTree = "<group>"; };
+		200000000000000000000099 /* TeamsMuter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamsMuter.swift; sourceTree = "<group>"; };
+		200000000000000000000100 /* SlackMuter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlackMuter.swift; sourceTree = "<group>"; };
+		200000000000000000000101 /* WhatsAppMuter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsAppMuter.swift; sourceTree = "<group>"; };
+		200000000000000000000102 /* UvenMuter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UvenMuter.swift; sourceTree = "<group>"; };
 
 		/* Formatter */
 		200000000000000000000081 /* FormatterEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatterEngine.swift; sourceTree = "<group>"; };
@@ -197,6 +205,10 @@
 				200000000000000000000096 /* FocusStash.swift */,
 				200000000000000000000097 /* MuterRegistry.swift */,
 				200000000000000000000098 /* GoogleMeetMuter.swift */,
+				200000000000000000000099 /* TeamsMuter.swift */,
+				200000000000000000000100 /* SlackMuter.swift */,
+				200000000000000000000101 /* WhatsAppMuter.swift */,
+				200000000000000000000102 /* UvenMuter.swift */,
 			);
 			path = MicMuting;
 			sourceTree = "<group>";
@@ -457,6 +469,10 @@
 				100000000000000000000096 /* FocusStash.swift in Sources */,
 				100000000000000000000097 /* MuterRegistry.swift in Sources */,
 				100000000000000000000098 /* GoogleMeetMuter.swift in Sources */,
+				100000000000000000000099 /* TeamsMuter.swift in Sources */,
+				100000000000000000000100 /* SlackMuter.swift in Sources */,
+				100000000000000000000101 /* WhatsAppMuter.swift in Sources */,
+				100000000000000000000102 /* UvenMuter.swift in Sources */,
 				100000000000000000000032 /* HotkeyRecordingWindow.swift in Sources */,
 				100000000000000000000033 /* OnboardingWindow.swift in Sources */,
 				100000000000000000000081 /* FormatterEngine.swift in Sources */,
