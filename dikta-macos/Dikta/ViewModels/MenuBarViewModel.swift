@@ -23,7 +23,7 @@ final class MenuBarViewModel: ObservableObject {
     // Services
     let configService: ConfigService
     private var cancellables = Set<AnyCancellable>()
-    private let transcriber: Transcriber
+    private let transcriber: any TranscriptionEngine
     private let audioRecorder: AudioRecorder
     private let audioFeedback: AudioFeedback
     private let clipboardManager: ClipboardManager
@@ -55,7 +55,7 @@ final class MenuBarViewModel: ObservableObject {
 
     init() {
         self.configService = ConfigService.shared
-        self.transcriber = Transcriber(modelName: configService.whisperModel)
+        self.transcriber = Transcriber(model: WhisperModel(rawValue: configService.whisperModel) ?? .small)
         self.audioRecorder = AudioRecorder()
         self.audioFeedback = AudioFeedback()
         self.clipboardManager = ClipboardManager()
@@ -102,7 +102,7 @@ final class MenuBarViewModel: ObservableObject {
         }
 
         // Load Whisper model
-        await transcriber.loadModel()
+        await transcriber.load()
 
         if transcriber.isReady {
             appState = .idle
@@ -368,12 +368,29 @@ final class MenuBarViewModel: ObservableObject {
     // MARK: - Whisper Model
 
     func setWhisperModel(_ model: WhisperModel) {
+        guard appState == .idle else { return }
+        guard model.rawValue != configService.whisperModel else { return }
+
         configService.whisperModel = model.rawValue
-        sendNotification(
-            title: "Model Changed",
-            body: "Switched to \(model.displayName). Restart app to load new model.",
-            isRoutine: true
-        )
+        appState = .loading
+
+        Task { @MainActor in
+            do {
+                try await transcriber.reload(model: model)
+                appState = .idle
+                sendNotification(
+                    title: "Model Changed",
+                    body: "Switched to \(model.displayName).",
+                    isRoutine: true
+                )
+            } catch {
+                appState = .idle
+                sendNotification(
+                    title: "Error",
+                    body: "Failed to switch model: \(error.localizedDescription)"
+                )
+            }
+        }
     }
 
     // MARK: - TTS Voice
