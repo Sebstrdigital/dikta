@@ -7,7 +7,8 @@ let package = Package(
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "Dikta", targets: ["Dikta"])
+        .executable(name: "Dikta", targets: ["Dikta"]),
+        .executable(name: "DiktaBench", targets: ["DiktaBench"])
     ],
     dependencies: [
         .package(url: "https://github.com/argmaxinc/argmax-oss-swift", from: "1.1.0"),
@@ -30,6 +31,17 @@ let package = Package(
             name: "DiktaTests",
             dependencies: ["Dikta"],
             path: "DiktaTests"
+        ),
+        .executableTarget(
+            name: "DiktaBench",
+            dependencies: [
+                .product(name: "WhisperKit", package: "argmax-oss-swift"),
+            ],
+            path: "Bench",
+            // "probes" is scratch work from a concurrent research task that happens
+            // to share this directory (case-insensitive filesystem merges Bench/ and
+            // bench/); it is not part of this target and must not be compiled into it.
+            exclude: ["probes", "data", "results", ".venv"]
         )
     ]
 )
