@@ -53,9 +53,11 @@ final class MenuBarViewModel: ObservableObject {
     // Window controllers
     let hotkeyWindowController = HotkeyRecordingWindowController()
 
-    init() {
+    /// - Parameter engine: Transcription engine to use. Defaults to a real WhisperKit-backed
+    ///   `Transcriber` built from the saved config; tests can inject a fake instead.
+    init(engine: (any TranscriptionEngine)? = nil) {
         self.configService = ConfigService.shared
-        self.transcriber = Transcriber(model: WhisperModel(rawValue: configService.whisperModel) ?? .small)
+        self.transcriber = engine ?? Transcriber(model: WhisperModel(rawValue: configService.whisperModel) ?? .small)
         self.audioRecorder = AudioRecorder()
         self.audioFeedback = AudioFeedback()
         self.clipboardManager = ClipboardManager()
@@ -92,13 +94,18 @@ final class MenuBarViewModel: ObservableObject {
     func initialize() async {
         appState = .loading
 
-        // Always show onboarding on app start
-        OnboardingWindowController.shared.show()
+        // Real-app-only side effects: showing a window, prompting for mic access,
+        // and grabbing global hotkeys don't belong in (and can crash or hang) a
+        // unit test process that constructs a MenuBarViewModel directly.
+        if !isRunningUnderXCTest {
+            // Always show onboarding on app start
+            OnboardingWindowController.shared.show()
 
-        // Now request mic permission (shows system dialog if not determined)
-        let hasMicPermission = await AudioRecorder.checkPermission()
-        if !hasMicPermission {
-            sendNotification(title: "Permission Required", body: "Please grant Microphone access in System Preferences")
+            // Now request mic permission (shows system dialog if not determined)
+            let hasMicPermission = await AudioRecorder.checkPermission()
+            if !hasMicPermission {
+                sendNotification(title: "Permission Required", body: "Please grant Microphone access in System Preferences")
+            }
         }
 
         // Load Whisper model
@@ -111,8 +118,10 @@ final class MenuBarViewModel: ObservableObject {
             Self.isModelLoaded = true
             NotificationCenter.default.post(name: .appModelLoaded, object: nil)
 
-            // Start hotkey listener
-            hotkeyManager.start()
+            if !isRunningUnderXCTest {
+                // Start hotkey listener
+                hotkeyManager.start()
+            }
 
             let toggleHotkey = configService.getHotkey(for: .toggle).displayString
             sendNotification(title: "Ready", body: "Whisper model loaded. Use \(toggleHotkey) to record.", isRoutine: true)
@@ -510,9 +519,21 @@ final class MenuBarViewModel: ObservableObject {
 
     // MARK: - Notifications
 
+    /// True when XCTest is linked into this process — true under both `swift test`
+    /// and `xcodebuild test`, hosted or not. Used to skip real-app side effects
+    /// (notifications, the onboarding window, the global hotkey listener) that
+    /// either crash or misbehave when a `MenuBarViewModel` is constructed directly
+    /// in a unit test, since `init()` kicks them off automatically.
+    private var isRunningUnderXCTest: Bool {
+        NSClassFromString("XCTestCase") != nil
+    }
+
     private var canUseNotifications: Bool {
-        // UNUserNotificationCenter requires a proper app bundle
-        Bundle.main.bundleIdentifier != nil
+        // UNUserNotificationCenter requires a proper app bundle and crashes
+        // (bundleProxyForCurrentProcess is nil) when called from the bare xctest
+        // executable. Bundle.main.bundleIdentifier alone doesn't rule that out
+        // (the xctest tool itself has one), hence the XCTest check too.
+        Bundle.main.bundleIdentifier != nil && !isRunningUnderXCTest
     }
 
     private func sendNotification(title: String, body: String, isRoutine: Bool = false) {

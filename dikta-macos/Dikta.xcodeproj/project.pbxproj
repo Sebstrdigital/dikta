@@ -41,6 +41,8 @@
 		100000000000000000000102 /* UvenMuter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000102 /* UvenMuter.swift */; };
 		100000000000000000000075 /* MicMutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000075 /* MicMutingTests.swift */; };
 		100000000000000000000104 /* TranscriberPostProcessingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000104 /* TranscriberPostProcessingTests.swift */; };
+		100000000000000000000105 /* FakeTranscriptionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000105 /* FakeTranscriptionEngine.swift */; };
+		100000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */; };
 
 		/* Formatter */
 		100000000000000000000081 /* FormatterEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000081 /* FormatterEngine.swift */; };
@@ -152,6 +154,8 @@
 		200000000000000000000074 /* EmbeddingParagraphSplitterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmbeddingParagraphSplitterTests.swift; sourceTree = "<group>"; };
 		200000000000000000000075 /* MicMutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicMutingTests.swift; sourceTree = "<group>"; };
 		200000000000000000000104 /* TranscriberPostProcessingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriberPostProcessingTests.swift; sourceTree = "<group>"; };
+		200000000000000000000105 /* FakeTranscriptionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeTranscriptionEngine.swift; sourceTree = "<group>"; };
+		200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelSetWhisperModelTests.swift; sourceTree = "<group>"; };
 
 		/* Product */
 		400000000000000000000001 /* Dikta.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Dikta.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -239,6 +243,8 @@
 				200000000000000000000074 /* EmbeddingParagraphSplitterTests.swift */,
 				200000000000000000000075 /* MicMutingTests.swift */,
 				200000000000000000000104 /* TranscriberPostProcessingTests.swift */,
+				200000000000000000000105 /* FakeTranscriptionEngine.swift */,
+				200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */,
 			);
 			path = DiktaTests;
 			sourceTree = "<group>";
@@ -442,6 +448,8 @@
 				100000000000000000000074 /* EmbeddingParagraphSplitterTests.swift in Sources */,
 				100000000000000000000075 /* MicMutingTests.swift in Sources */,
 				100000000000000000000104 /* TranscriberPostProcessingTests.swift in Sources */,
+				100000000000000000000105 /* FakeTranscriptionEngine.swift in Sources */,
+				100000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
