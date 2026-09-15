@@ -31,6 +31,14 @@ final class AppleDictationEngine: ObservableObject, TranscriptionEngine {
     /// the first successful load, even once `configService.language` moves on.
     private var preparedLanguage: Language?
 
+    /// Bumped at the start and end of every `withPublishedProgress` call. The
+    /// KVO observer's handler hops to `@MainActor` asynchronously, so a hop
+    /// queued just before `withPublishedProgress` returns can otherwise land
+    /// *after* its `defer`'s `downloadProgress = nil` reset and resurrect a
+    /// stale percentage. Each hop captures the generation it was scheduled
+    /// under and is a no-op unless it still matches.
+    private var downloadGeneration = 0
+
     init(configService: ConfigService) {
         self.configService = configService
     }
@@ -206,15 +214,23 @@ final class AppleDictationEngine: ObservableObject, TranscriptionEngine {
     /// no progress updates ever arrive (e.g. an install that completes before
     /// the first KVO tick), so `downloadProgress` never gets stuck at 0.
     private func withPublishedProgress(for request: AssetInstallationRequest, _ work: () async throws -> Void) async rethrows {
+        downloadGeneration += 1
+        let generation = downloadGeneration
         downloadProgress = 0
         let observation = request.progress.observe(\.fractionCompleted, options: [.new]) { [weak self] _, change in
             guard let value = change.newValue else { return }
             Task { @MainActor [weak self] in
-                self?.downloadProgress = value
+                guard let self, self.downloadGeneration == generation else { return }
+                self.downloadProgress = value
             }
         }
         defer {
             observation.invalidate()
+            // Bump the generation *before* clearing downloadProgress so any
+            // hop still in flight for this (now-finished) install compares
+            // stale and no-ops instead of potentially landing after this
+            // reset and resurrecting a stray percentage.
+            downloadGeneration += 1
             downloadProgress = nil
         }
         try await work()
