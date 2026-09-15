@@ -24,6 +24,21 @@ final class AppleDictationEngine: ObservableObject, TranscriptionEngine {
 
     private let configService: ConfigService
 
+    /// The `Language` `isReady` was last successfully resolved/installed for.
+    /// Lets `load()` tell "ready for the language that's now configured" apart
+    /// from "ready, but for a language that's since changed" — without this,
+    /// `load()`'s `!isReady` early-return would silently no-op forever after
+    /// the first successful load, even once `configService.language` moves on.
+    private var preparedLanguage: Language?
+
+    /// Bumped at the start and end of every `withPublishedProgress` call. The
+    /// KVO observer's handler hops to `@MainActor` asynchronously, so a hop
+    /// queued just before `withPublishedProgress` returns can otherwise land
+    /// *after* its `defer`'s `downloadProgress = nil` reset and resurrect a
+    /// stale percentage. Each hop captures the generation it was scheduled
+    /// under and is a no-op unless it still matches.
+    private var downloadGeneration = 0
+
     init(configService: ConfigService) {
         self.configService = configService
     }
@@ -49,14 +64,47 @@ final class AppleDictationEngine: ObservableObject, TranscriptionEngine {
     }
 
     /// Resolve the currently configured `Language` and make sure its assets
-    /// are installed. No-op if already loading or ready.
+    /// are installed. No-op if already loading, or already ready *for that
+    /// language* — see `preparedLanguage`.
     func load() async {
-        guard !isLoading && !isReady else { return }
+        await prepareIfNeeded(for: configService.language)
+    }
+
+    /// Re-resolve and (re-)install assets for `language`, so switching the
+    /// active dictation language while Apple Dictation is already loaded
+    /// doesn't leave `transcribe` throwing `.assetsNotInstalled` until the
+    /// app restarts. Unlike `load()`, this isn't a no-op when `isReady` is
+    /// already true — re-preparing for a *different* language is exactly the
+    /// case where the engine is ready for the *old* language and must become
+    /// ready for the new one instead.
+    ///
+    /// Throws if `language` can't be resolved/installed; callers should keep
+    /// the previous language active in that case (this leaves whatever
+    /// language was last successfully prepared still working — `isReady`
+    /// only goes `false` if *this* prepare fails outright, not merely because
+    /// a different one is being attempted).
+    func prepare(language: Language) async throws {
+        guard !isLoading else {
+            throw TranscriberError.reloadInProgress
+        }
+        await prepareIfNeeded(for: language)
+        guard isReady, preparedLanguage == language else {
+            throw AppleDictationEngineError.unsupportedLanguage(language.displayName)
+        }
+    }
+
+    /// Shared core of `load()`/`prepare(language:)`: resolves `language` and
+    /// installs its assets unless already prepared for exactly that language.
+    /// Guards against overlapping calls via `isLoading`.
+    private func prepareIfNeeded(for language: Language) async {
+        guard !isLoading else { return }
+        guard !(isReady && preparedLanguage == language) else { return }
+
         isLoading = true
         errorMessage = nil
         downloadProgress = nil
 
-        await resolveAndInstall(for: configService.language)
+        await resolveAndInstall(for: language)
 
         isLoading = false
     }
@@ -152,6 +200,7 @@ final class AppleDictationEngine: ObservableObject, TranscriptionEngine {
                 }
             }
             isReady = true
+            preparedLanguage = language
         } catch {
             isReady = false
             errorMessage = "Apple Dictation does not support \(language.displayName)."
@@ -165,15 +214,23 @@ final class AppleDictationEngine: ObservableObject, TranscriptionEngine {
     /// no progress updates ever arrive (e.g. an install that completes before
     /// the first KVO tick), so `downloadProgress` never gets stuck at 0.
     private func withPublishedProgress(for request: AssetInstallationRequest, _ work: () async throws -> Void) async rethrows {
+        downloadGeneration += 1
+        let generation = downloadGeneration
         downloadProgress = 0
         let observation = request.progress.observe(\.fractionCompleted, options: [.new]) { [weak self] _, change in
             guard let value = change.newValue else { return }
             Task { @MainActor [weak self] in
-                self?.downloadProgress = value
+                guard let self, self.downloadGeneration == generation else { return }
+                self.downloadProgress = value
             }
         }
         defer {
             observation.invalidate()
+            // Bump the generation *before* clearing downloadProgress so any
+            // hop still in flight for this (now-finished) install compares
+            // stale and no-ops instead of potentially landing after this
+            // reset and resurrecting a stray percentage.
+            downloadGeneration += 1
             downloadProgress = nil
         }
         try await work()

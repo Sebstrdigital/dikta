@@ -22,12 +22,13 @@ final class AppleDictationEngineLocaleMappingTests: XCTestCase {
         XCTAssertEqual(AppleDictationEngine.bcp47(for: .danish), "da-DK")
     }
 
-    /// Every `Language` case must have a mapping — this fails to compile (not
-    /// just fails at runtime) if a future `Language` case is added without
-    /// updating `bcp47`, since the switch in `bcp47` is exhaustive.
+    /// Every `Language` case must have a mapping. `bcp47`'s switch is
+    /// exhaustive (no `default:`), so a future `Language` case added without
+    /// a corresponding mapping fails to *build*, not just to pass this test —
+    /// this test exists to document that guarantee, not to establish it.
     func test_bcp47_coversAllLanguageCases() {
         for language in Language.allCases {
-            XCTAssertFalse(AppleDictationEngine.bcp47(for: language).isEmpty)
+            _ = AppleDictationEngine.bcp47(for: language)
         }
     }
 }

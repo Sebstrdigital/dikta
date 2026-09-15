@@ -83,8 +83,25 @@ def cmd_score(args: argparse.Namespace) -> None:
         print("ERROR: no overlapping files between results and refs", file=sys.stderr)
         sys.exit(1)
 
-    references = [normalize(refs[f]) for f in common_files]
-    hypotheses = [normalize(results[f]["text"]) for f in common_files]
+    # jiwer.wer raises on an empty reference (it can't divide by zero
+    # reference words), so skip those clips rather than letting the whole
+    # run crash on one bad FLEURS reference.
+    references = []
+    hypotheses = []
+    empty_ref_files = []
+    for f in common_files:
+        ref = normalize(refs[f])
+        if not ref:
+            empty_ref_files.append(f)
+            continue
+        references.append(ref)
+        hypotheses.append(normalize(results[f]["text"]))
+
+    if empty_ref_files:
+        print(f"WARNING: {len(empty_ref_files)} file(s) have an empty reference after normalization, skipped: {empty_ref_files}", file=sys.stderr)
+    if not references:
+        print("ERROR: every overlapping file has an empty reference, nothing to score", file=sys.stderr)
+        sys.exit(1)
 
     aggregate_wer = jiwer.wer(references, hypotheses)
 

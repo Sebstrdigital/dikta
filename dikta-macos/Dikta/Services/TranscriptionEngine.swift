@@ -30,4 +30,22 @@ protocol TranscriptionEngine: AnyObject {
 
     /// Transcribe audio samples using the currently loaded model.
     func transcribe(_ audioSamples: [Float], language: String?, micSensitivity: MicSensitivity) async throws -> String
+
+    /// Prepare the engine to transcribe in `language`, going forward.
+    ///
+    /// Most engines (WhisperKit's `Transcriber`) take a language code
+    /// per-`transcribe` call and need no separate preparation step, hence the
+    /// no-op default below. `AppleDictationEngine` overrides this: it must
+    /// resolve `language` to a supported locale and make sure that locale's
+    /// assets are installed *before* the next `transcribe` call, since
+    /// `transcribe` itself refuses to auto-download mid-dictation.
+    ///
+    /// Throws if preparation fails (e.g. an unsupported/uninstallable
+    /// locale); callers should keep the previous language active in that case
+    /// rather than switching to one the engine can't actually use.
+    func prepare(language: Language) async throws
+}
+
+extension TranscriptionEngine {
+    func prepare(language: Language) async throws {}
 }

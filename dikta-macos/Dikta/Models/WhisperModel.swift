@@ -35,7 +35,7 @@ enum WhisperModel: String, Codable, CaseIterable {
     var displayName: String {
         switch self {
         case .small: return "Small (Balanced)"
-        case .turbo: return "Large v3 Turbo (Best English)"
+        case .turbo: return "Large v3 Turbo (Recommended)"
         case .medium: return "Medium (Legacy)"
         }
     }
