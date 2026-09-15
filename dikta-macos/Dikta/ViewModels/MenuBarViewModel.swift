@@ -53,10 +53,14 @@ final class MenuBarViewModel: ObservableObject {
     // Window controllers
     let hotkeyWindowController = HotkeyRecordingWindowController()
 
-    /// - Parameter engine: Transcription engine to use. Defaults to a real WhisperKit-backed
-    ///   `Transcriber` built from the saved config; tests can inject a fake instead.
-    init(engine: (any TranscriptionEngine)? = nil) {
-        self.configService = ConfigService.shared
+    /// - Parameters:
+    ///   - engine: Transcription engine to use. Defaults to a real WhisperKit-backed
+    ///     `Transcriber` built from the saved config; tests can inject a fake instead.
+    ///   - configService: Config store to use. Defaults to `.shared` (the real, persisted
+    ///     config); tests can inject an isolated instance instead.
+    init(engine: (any TranscriptionEngine)? = nil, configService: ConfigService? = nil) {
+        let configService = configService ?? .shared
+        self.configService = configService
         self.transcriber = engine ?? Transcriber(model: WhisperModel(rawValue: configService.whisperModel) ?? .small)
         self.audioRecorder = AudioRecorder()
         self.audioFeedback = AudioFeedback()
@@ -376,14 +380,19 @@ final class MenuBarViewModel: ObservableObject {
 
     // MARK: - Whisper Model
 
-    func setWhisperModel(_ model: WhisperModel) {
-        guard appState == .idle else { return }
-        guard model.rawValue != configService.whisperModel else { return }
+    /// Switches to `model`, reloading it live. Returns the `Task` doing the work
+    /// (nil if the switch was skipped — already idle-blocked, or already on
+    /// `model`) so tests can await its completion instead of polling `appState`.
+    /// Production callers can ignore the return value.
+    @discardableResult
+    func setWhisperModel(_ model: WhisperModel) -> Task<Void, Never>? {
+        guard appState == .idle else { return nil }
+        guard model.rawValue != configService.whisperModel else { return nil }
 
         let previousModel = WhisperModel(rawValue: configService.whisperModel) ?? .small
         appState = .loading
 
-        Task { @MainActor in
+        return Task { @MainActor in
             do {
                 try await transcriber.reload(model: model)
                 // Only persist the new model once it has actually loaded.
