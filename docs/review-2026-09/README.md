@@ -32,7 +32,23 @@ No deprecations under Xcode 26. Zero TODO/FIXME. But:
 - Test target hand-copies `AppConfig` (exec target not `@testable`). Copy drifted — missing `formatSelection`. Zero tests on `Transcriber`.
 - Parakeet TDT v3 sv FLEURS 16.8% — worse than KB-Whisper small. Not a Swedish answer. English-only win.
 
-## Proposed Order (user decides)
+## Status — first update shipped 2026-09-15
+
+PR #13 `fix/review-2026-09` → main. 15 commits, skeptic-approved (opus, 3 rounds). 235 tests green under `swift test` + `xcodebuild test` (ad-hoc signing overrides).
+
+| Item | Status |
+|---|---|
+| 1. Register Muter files, CI `xcodebuild` | ✅ 33c85b3, 0b117b6, 7ea0d1a |
+| 2. WhisperKit → argmax-oss-swift 1.1.0, lockfiles agree | ✅ c358015 (needed explicit `.product(name:package:)` — SPM byName fails vs renamed pkg) |
+| 3. `TranscriptionEngine` + `repo`/`variant` + live reload | ✅ 846dd6f, 3f5ec14, bd1bd81 (skeptic caught failed-reload regression → fallback to previous model) |
+| 6a. Tests `@testable import`, `cleanSegments` tests, view-model tests | ✅ 0d467fe, e1cb0c1, 45843a0, f555dc9 |
+| 4. Model swap + KB-Whisper tier | ⏳ update 2 |
+| 5. `DictationTranscriber` experiment | ⏳ update 2 |
+| 6b. `DiktaCore` target, paste off MainActor, `medium` download UX | ⏳ update 2 |
+
+New follow-ups from skeptic: replace `isRunningUnderXCTest` guard in `MenuBarViewModel` with defaulted init param; align DiktaTests signing with app target (Manual/Developer ID vs Automatic). Note: `.claude/worktrees/` in dikta has 3 stale locked agent worktrees at 608b669 from earlier runs — cleanup candidate.
+
+## Proposed Order (original)
 
 1. **Unblock release.** Register 4 Muter files in pbxproj. Add CI step: `xcodebuild build` (SPM alone hides this class of bug). Effort: XS.
 2. **Unify WhisperKit pin → argmax-oss-swift 1.1.0** in Package.swift + pbxproj. Effort: S. No code changes.
