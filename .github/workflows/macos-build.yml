@@ -46,3 +46,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild -project Dikta.xcodeproj -scheme Dikta -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
+
+      # App target uses manual Developer ID signing; DiktaTests is automatic. Override both to ad-hoc so the test bundle can load into the host.
+      - name: xcodebuild test (ad-hoc signing)
+        run: xcodebuild -project Dikta.xcodeproj -scheme Dikta -destination 'platform=macOS' test CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= CODE_SIGNING_REQUIRED=NO
