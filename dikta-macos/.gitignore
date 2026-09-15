@@ -14,3 +14,9 @@ WhisperModels/
 
 # macOS
 .DS_Store
+
+# DiktaBench
+bench/data/
+bench/.venv/
+bench/results/*
+!bench/results/.gitkeep

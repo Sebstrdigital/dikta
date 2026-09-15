@@ -1,0 +1,6 @@
+# Pinned <4.0: datasets>=4.0 requires torchcodec (+ torch, + system ffmpeg) for
+# Audio feature decoding. 3.6.0 decodes via soundfile/librosa, no torch needed.
+datasets==3.6.0
+soundfile>=0.12
+librosa>=0.10   # datasets' Audio(sampling_rate=...) resample path needs this
+jiwer>=3.0
