@@ -371,12 +371,14 @@ final class MenuBarViewModel: ObservableObject {
         guard appState == .idle else { return }
         guard model.rawValue != configService.whisperModel else { return }
 
-        configService.whisperModel = model.rawValue
+        let previousModel = WhisperModel(rawValue: configService.whisperModel) ?? .small
         appState = .loading
 
         Task { @MainActor in
             do {
                 try await transcriber.reload(model: model)
+                // Only persist the new model once it has actually loaded.
+                configService.whisperModel = model.rawValue
                 appState = .idle
                 sendNotification(
                     title: "Model Changed",
@@ -384,11 +386,25 @@ final class MenuBarViewModel: ObservableObject {
                     isRoutine: true
                 )
             } catch {
-                appState = .idle
-                sendNotification(
-                    title: "Error",
-                    body: "Failed to switch model: \(error.localizedDescription)"
-                )
+                // The new model failed to load. Fall back to the model that was
+                // working before, so recording (which requires appState == .idle)
+                // doesn't stay broken until an app restart.
+                do {
+                    try await transcriber.reload(model: previousModel)
+                    appState = .idle
+                    sendNotification(
+                        title: "Error",
+                        body: "Could not load \(model.displayName), kept \(previousModel.displayName)."
+                    )
+                } catch {
+                    // Fallback also failed: mirror the startup-failure path
+                    // (initialize()) by staying out of .idle rather than
+                    // pretending the app is ready to record with no model loaded.
+                    sendNotification(
+                        title: "Error",
+                        body: transcriber.errorMessage ?? "Failed to load Whisper model"
+                    )
+                }
             }
         }
     }

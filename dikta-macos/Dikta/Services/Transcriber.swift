@@ -33,7 +33,9 @@ final class Transcriber: ObservableObject, TranscriptionEngine {
     /// Unload the current model (if any) and load `model` in its place, so the
     /// active model can be switched without an app restart.
     func reload(model: WhisperModel) async throws {
-        guard !isLoading else { return }
+        guard !isLoading else {
+            throw TranscriberError.reloadInProgress
+        }
 
         whisperKit = nil
         isReady = false
@@ -131,6 +133,9 @@ final class Transcriber: ObservableObject, TranscriptionEngine {
             )
         }
 
+        let validSegmentCount = allSegments.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }.count
+        AppLogger.transcription.info("Valid segments: \(validSegmentCount) of \(allSegments.count)")
+
         // Diagnostic file log: one compact line with per-segment scores and text
         let noSpeechProbs = allSegments.map { String(format: "%.2f", $0.noSpeechProb) }.joined(separator: ",")
         let logProbs = allSegments.map { String(format: "%.1f", $0.avgLogprob) }.joined(separator: ",")
@@ -138,7 +143,7 @@ final class Transcriber: ObservableObject, TranscriptionEngine {
 
         let text = Self.cleanSegments(allSegments.map { TranscriptSegment(text: $0.text) })
 
-        DiagnosticLogger.shared.log("WHISPER | segs=\(allSegments.count) | noSpeech=[\(noSpeechProbs)] | logProb=[\(logProbs)] | texts=[\(segTexts)]")
+        DiagnosticLogger.shared.log("WHISPER | segs=\(allSegments.count) valid=\(validSegmentCount) | noSpeech=[\(noSpeechProbs)] | logProb=[\(logProbs)] | texts=[\(segTexts)]")
         DiagnosticLogger.shared.log("WHISPER_CLEAN | text=\"\(text)\"")
 
         if text.isEmpty {
@@ -172,6 +177,7 @@ enum TranscriberError: Error, LocalizedError {
     case emptyAudio
     case noSpeechDetected
     case reloadFailed(String)
+    case reloadInProgress
 
     var errorDescription: String? {
         switch self {
@@ -183,6 +189,8 @@ enum TranscriberError: Error, LocalizedError {
             return "No speech detected in recording"
         case .reloadFailed(let message):
             return message
+        case .reloadInProgress:
+            return "A model reload is already in progress"
         }
     }
 }
