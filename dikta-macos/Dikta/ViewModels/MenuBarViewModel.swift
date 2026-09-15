@@ -27,7 +27,11 @@ final class MenuBarViewModel: ObservableObject {
     // Services
     let configService: ConfigService
     private var cancellables = Set<AnyCancellable>()
-    private let transcriber: any TranscriptionEngine
+    private var transcriber: any TranscriptionEngine
+    /// Builds a `TranscriptionEngine` for a given kind/model. Defaults to
+    /// `TranscriptionEngineFactory.make`; tests inject a fake so `setEngine`
+    /// can be exercised without touching WhisperKit or Speech.
+    private let engineFactory: (TranscriptionEngineKind, WhisperModel, ConfigService) -> any TranscriptionEngine
     private let audioRecorder: AudioRecorder
     private let audioFeedback: AudioFeedback
     private let clipboardManager: ClipboardManager
@@ -58,14 +62,24 @@ final class MenuBarViewModel: ObservableObject {
     let hotkeyWindowController = HotkeyRecordingWindowController()
 
     /// - Parameters:
-    ///   - engine: Transcription engine to use. Defaults to a real WhisperKit-backed
-    ///     `Transcriber` built from the saved config; tests can inject a fake instead.
+    ///   - engine: Transcription engine to use. Defaults to one built by
+    ///     `engineFactory` from the saved config's engine kind; tests can
+    ///     inject a fake instead.
     ///   - configService: Config store to use. Defaults to `.shared` (the real, persisted
     ///     config); tests can inject an isolated instance instead.
-    init(engine: (any TranscriptionEngine)? = nil, configService: ConfigService? = nil) {
+    ///   - engineFactory: Builds the default `engine` when none is injected, and
+    ///     builds every engine `setEngine` switches to. Defaults to
+    ///     `TranscriptionEngineFactory.make`; tests inject a fake factory.
+    init(
+        engine: (any TranscriptionEngine)? = nil,
+        configService: ConfigService? = nil,
+        engineFactory: @escaping (TranscriptionEngineKind, WhisperModel, ConfigService) -> any TranscriptionEngine = TranscriptionEngineFactory.make
+    ) {
         let configService = configService ?? .shared
         self.configService = configService
-        self.transcriber = engine ?? Transcriber(model: WhisperModel(rawValue: configService.whisperModel) ?? .small)
+        self.engineFactory = engineFactory
+        let model = WhisperModel(rawValue: configService.whisperModel) ?? .small
+        self.transcriber = engine ?? engineFactory(configService.engine, model, configService)
         self.audioRecorder = AudioRecorder()
         self.audioFeedback = AudioFeedback()
         self.clipboardManager = ClipboardManager()
@@ -98,16 +112,22 @@ final class MenuBarViewModel: ObservableObject {
         }
     }
 
-    /// Runs `work` (a `transcriber.load()`/`reload(model:)` call) while mirroring
-    /// `transcriber.downloadProgress` into `downloadProgress` on a short poll, so
+    /// Runs `work` (a `load()`/`reload(model:)` call on `engine`) while mirroring
+    /// `engine.downloadProgress` into `downloadProgress` on a short poll, so
     /// a menu re-render picks up the current download percentage. Polling (rather
-    /// than a Combine subscription) is used because `transcriber` is held as
+    /// than a Combine subscription) is used because engines are held as
     /// `any TranscriptionEngine` for testability, which doesn't expose a publisher.
     /// Always resets `downloadProgress` to nil when `work` finishes, success or not.
-    private func withDownloadProgressPolling<T>(_ work: () async throws -> T) async rethrows -> T {
+    ///
+    /// `engine` defaults to the currently active `transcriber`, which is what
+    /// every call site wants except `setEngine` — that one is loading a brand
+    /// new engine instance that isn't `transcriber` yet, so it passes that
+    /// instance explicitly.
+    private func withDownloadProgressPolling<T>(observing engine: (any TranscriptionEngine)? = nil, _ work: () async throws -> T) async rethrows -> T {
+        let engine = engine ?? transcriber
         let pollingTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                self?.downloadProgress = self?.transcriber.downloadProgress
+                self?.downloadProgress = engine.downloadProgress
                 try? await Task.sleep(nanoseconds: 150_000_000) // 150ms
             }
         }
@@ -453,6 +473,55 @@ final class MenuBarViewModel: ObservableObject {
                         body: transcriber.errorMessage ?? "Failed to load Whisper model"
                     )
                 }
+            }
+        }
+    }
+
+    // MARK: - Transcription Engine
+
+    /// Switches the active transcription engine to `kind`. Returns the `Task`
+    /// doing the work (nil if the switch was skipped — already idle-blocked,
+    /// or already on `kind`) so tests can await its completion instead of
+    /// polling `appState`. Production callers can ignore the return value.
+    ///
+    /// Unlike `setWhisperModel` (which reloads WhisperKit's *same* long-lived
+    /// instance in place), this builds a brand new engine via `engineFactory`
+    /// and only swaps `transcriber` to it once its `load()` has actually
+    /// succeeded. The previous engine is never touched, so on failure it's
+    /// still loaded and ready — "falling back" to it is just not swapping,
+    /// with no extra reload step needed.
+    @discardableResult
+    func setEngine(_ kind: TranscriptionEngineKind) -> Task<Void, Never>? {
+        guard appState == .idle else { return nil }
+        guard kind != configService.engine else { return nil }
+
+        let previousKind = configService.engine
+        let model = WhisperModel(rawValue: configService.whisperModel) ?? .small
+        appState = .loading
+
+        return Task { @MainActor in
+            let newEngine = engineFactory(kind, model, configService)
+            await withDownloadProgressPolling(observing: newEngine) {
+                await newEngine.load()
+            }
+
+            if newEngine.isReady {
+                transcriber = newEngine
+                // Only persist the new engine once it has actually loaded.
+                configService.engine = kind
+                appState = .idle
+                sendNotification(
+                    title: "Engine Changed",
+                    body: "Switched to \(kind.displayName).",
+                    isRoutine: true
+                )
+            } else {
+                appState = .idle
+                let detail = newEngine.errorMessage.map { " \($0)" } ?? ""
+                sendNotification(
+                    title: "Error",
+                    body: "Could not switch to \(kind.displayName), kept \(previousKind.displayName).\(detail)"
+                )
             }
         }
     }
