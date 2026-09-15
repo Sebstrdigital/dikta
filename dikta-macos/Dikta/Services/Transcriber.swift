@@ -1,12 +1,10 @@
 import Foundation
 import WhisperKit
 
-/// A segment's text and no-speech confidence, decoupled from WhisperKit's own
-/// `TranscriptionSegment` type so `Transcriber.cleanSegments` can be unit tested
-/// without linking WhisperKit.
+/// A segment's text, decoupled from WhisperKit's own `TranscriptionSegment` type
+/// so `Transcriber.cleanSegments` can be unit tested without linking WhisperKit.
 struct TranscriptSegment {
     let text: String
-    let noSpeechProb: Float
 }
 
 /// Service for transcribing audio using WhisperKit.
@@ -138,10 +136,7 @@ final class Transcriber: ObservableObject, TranscriptionEngine {
         let logProbs = allSegments.map { String(format: "%.1f", $0.avgLogprob) }.joined(separator: ",")
         let segTexts = allSegments.map { "\"\($0.text.trimmingCharacters(in: .whitespaces))\"" }.joined(separator: ",")
 
-        let text = Self.cleanSegments(
-            allSegments.map { TranscriptSegment(text: $0.text, noSpeechProb: $0.noSpeechProb) },
-            noSpeechThreshold: micSensitivity.noSpeechThreshold
-        )
+        let text = Self.cleanSegments(allSegments.map { TranscriptSegment(text: $0.text) })
 
         DiagnosticLogger.shared.log("WHISPER | segs=\(allSegments.count) | noSpeech=[\(noSpeechProbs)] | logProb=[\(logProbs)] | texts=[\(segTexts)]")
         DiagnosticLogger.shared.log("WHISPER_CLEAN | text=\"\(text)\"")
@@ -154,14 +149,11 @@ final class Transcriber: ObservableObject, TranscriptionEngine {
     }
 
     /// Strip Whisper control tokens and bracket noise tokens, drop empty/whitespace
-    /// segments and segments Whisper itself flagged as likely silence (`noSpeechProb`
-    /// at or above `noSpeechThreshold`), and join what remains into one string.
+    /// segments, and join what remains into one string.
     ///
     /// Pure function — no WhisperKit dependency — so it can be unit tested directly.
-    static func cleanSegments(_ segments: [TranscriptSegment], noSpeechThreshold: Float) -> String {
-        let validSegments = segments.filter {
-            !$0.text.trimmingCharacters(in: .whitespaces).isEmpty && $0.noSpeechProb < noSpeechThreshold
-        }
+    static func cleanSegments(_ segments: [TranscriptSegment]) -> String {
+        let validSegments = segments.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
 
         return validSegments.map { segment in
             // Strip Whisper control tokens (e.g. <|startoftranscript|>, <|en|>, <|0.00|>, <|endoftext|>)
