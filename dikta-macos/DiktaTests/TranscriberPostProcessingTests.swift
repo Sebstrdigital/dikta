@@ -100,3 +100,24 @@ final class WhisperModelDecodingTests: XCTestCase {
         XCTAssertTrue(model.isRecommended)
     }
 }
+
+// MARK: - Transcriber disk-space guard
+
+/// Proves `Transcriber` refuses to start a download when the injected
+/// free-space provider reports too little free space, without touching the
+/// network or a real WhisperKit model. `getBundledModelPath` naturally returns
+/// nil in the test bundle (no `WhisperModels/` resource), so `loadModel`
+/// reaches the disk-space check on the download path.
+@MainActor
+final class TranscriberDiskSpaceTests: XCTestCase {
+    func test_load_refusesWhenFreeSpaceBelowTwiceModelSize() async {
+        let transcriber = Transcriber(model: .turbo, freeDiskSpaceProvider: { 1_000 }) // 1 KB, nowhere near enough
+
+        await transcriber.load()
+
+        XCTAssertFalse(transcriber.isReady)
+        XCTAssertNil(transcriber.downloadProgress)
+        let message = try? XCTUnwrap(transcriber.errorMessage)
+        XCTAssertTrue(message?.contains("disk space") ?? false, "expected a disk-space error, got: \(transcriber.errorMessage ?? "nil")")
+    }
+}

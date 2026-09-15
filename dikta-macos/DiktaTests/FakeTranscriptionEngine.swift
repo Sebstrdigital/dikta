@@ -8,6 +8,7 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     private(set) var isLoading = false
     private(set) var isReady = false
     private(set) var errorMessage: String?
+    var downloadProgress: Double?
 
     /// Models (by rawValue) whose `reload(model:)` should fail.
     var modelsThatFail: Set<String> = []
