@@ -27,6 +27,14 @@ struct MenuBarView: View {
             } else if viewModel.appState == .processing {
                 Text("Processing...")
                     .foregroundColor(.secondary)
+            } else if viewModel.appState == .loading {
+                if let progress = viewModel.downloadProgress {
+                    Text("Downloading model… \(Int(progress * 100))%")
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Loading model...")
+                        .foregroundColor(.secondary)
+                }
             }
 
             // History submenu
@@ -198,12 +206,12 @@ struct AdvancedMenu: View {
             Divider()
 
             Menu("Whisper Model: \(currentModel.displayName)") {
-                ForEach(WhisperModel.allCases, id: \.self) { model in
+                ForEach(WhisperModel.allCases.sorted(by: { $0.sortOrder < $1.sortOrder }), id: \.self) { model in
                     Button(action: {
                         viewModel.setWhisperModel(model)
                     }) {
                         HStack {
-                            Text(model.displayName)
+                            Text(model.isRecommended ? "\(model.displayName) ★" : model.displayName)
                             if currentModel == model {
                                 Spacer()
                                 Image(systemName: "checkmark")

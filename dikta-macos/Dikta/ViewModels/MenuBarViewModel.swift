@@ -18,6 +18,10 @@ enum AppState {
 final class MenuBarViewModel: ObservableObject {
     // State
     @Published var appState: AppState = .loading
+    /// Fraction (0...1) of an in-progress Whisper model download, mirrored from
+    /// `transcriber.downloadProgress` while `appState == .loading`. Nil when no
+    /// download is happening (bundled load, or not currently loading at all).
+    @Published private(set) var downloadProgress: Double?
     static var isModelLoaded = false
 
     // Services
@@ -94,6 +98,26 @@ final class MenuBarViewModel: ObservableObject {
         }
     }
 
+    /// Runs `work` (a `transcriber.load()`/`reload(model:)` call) while mirroring
+    /// `transcriber.downloadProgress` into `downloadProgress` on a short poll, so
+    /// a menu re-render picks up the current download percentage. Polling (rather
+    /// than a Combine subscription) is used because `transcriber` is held as
+    /// `any TranscriptionEngine` for testability, which doesn't expose a publisher.
+    /// Always resets `downloadProgress` to nil when `work` finishes, success or not.
+    private func withDownloadProgressPolling<T>(_ work: () async throws -> T) async rethrows -> T {
+        let pollingTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                self?.downloadProgress = self?.transcriber.downloadProgress
+                try? await Task.sleep(nanoseconds: 150_000_000) // 150ms
+            }
+        }
+        defer {
+            pollingTask.cancel()
+            downloadProgress = nil
+        }
+        return try await work()
+    }
+
     /// Initialize the app (load models, check permissions, etc.)
     func initialize() async {
         appState = .loading
@@ -113,7 +137,9 @@ final class MenuBarViewModel: ObservableObject {
         }
 
         // Load Whisper model
-        await transcriber.load()
+        await withDownloadProgressPolling {
+            await transcriber.load()
+        }
 
         if transcriber.isReady {
             appState = .idle
@@ -394,7 +420,9 @@ final class MenuBarViewModel: ObservableObject {
 
         return Task { @MainActor in
             do {
-                try await transcriber.reload(model: model)
+                try await withDownloadProgressPolling {
+                    try await transcriber.reload(model: model)
+                }
                 // Only persist the new model once it has actually loaded.
                 configService.whisperModel = model.rawValue
                 appState = .idle
@@ -408,7 +436,9 @@ final class MenuBarViewModel: ObservableObject {
                 // working before, so recording (which requires appState == .idle)
                 // doesn't stay broken until an app restart.
                 do {
-                    try await transcriber.reload(model: previousModel)
+                    try await withDownloadProgressPolling {
+                        try await transcriber.reload(model: previousModel)
+                    }
                     appState = .idle
                     sendNotification(
                         title: "Error",

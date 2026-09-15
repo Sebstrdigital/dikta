@@ -15,6 +15,10 @@ protocol TranscriptionEngine: AnyObject {
     var isReady: Bool { get }
     /// Set when the most recent load/reload attempt failed.
     var errorMessage: String? { get }
+    /// Fraction (0...1) of an in-progress model download, or nil when no
+    /// download is happening (including while a bundled model loads, which
+    /// never downloads).
+    var downloadProgress: Double? { get }
 
     /// Load the currently configured model. No-op if already loading or ready.
     func load() async
