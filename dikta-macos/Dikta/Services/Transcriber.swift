@@ -22,6 +22,15 @@ final class Transcriber: ObservableObject, TranscriptionEngine {
     private var model: WhisperModel
     private let freeDiskSpaceProvider: () -> Int64
 
+    /// Bumped at the start and end of every `loadModel` call. `progressCallback`
+    /// hops to `@MainActor` asynchronously (it's invoked from WhisperKit's
+    /// download machinery, possibly off-MainActor), so a hop queued just before
+    /// `loadModel` finishes can otherwise land *after* the end-of-call
+    /// `downloadProgress = nil` reset and resurrect a stale percentage on an
+    /// already-finished (or already-superseded) load. Each hop captures the
+    /// generation it was scheduled under and is a no-op unless it still matches.
+    private var downloadGeneration = 0
+
     /// - Parameter freeDiskSpaceProvider: Returns bytes free on the volume that
     ///   will hold a downloaded model. Defaults to a real filesystem probe;
     ///   tests inject a fixed value to exercise the disk-space guard without
@@ -61,6 +70,8 @@ final class Transcriber: ObservableObject, TranscriptionEngine {
     private func loadModel(_ model: WhisperModel) async {
         isLoading = true
         errorMessage = nil
+        downloadGeneration += 1
+        let generation = downloadGeneration
         downloadProgress = nil
 
         do {
@@ -96,7 +107,8 @@ final class Transcriber: ObservableObject, TranscriptionEngine {
                     progressCallback: { [weak self] progress in
                         let fraction = progress.fractionCompleted
                         Task { @MainActor in
-                            self?.downloadProgress = fraction
+                            guard let self, self.downloadGeneration == generation else { return }
+                            self.downloadProgress = fraction
                         }
                     }
                 )
@@ -117,6 +129,11 @@ final class Transcriber: ObservableObject, TranscriptionEngine {
             AppLogger.transcription.error("Whisper model loading error: \(error.localizedDescription)")
         }
 
+        // Bump the generation *before* clearing downloadProgress so any hop
+        // still in flight for this (now-finished) load compares stale and
+        // no-ops, rather than potentially landing after this reset and
+        // resurrecting a stray percentage.
+        downloadGeneration += 1
         downloadProgress = nil
         isLoading = false
     }
