@@ -23,15 +23,22 @@ final class MenuBarViewModel: ObservableObject {
     /// download is happening (bundled load, or not currently loading at all).
     @Published private(set) var downloadProgress: Double?
     static var isModelLoaded = false
+    /// Which engine is actually active. Normally mirrors `configService.engine`,
+    /// but can differ right after a factory substitution (e.g. `.appleDictation`
+    /// requested on a pre-macOS 26 system, silently built as Whisper instead) —
+    /// UI must read this, not `configService.engine`, to never claim an engine
+    /// that isn't the one actually running.
+    @Published private(set) var activeEngineKind: TranscriptionEngineKind
 
     // Services
     let configService: ConfigService
     private var cancellables = Set<AnyCancellable>()
     private var transcriber: any TranscriptionEngine
-    /// Builds a `TranscriptionEngine` for a given kind/model. Defaults to
-    /// `TranscriptionEngineFactory.make`; tests inject a fake so `setEngine`
-    /// can be exercised without touching WhisperKit or Speech.
-    private let engineFactory: (TranscriptionEngineKind, WhisperModel, ConfigService) -> any TranscriptionEngine
+    /// Builds a `TranscriptionEngine` for a given kind/model, returning the
+    /// engine plus the kind actually built (see `TranscriptionEngineFactory.make`).
+    /// Defaults to `TranscriptionEngineFactory.make`; tests inject a fake so
+    /// `setEngine` can be exercised without touching WhisperKit or Speech.
+    private let engineFactory: (TranscriptionEngineKind, WhisperModel, ConfigService) -> (engine: any TranscriptionEngine, effectiveKind: TranscriptionEngineKind)
     private let audioRecorder: AudioRecorder
     private let audioFeedback: AudioFeedback
     private let clipboardManager: ClipboardManager
@@ -73,13 +80,33 @@ final class MenuBarViewModel: ObservableObject {
     init(
         engine: (any TranscriptionEngine)? = nil,
         configService: ConfigService? = nil,
-        engineFactory: @escaping (TranscriptionEngineKind, WhisperModel, ConfigService) -> any TranscriptionEngine = TranscriptionEngineFactory.make
+        engineFactory: @escaping (TranscriptionEngineKind, WhisperModel, ConfigService) -> (engine: any TranscriptionEngine, effectiveKind: TranscriptionEngineKind) = TranscriptionEngineFactory.make
     ) {
         let configService = configService ?? .shared
         self.configService = configService
         self.engineFactory = engineFactory
         let model = WhisperModel(rawValue: configService.whisperModel) ?? .small
-        self.transcriber = engine ?? engineFactory(configService.engine, model, configService)
+
+        let requestedKind = configService.engine
+        let initialEngine: any TranscriptionEngine
+        let effectiveKind: TranscriptionEngineKind
+        if let engine {
+            // An injected engine is assumed to already match the requested
+            // kind — there's no factory call to report otherwise.
+            initialEngine = engine
+            effectiveKind = requestedKind
+        } else {
+            (initialEngine, effectiveKind) = engineFactory(requestedKind, model, configService)
+        }
+        self.transcriber = initialEngine
+        self.activeEngineKind = effectiveKind
+        if effectiveKind != requestedKind {
+            // The factory silently substituted a different engine than
+            // requested (e.g. Apple Dictation asked for on a pre-macOS 26
+            // config). Persist what's actually running so the menu/config
+            // never claims an engine that isn't the one in use.
+            configService.engine = effectiveKind
+        }
         self.audioRecorder = AudioRecorder()
         self.audioFeedback = AudioFeedback()
         self.clipboardManager = ClipboardManager()
@@ -561,26 +588,29 @@ final class MenuBarViewModel: ObservableObject {
     @discardableResult
     func setEngine(_ kind: TranscriptionEngineKind) -> Task<Void, Never>? {
         guard appState == .idle else { return nil }
-        guard kind != configService.engine else { return nil }
+        guard kind != activeEngineKind else { return nil }
 
-        let previousKind = configService.engine
+        let previousKind = activeEngineKind
         let model = WhisperModel(rawValue: configService.whisperModel) ?? .small
         appState = .loading
 
         return Task { @MainActor in
-            let newEngine = engineFactory(kind, model, configService)
+            let (newEngine, effectiveKind) = engineFactory(kind, model, configService)
             await withDownloadProgressPolling(observing: newEngine) {
                 await newEngine.load()
             }
 
             if newEngine.isReady {
                 transcriber = newEngine
+                activeEngineKind = effectiveKind
                 // Only persist the new engine once it has actually loaded.
-                configService.engine = kind
+                // Persist effectiveKind (not kind) so config never claims an
+                // engine that isn't the one actually running.
+                configService.engine = effectiveKind
                 appState = .idle
                 sendNotification(
                     title: "Engine Changed",
-                    body: "Switched to \(kind.displayName).",
+                    body: "Switched to \(effectiveKind.displayName).",
                     isRoutine: true
                 )
             } else {

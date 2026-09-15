@@ -183,11 +183,11 @@ struct EngineMenu: View {
     @ObservedObject var viewModel: MenuBarViewModel
 
     var body: some View {
-        Menu("Engine: \(viewModel.configService.engine.displayName)") {
+        Menu("Engine: \(viewModel.activeEngineKind.displayName)") {
             Button(action: { viewModel.setEngine(.whisper) }) {
                 HStack {
                     Text(TranscriptionEngineKind.whisper.displayName)
-                    if viewModel.configService.engine == .whisper {
+                    if viewModel.activeEngineKind == .whisper {
                         Spacer()
                         Image(systemName: "checkmark")
                     }
@@ -198,7 +198,7 @@ struct EngineMenu: View {
                 Button(action: { viewModel.setEngine(.appleDictation) }) {
                     HStack {
                         Text(TranscriptionEngineKind.appleDictation.displayName)
-                        if viewModel.configService.engine == .appleDictation {
+                        if viewModel.activeEngineKind == .appleDictation {
                             Spacer()
                             Image(systemName: "checkmark")
                         }
@@ -240,7 +240,7 @@ struct AdvancedMenu: View {
 
             EngineMenu(viewModel: viewModel)
 
-            let isWhisperActive = viewModel.configService.engine == .whisper
+            let isWhisperActive = viewModel.activeEngineKind == .whisper
             Menu(isWhisperActive ? "Whisper Model: \(currentModel.displayName)" : "Whisper Model (switch to Whisper engine to change)") {
                 ForEach(WhisperModel.allCases.sorted(by: { $0.sortOrder < $1.sortOrder }), id: \.self) { model in
                     Button(action: {

@@ -37,11 +37,27 @@ final class MenuBarViewModelSetEngineTests: XCTestCase {
         }
     }
 
+    /// Same substitution guarantee as `test_setEngine_factorySubstitutesEffectiveKind_persistsEffectiveNotRequested`,
+    /// but exercised via `init` (no `engine:` injected, so `init` itself must
+    /// call `engineFactory` and reconcile the result) rather than `setEngine`.
+    func test_init_factorySubstitutesEffectiveKind_persistsEffectiveNotRequested() async {
+        configService.engine = .appleDictation
+        let builtEngine = FakeTranscriptionEngine()
+        let viewModel = MenuBarViewModel(configService: configService) { requestedKind, _, _ in
+            XCTAssertEqual(requestedKind, .appleDictation)
+            return (builtEngine, .whisper)
+        }
+        await waitUntil { viewModel.appState == .idle }
+
+        XCTAssertEqual(viewModel.activeEngineKind, .whisper)
+        XCTAssertEqual(configService.engine, .whisper)
+    }
+
     func test_setEngine_success() async {
         let initialEngine = FakeTranscriptionEngine()
         let nextEngine = FakeTranscriptionEngine()
         let viewModel = MenuBarViewModel(engine: initialEngine, configService: configService) { _, _, _ in
-            nextEngine
+            (nextEngine, .appleDictation)
         }
         await waitUntil { viewModel.appState == .idle }
 
@@ -51,6 +67,7 @@ final class MenuBarViewModelSetEngineTests: XCTestCase {
         await task.value
 
         XCTAssertEqual(configService.engine, .appleDictation)
+        XCTAssertEqual(viewModel.activeEngineKind, .appleDictation)
         XCTAssertEqual(viewModel.appState, .idle)
         XCTAssertEqual(nextEngine.loadCallCount, 1)
     }
@@ -60,7 +77,7 @@ final class MenuBarViewModelSetEngineTests: XCTestCase {
         let failingEngine = FakeTranscriptionEngine()
         failingEngine.shouldFailLoad = true
         let viewModel = MenuBarViewModel(engine: initialEngine, configService: configService) { _, _, _ in
-            failingEngine
+            (failingEngine, .appleDictation)
         }
         await waitUntil { viewModel.appState == .idle }
 
@@ -74,6 +91,7 @@ final class MenuBarViewModelSetEngineTests: XCTestCase {
         // failed switch (unlike setWhisperModel, which must reload the same
         // shared instance back), so "falling back" to it needs no further step.
         XCTAssertEqual(configService.engine, .whisper)
+        XCTAssertEqual(viewModel.activeEngineKind, .whisper)
         XCTAssertEqual(viewModel.appState, .idle)
         XCTAssertEqual(failingEngine.loadCallCount, 1)
     }
@@ -81,12 +99,37 @@ final class MenuBarViewModelSetEngineTests: XCTestCase {
     func test_setEngine_alreadyOnRequestedKind_returnsNilAndSkips() async {
         let initialEngine = FakeTranscriptionEngine()
         let viewModel = MenuBarViewModel(engine: initialEngine, configService: configService) { _, _, _ in
-            FakeTranscriptionEngine()
+            (FakeTranscriptionEngine(), .whisper)
         }
         await waitUntil { viewModel.appState == .idle }
 
-        // configService.engine defaults to .whisper; requesting .whisper again
-        // should be a no-op, not a redundant reload.
+        // The active engine kind defaults to .whisper; requesting .whisper
+        // again should be a no-op, not a redundant reload.
         XCTAssertNil(viewModel.setEngine(.whisper))
+    }
+
+    /// When the factory substitutes a different engine than requested (e.g.
+    /// Apple Dictation asked for but unavailable, so the factory silently
+    /// builds Whisper instead), the view model must persist and expose the
+    /// *effective* kind, not the one that was requested — otherwise the menu
+    /// would claim Apple Dictation is active while Whisper is what's running.
+    func test_setEngine_factorySubstitutesEffectiveKind_persistsEffectiveNotRequested() async {
+        let initialEngine = FakeTranscriptionEngine()
+        let substitutedEngine = FakeTranscriptionEngine()
+        let viewModel = MenuBarViewModel(engine: initialEngine, configService: configService) { requestedKind, _, _ in
+            XCTAssertEqual(requestedKind, .appleDictation)
+            // Simulate TranscriptionEngineFactory.make's pre-macOS 26 fallback.
+            return (substitutedEngine, .whisper)
+        }
+        await waitUntil { viewModel.appState == .idle }
+
+        guard let task = viewModel.setEngine(.appleDictation) else {
+            return XCTFail("expected setEngine to start a switch")
+        }
+        await task.value
+
+        XCTAssertEqual(configService.engine, .whisper)
+        XCTAssertEqual(viewModel.activeEngineKind, .whisper)
+        XCTAssertEqual(viewModel.appState, .idle)
     }
 }
