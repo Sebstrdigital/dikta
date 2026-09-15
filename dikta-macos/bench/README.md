@@ -4,7 +4,7 @@ STT benchmark harness for Dikta. sv + en WER, RTF, load time. Repeatable.
 
 ## What's here
 
-- `../Bench/main.swift` — SPM executable `DiktaBench`. Loads a WhisperKit model
+- `DiktaBench/main.swift` — SPM executable `DiktaBench`. Loads a WhisperKit model
   by raw repo/variant string, transcribes every clip in a dir, writes
   `{file, text, seconds_audio, seconds_wall, model_load_seconds}` JSON lines.
 - `fetch_clips.py` — pulls a fixed seeded 20-clip sample per language from
