@@ -27,6 +27,14 @@ struct MenuBarView: View {
             } else if viewModel.appState == .processing {
                 Text("Processing...")
                     .foregroundColor(.secondary)
+            } else if viewModel.appState == .loading {
+                if let progress = viewModel.downloadProgress {
+                    Text("Downloading model… \(Int(progress * 100))%")
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Loading model...")
+                        .foregroundColor(.secondary)
+                }
             }
 
             // History submenu
