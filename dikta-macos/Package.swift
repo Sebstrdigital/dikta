@@ -37,11 +37,7 @@ let package = Package(
             dependencies: [
                 .product(name: "WhisperKit", package: "argmax-oss-swift"),
             ],
-            path: "Bench",
-            // "probes" is scratch work from a concurrent research task that happens
-            // to share this directory (case-insensitive filesystem merges Bench/ and
-            // bench/); it is not part of this target and must not be compiled into it.
-            exclude: ["probes", "data", "results", ".venv"]
+            path: "bench/DiktaBench"
         )
     ]
 )
