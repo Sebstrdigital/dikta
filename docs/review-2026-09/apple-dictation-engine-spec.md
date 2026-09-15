@@ -77,4 +77,4 @@ Numbers/dates/currency/times arrive normalized regardless. Must measure vs forma
 
 ## Probes
 
-Verified probe source copied to `dikta-macos/Bench/probes/apple-streamprobe.swift` (compile line in §1). Others (status/req/preset/reuse) were session-temp.
+Verified probe source copied to `dikta-macos/bench/probes/apple-streamprobe.swift` (compile line in §1). Others (status/req/preset/reuse) were session-temp.
