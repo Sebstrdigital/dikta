@@ -625,3 +625,16 @@ final class WhisperModelTests: XCTestCase {
         XCTAssertGreaterThan(WhisperModel.kbWhisperSmall.sortOrder, WhisperModel.medium.sortOrder)
     }
 }
+
+// MARK: - XCTest host detection
+
+/// Pins the mechanism that keeps the hosted app from building a real
+/// `Transcriber` (and starting Sparkle) during `xcodebuild test`. If a future
+/// toolchain makes `NSClassFromString("XCTestCase")` return nil under a hosted
+/// run, this fails instead of the suite silently starting network downloads.
+final class XCTestHostDetectionTests: XCTestCase {
+    @MainActor
+    func test_isRunningUnderXCTestHost_isTrueInsideTests() {
+        XCTAssertTrue(MenuBarViewModel.isRunningUnderXCTestHost)
+    }
+}

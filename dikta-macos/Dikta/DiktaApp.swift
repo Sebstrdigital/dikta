@@ -34,10 +34,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+/// No-op `TranscriptionEngine` used only when `Dikta.app` itself is acting as
+/// the unit-test host for `xcodebuild test -scheme Dikta` (a "Host Application"
+/// unit test bundle launches the real app first). In that case `DiktaApp`'s own
+/// `init` still runs for real, so without this, `MenuBarViewModel()` below would
+/// fall through to a real `Transcriber` and attempt a live WhisperKit model
+/// download as a side effect of the app launching — invisible on a dev machine
+/// with the model cached, but a hang/crash on a clean CI runner. Never touches
+/// WhisperKit or the network.
+@MainActor
+private final class NoOpTranscriptionEngine: TranscriptionEngine {
+    let isLoading = false
+    let isReady = true
+    let errorMessage: String? = nil
+    let downloadProgress: Double? = nil
+
+    func load() async {}
+    func reload(model: WhisperModel) async throws {}
+    func transcribe(_ audioSamples: [Float], language: String?, micSensitivity: MicSensitivity) async throws -> String { "" }
+}
+
 @main
 struct DiktaApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @StateObject private var viewModel = MenuBarViewModel()
+    @StateObject private var viewModel = MenuBarViewModel(
+        engine: MenuBarViewModel.isRunningUnderXCTestHost ? NoOpTranscriptionEngine() : nil
+    )
     @StateObject private var sparkle = SparkleController()
 
     init() {
