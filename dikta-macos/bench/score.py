@@ -147,6 +147,61 @@ def cmd_report(args: argparse.Namespace) -> None:
     print_table(summaries)
 
 
+_DIGIT_RE = re.compile(r"\d")
+
+
+def cmd_digits(args: argparse.Namespace) -> None:
+    """Report digit counts and WER restricted to clips whose reference has no
+    digits, for engines (e.g. Apple Dictation) that apply inverse text
+    normalization and turn spoken numbers/dates/currency into digits — which
+    otherwise pollutes aggregate WER with ITN-vs-spelled-out mismatches rather
+    than genuine transcription errors."""
+    results_path = Path(args.results)
+    refs_path = Path(args.refs)
+
+    results = {r["file"]: r for r in load_jsonl(results_path)}
+    refs = {r["file"]: r["reference"] for r in load_jsonl(refs_path)}
+
+    common_files = sorted(set(results) & set(refs))
+    missing_results = sorted(set(refs) - set(results))
+    missing_refs = sorted(set(results) - set(refs))
+    if missing_results:
+        print(f"WARNING: {len(missing_results)} ref file(s) have no bench result: {missing_results}", file=sys.stderr)
+    if missing_refs:
+        print(f"WARNING: {len(missing_refs)} bench result(s) have no reference: {missing_refs}", file=sys.stderr)
+    if not common_files:
+        print("ERROR: no overlapping files between results and refs", file=sys.stderr)
+        sys.exit(1)
+
+    ref_has_digits = sum(1 for f in common_files if _DIGIT_RE.search(refs[f]))
+    hyp_has_digits = sum(1 for f in common_files if _DIGIT_RE.search(results[f]["text"]))
+
+    no_digit_files = [f for f in common_files if not _DIGIT_RE.search(refs[f])]
+
+    references = []
+    hypotheses = []
+    empty_ref_files = []
+    for f in no_digit_files:
+        ref = normalize(refs[f])
+        if not ref:
+            empty_ref_files.append(f)
+            continue
+        references.append(ref)
+        hypotheses.append(normalize(results[f]["text"]))
+
+    if empty_ref_files:
+        print(f"WARNING: {len(empty_ref_files)} file(s) have an empty reference after normalization, skipped: {empty_ref_files}", file=sys.stderr)
+
+    wer_no_digit_refs = jiwer.wer(references, hypotheses) if references else float("nan")
+
+    print(
+        f"model={args.model} lang={args.lang} n_total={len(common_files)} "
+        f"ref_has_digits={ref_has_digits} hyp_has_digits={hyp_has_digits} "
+        f"n_no_digit_refs={len(references)} "
+        f"wer_no_digit_refs={wer_no_digit_refs * 100:.2f}%"
+    )
+
+
 def print_table(rows: list[dict]) -> None:
     header = f"{'model':<45} {'lang':<5} {'WER':>8} {'median RTF':>11} {'load s':>8}"
     print(header)
@@ -171,6 +226,16 @@ def main() -> None:
 
     p_report = sub.add_parser("report", help="print a table from all saved summaries")
     p_report.set_defaults(func=cmd_report)
+
+    p_digits = sub.add_parser(
+        "digits",
+        help="report digit-count stats and WER restricted to no-digit-reference clips (ITN check)",
+    )
+    p_digits.add_argument("--results", required=True)
+    p_digits.add_argument("--refs", required=True)
+    p_digits.add_argument("--model", required=True, help="model variant label, e.g. apple-dictation")
+    p_digits.add_argument("--lang", required=True, choices=["sv", "en"])
+    p_digits.set_defaults(func=cmd_digits)
 
     args = parser.parse_args()
     args.func(args)

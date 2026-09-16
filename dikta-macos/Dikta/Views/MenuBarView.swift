@@ -176,39 +176,6 @@ struct WriteInMenu: View {
     }
 }
 
-/// Transcription engine submenu. "Apple Dictation" is only offered on macOS 26+
-/// — `AppleDictationEngine` itself is `@available(macOS 26.0, *)`, so the menu
-/// must not let a pre-26 user select it in the first place.
-struct EngineMenu: View {
-    @ObservedObject var viewModel: MenuBarViewModel
-
-    var body: some View {
-        Menu("Engine: \(viewModel.activeEngineKind.displayName)") {
-            Button(action: { viewModel.setEngine(.whisper) }) {
-                HStack {
-                    Text(TranscriptionEngineKind.whisper.displayName)
-                    if viewModel.activeEngineKind == .whisper {
-                        Spacer()
-                        Image(systemName: "checkmark")
-                    }
-                }
-            }
-
-            if #available(macOS 26.0, *) {
-                Button(action: { viewModel.setEngine(.appleDictation) }) {
-                    HStack {
-                        Text(TranscriptionEngineKind.appleDictation.displayName)
-                        if viewModel.activeEngineKind == .appleDictation {
-                            Spacer()
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 /// Advanced settings submenu
 struct AdvancedMenu: View {
     @ObservedObject var viewModel: MenuBarViewModel
@@ -238,10 +205,7 @@ struct AdvancedMenu: View {
 
             Divider()
 
-            EngineMenu(viewModel: viewModel)
-
-            let isWhisperActive = viewModel.activeEngineKind == .whisper
-            Menu(isWhisperActive ? "Whisper Model: \(currentModel.displayName)" : "Whisper Model (switch to Whisper engine to change)") {
+            Menu("Whisper Model: \(currentModel.displayName)") {
                 ForEach(WhisperModel.allCases.sorted(by: { $0.sortOrder < $1.sortOrder }), id: \.self) { model in
                     Button(action: {
                         viewModel.setWhisperModel(model)
@@ -256,7 +220,6 @@ struct AdvancedMenu: View {
                     }
                 }
             }
-            .disabled(!isWhisperActive)
 
             Button(action: { viewModel.toggleDiagnosticLogging() }) {
                 HStack {

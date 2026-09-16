@@ -4,14 +4,18 @@ STT benchmark harness for Dikta. sv + en WER, RTF, load time. Repeatable.
 
 ## What's here
 
-- `DiktaBench/main.swift` — SPM executable `DiktaBench`. Loads a WhisperKit model
-  by raw repo/variant string, transcribes every clip in a dir, writes
+- `DiktaBench/main.swift` — SPM executable `DiktaBench`. `--engine whisper`
+  (default) loads a WhisperKit model by raw repo/variant string; `--engine
+  apple` drives Apple's on-device `DictationTranscriber` (Speech framework,
+  macOS 26+) instead, ignoring `--repo`/`--variant`. Either way it transcribes
+  every clip in a dir and writes
   `{file, text, seconds_audio, seconds_wall, model_load_seconds}` JSON lines.
 - `fetch_clips.py` — pulls a fixed seeded 20-clip sample per language from
   `google/fleurs` (sv_se, en_us, test split) via HF streaming. Idempotent.
 - `score.py` — normalises text (lowercase, strip punctuation, collapse
   whitespace, NFC, keeps åäö), computes aggregate WER with `jiwer`, prints a
-  table, writes a timestamped summary JSON per run.
+  table, writes a timestamped summary JSON per run. Also has a `digits`
+  subcommand for engines that apply inverse text normalization (see below).
 - `run.sh` — runs the whole pipeline: fetch -> transcribe -> score -> report.
 
 ## Run it
@@ -29,9 +33,21 @@ your own repo/variant pairs:
          argmaxinc/whisperkit-coreml openai_whisper-large-v3-v20240930_turbo_632MB
 ```
 
+The literal pair `apple apple` selects the Apple Dictation engine instead of a
+WhisperKit repo/variant (macOS 26+ only):
+
+```
+./run.sh apple apple
+```
+
+It's scored and labelled as model `apple-dictation`, and can be combined with
+WhisperKit pairs in the same invocation (`./run.sh apple apple argmaxinc/whisperkit-coreml openai_whisper-small`).
+
 First run: creates a venv in `.venv/` (gitignored), installs deps, downloads
 20 sv + 20 en clips into `data/` (gitignored), builds `DiktaBench`, downloads
 the WhisperKit model itself (~500MB+, cached by WhisperKit after first pull).
+The Apple engine instead does a one-time asset check/install per language via
+`AssetInventory` (timed as `model_load_seconds`), no separate download step.
 
 ## Where results land
 
@@ -55,6 +71,19 @@ swift run DiktaBench --repo argmaxinc/whisperkit-coreml \
 python3 score.py score --results results/raw-small-sv.jsonl \
     --refs data/sv/refs.jsonl --model openai_whisper-small --lang sv
 python3 score.py report
+
+# Apple engine, one language:
+swift run DiktaBench --engine apple --language sv \
+    --audio-dir data/sv --out results/raw-apple-dictation-sv.jsonl
+python3 score.py score --results results/raw-apple-dictation-sv.jsonl \
+    --refs data/sv/refs.jsonl --model apple-dictation --lang sv
+
+# Digit-count / ITN check (any engine, but written for Apple's ITN behaviour —
+# see docs/review-2026-09/apple-dictation-engine-spec.md §5): reports how many
+# clips have digits in the reference vs. the hypothesis, and WER restricted to
+# clips whose reference has no digits.
+python3 score.py digits --results results/raw-apple-dictation-sv.jsonl \
+    --refs data/sv/refs.jsonl --model apple-dictation --lang sv
 ```
 
 ## Licence
@@ -80,3 +109,13 @@ commit audio.
 - WER is aggregate (total edit distance over total reference words across the
   whole set), not mean-of-per-file. Matches
   `docs/review-2026-09/stt-landscape-2026-09.md`.
+- Apple engine: builds a **fresh** `DictationTranscriber` + `SpeechAnalyzer`
+  per clip (reusing one across clips has been observed to silently return
+  `""` on the second call — see
+  `Dikta/Services/AppleDictationEngine.swift` and
+  `docs/review-2026-09/apple-dictation-engine-spec.md` §6), and applies
+  inverse text normalization unconditionally (numbers/dates/currency come out
+  as digits, punctuation included) — there's no toggle for it (spec §5). This
+  means aggregate WER against FLEURS references (which spell numbers out) is
+  not a fair like-for-like with WhisperKit; use `score.py digits` to separate
+  genuine transcription errors from ITN-vs-spelled-out mismatches.
