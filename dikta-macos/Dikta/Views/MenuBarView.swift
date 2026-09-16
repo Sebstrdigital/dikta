@@ -181,8 +181,21 @@ struct AdvancedMenu: View {
     @ObservedObject var viewModel: MenuBarViewModel
     @EnvironmentObject var sparkle: SparkleController
 
+    /// The persisted preference — used for the submenu's checkmark, which
+    /// reflects what the user picked even while Svenska keeps a different
+    /// model (KB-Whisper) actually loaded.
     private var currentModel: WhisperModel {
         WhisperModel(rawValue: viewModel.configService.whisperModel) ?? .small
+    }
+
+    /// What's actually loaded in the transcription engine right now — shown in
+    /// the submenu title so e.g. "Whisper Model: KB-Whisper Small (Svenska)"
+    /// is visible while Svenska is active, even though the preference (and
+    /// checkmark) still point at whatever the user picked. Nil only in the
+    /// rare case where every load attempt, including the last-resort `.small`
+    /// fallback, has failed.
+    private var loadedModelTitle: String {
+        viewModel.loadedModel?.displayName ?? "Not Loaded"
     }
 
     var body: some View {
@@ -205,8 +218,8 @@ struct AdvancedMenu: View {
 
             Divider()
 
-            Menu("Whisper Model: \(currentModel.displayName)") {
-                ForEach(WhisperModel.allCases.sorted(by: { $0.sortOrder < $1.sortOrder }), id: \.self) { model in
+            Menu("Whisper Model: \(loadedModelTitle)") {
+                ForEach(WhisperModel.allCases.filter(\.isUserSelectable).sorted(by: { $0.sortOrder < $1.sortOrder }), id: \.self) { model in
                     Button(action: {
                         viewModel.setWhisperModel(model)
                     }) {
@@ -218,6 +231,14 @@ struct AdvancedMenu: View {
                             }
                         }
                     }
+                }
+
+                if viewModel.configService.language == .swedish {
+                    Divider()
+                    Button(action: {}) {
+                        Text("Svenska uses KB-Whisper Small automatically")
+                    }
+                    .disabled(true)
                 }
             }
 

@@ -50,14 +50,14 @@ New follow-ups from skeptic: replace `isRunningUnderXCTest` guard in `MenuBarVie
 
 ## Status — second update (branch `feat/update-2-models`, 2026-09-15)
 
-Stacked on PR #13. Reports: [benchmark-2026-09-15.md](benchmark-2026-09-15.md), [apple-dictation-engine-spec.md](apple-dictation-engine-spec.md), [foundation-models-probe-2026-09-16.md](foundation-models-probe-2026-09-16.md) (blocked — `SensitiveContentAnalysisML`/`ModelManagerError 1013` fails every `LanguageModelSession.respond` call on this Mac before any formatting could be tested), [benchmark-2026-09-16-apple.md](benchmark-2026-09-16-apple.md) (Apple Dictation engine now driven by DiktaBench: sv 11.68% / en 11.18% WER, ~1.2s load).
+Stacked on PR #13. Reports: [benchmark-2026-09-15.md](benchmark-2026-09-15.md), [apple-dictation-engine-spec.md](apple-dictation-engine-spec.md), [foundation-models-probe-2026-09-16.md](foundation-models-probe-2026-09-16.md) (blocked — `SensitiveContentAnalysisML`/`ModelManagerError 1013` fails every `LanguageModelSession.respond` call on this Mac before any formatting could be tested), [benchmark-2026-09-16-apple.md](benchmark-2026-09-16-apple.md) (Apple Dictation engine now driven by DiktaBench: sv 11.68% / en 11.18% WER, ~1.2s load), [kb-whisper-conversion-2026-09-16.md](kb-whisper-conversion-2026-09-16.md) (self-conversion — sv 3.50% / en 54.19% WER, exact match to the community conversion).
 
 | Item | Status |
 |---|---|
 | Benchmark harness `dikta-macos/bench/` (DiktaBench + FLEURS + jiwer) | ✅ |
 | `large-v3-turbo` option + download progress + disk guard | ✅ |
 | Apple `DictationTranscriber` engine | ❌ removed 2026-09-16 — decision: not shipping Apple STT (worse WER than turbo/KB-Whisper, no benefit over built-in macOS dictation; see [benchmark-2026-09-16-apple.md](benchmark-2026-09-16-apple.md)) |
-| KB-Whisper sv tier | ⏸ **decision needed** — see below |
+| KB-Whisper sv tier | ✅ self-converted, published to `sebastian-duadigital/whisperkit-kb-whisper-small`, Hub download verified (sv 3.50%), app auto-selects it for Svenska — see [kb-whisper-conversion-2026-09-16.md](kb-whisper-conversion-2026-09-16.md) |
 | `medium` download UX | ✅ (progress row covers it) |
 | Paste off MainActor, `DiktaCore` target, XCTest guard → init param | ⏳ update 3 |
 

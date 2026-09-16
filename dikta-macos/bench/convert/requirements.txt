@@ -1,0 +1,67 @@
+# Reference snapshot only — NOT installed directly with `pip install -r`.
+#
+# `whisperkittools` isn't published on PyPI; it's installed editable from a
+# git checkout (`pip install -e ./whisperkittools`), which `convert.sh` does
+# for you, pinned to a specific commit (see PINNED_COMMIT in convert.sh —
+# whisperkittools has no version tags).
+#
+# This file is the exact `pip freeze` from bench/convert/.venv/ after that
+# install, on Python 3.11.15 / macOS 26.6.2 / Xcode 27.0, kept here so a
+# dependency-resolution drift (e.g. a future numpy release breaking the
+# `numpy<2.4.0` pin whisperkittools's setup.py enforces for CoreML
+# conversion) can be diffed against a known-good set.
+annotated-types==0.8.0
+argmaxtools==0.1.23
+attrs==26.1.0
+beartype==0.22.9
+cattrs==26.2.0
+certifi==2026.7.22
+charset-normalizer==3.5.1
+click==8.5.0
+cloudpickle==3.1.2
+coremltools==9.0
+filelock==3.32.7
+fsspec==2026.7.0
+googleapis-common-protos==1.75.3
+hf-xet==1.6.0
+huggingface_hub==0.36.2
+idna==3.19
+jaxtyping==0.3.11
+Jinja2==3.1.6
+joblib==1.6.0
+MarkupSafe==3.0.3
+mpmath==1.3.0
+narwhals==2.26.0
+networkx==3.6.1
+numpy==2.3.5
+opentelemetry-api==1.44.0
+opentelemetry-exporter-otlp-proto-common==1.44.0
+opentelemetry-exporter-otlp-proto-http==1.44.0
+opentelemetry-proto==1.44.0
+opentelemetry-sdk==1.44.0
+opentelemetry-semantic-conventions==0.65b0
+packaging==26.3
+platformdirs==4.11.8
+protobuf==7.36.1
+pyaml==26.7.0
+pydantic==2.13.5
+pydantic_core==2.46.5
+PyYAML==6.0.3
+regex==2026.9.10
+requests==2.34.2
+safetensors==0.8.0
+scikit-learn==1.9.1
+scipy==1.17.1
+sympy==1.13.1
+tabulate==0.10.0
+threadpoolctl==3.7.0
+tokenizers==0.21.4
+torch==2.5.0
+tqdm==4.70.1
+transformers==4.53.0
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+urllib3==2.8.0
+wadler_lindig==0.1.7
+wandb==0.30.0
+xxhash==4.0.1

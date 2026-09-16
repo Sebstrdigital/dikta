@@ -2,6 +2,7 @@
 
 All notable changes to Dikta will be documented in this file.
 
+- 2026-09-16: macOS — added KB-Whisper Small, a Swedish-tuned Whisper model auto-selected whenever the active language is Svenska (overrides the Whisper Model preference; releases back to it for every other language). Not user-selectable; not bundled, downloads at runtime like `turbo`/`medium`
 - 2026-04-17: DiagnosticLogger (Windows) now correctly gated behind `[Conditional("DIAGNOSTICS")]` compile flag — release builds produce no log output
 
 ## [1.2] - 2026-03-31

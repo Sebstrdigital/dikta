@@ -545,4 +545,83 @@ final class AppConfigEnabledLanguagesDecodingTests: XCTestCase {
         let config = try JSONDecoder().decode(AppConfig.self, from: minimalJSON)
         XCTAssertFalse(config.diagnosticLogging)
     }
+
+    /// `whisper_model` is stored as a raw `String`, so any value (including the
+    /// Swedish-tuned `kb-whisper-small`) decodes without special-casing here —
+    /// interpretation into a `WhisperModel` case happens where it's consumed.
+    func test_decode_kbWhisperSmallWhisperModel_decodesRawValue() throws {
+        let json = """
+        {
+            "version": 3,
+            "hotkeys": {
+                "toggle": {"modifiers": ["shift", "ctrl"]},
+                "push_to_talk": {"modifiers": ["cmd", "shift"]}
+            },
+            "output_mode": "general",
+            "history": [],
+            "whisper_model": "kb-whisper-small",
+            "llm_model": "gemma3"
+        }
+        """.data(using: .utf8)!
+        let config = try JSONDecoder().decode(AppConfig.self, from: json)
+        XCTAssertEqual(config.whisperModel, "kb-whisper-small")
+    }
+}
+
+// MARK: - WhisperModel Tests
+
+final class WhisperModelTests: XCTestCase {
+
+    /// `"kb-whisper-small"` must round-trip through `WhisperModel`'s
+    /// `RawRepresentable` conformance to `.kbWhisperSmall` — this is the raw
+    /// value persisted in `AppConfig.whisperModel`/`ConfigService.whisperModel`.
+    func test_rawValue_kbWhisperSmall_roundTrips() {
+        XCTAssertEqual(WhisperModel(rawValue: "kb-whisper-small"), .kbWhisperSmall)
+        XCTAssertEqual(WhisperModel.kbWhisperSmall.rawValue, "kb-whisper-small")
+    }
+
+    /// An unrecognized raw value must keep today's existing fallback:
+    /// `WhisperModel(rawValue:) ?? .small` returns nil here, and every call
+    /// site (MenuBarViewModel.init, setWhisperModel, MenuBarView.currentModel)
+    /// falls back to `.small`.
+    func test_rawValue_unknown_returnsNil() {
+        XCTAssertNil(WhisperModel(rawValue: "not-a-real-model"))
+    }
+
+    func test_isUserSelectable_falseOnlyForKbWhisperSmall() {
+        for model in WhisperModel.allCases {
+            if model == .kbWhisperSmall {
+                XCTAssertFalse(model.isUserSelectable, "\(model) should not be user-selectable")
+            } else {
+                XCTAssertTrue(model.isUserSelectable, "\(model) should be user-selectable")
+            }
+        }
+    }
+
+    /// Mirrors the filter the Whisper Model submenu applies
+    /// (`WhisperModel.allCases.filter(\.isUserSelectable)`) — the menu's model
+    /// list must exclude `kbWhisperSmall`.
+    func test_userSelectableModels_excludesKbWhisperSmall() {
+        let menuModels = WhisperModel.allCases.filter(\.isUserSelectable)
+        XCTAssertFalse(menuModels.contains(.kbWhisperSmall))
+        XCTAssertEqual(Set(menuModels), [.small, .turbo, .medium])
+    }
+
+    func test_kbWhisperSmall_repo_isDedicatedRepo() {
+        XCTAssertEqual(WhisperModel.kbWhisperSmall.repo, "sebastian-duadigital/whisperkit-kb-whisper-small")
+    }
+
+    func test_kbWhisperSmall_variant() {
+        XCTAssertEqual(WhisperModel.kbWhisperSmall.variant, "KBLab_kb-whisper-small")
+    }
+
+    func test_existingModels_repo_unchanged() {
+        XCTAssertEqual(WhisperModel.small.repo, "argmaxinc/whisperkit-coreml")
+        XCTAssertEqual(WhisperModel.turbo.repo, "argmaxinc/whisperkit-coreml")
+        XCTAssertEqual(WhisperModel.medium.repo, "argmaxinc/whisperkit-coreml")
+    }
+
+    func test_kbWhisperSmall_sortsAfterMedium() {
+        XCTAssertGreaterThan(WhisperModel.kbWhisperSmall.sortOrder, WhisperModel.medium.sortOrder)
+    }
 }

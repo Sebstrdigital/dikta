@@ -20,3 +20,7 @@ bench/data/
 bench/.venv/
 bench/results/*
 !bench/results/.gitkeep
+bench/models/
+bench/convert/.venv/
+bench/convert/whisperkittools/
+bench/convert/src/
