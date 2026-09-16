@@ -10,15 +10,24 @@ final class ConfigService: ObservableObject {
 
     @Published private(set) var config: AppConfig
 
-    private init() {
-        // ~/Library/Application Support/Dikta/
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        configDir = appSupport.appendingPathComponent("Dikta")
-        configFile = configDir.appendingPathComponent("config.json")
+    /// Designated initializer. `configFile`'s parent directory is used (and created
+    /// on save if missing) as the config directory. Internal rather than private so
+    /// tests can point a `ConfigService` at an isolated temp file instead of the
+    /// real config `.shared` uses.
+    init(configFile: URL) {
+        self.configFile = configFile
+        self.configDir = configFile.deletingLastPathComponent()
 
         // Load or create default config
         config = Self.load(from: configFile) ?? .default
         DiagnosticLogger.shared.isEnabled = config.diagnosticLogging
+    }
+
+    private convenience init() {
+        // ~/Library/Application Support/Dikta/
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let configDir = appSupport.appendingPathComponent("Dikta")
+        self.init(configFile: configDir.appendingPathComponent("config.json"))
     }
 
     private static func load(from url: URL) -> AppConfig? {

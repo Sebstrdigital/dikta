@@ -10,14 +10,14 @@ let package = Package(
         .executable(name: "Dikta", targets: ["Dikta"])
     ],
     dependencies: [
-        .package(url: "https://github.com/argmaxinc/WhisperKit", "0.9.0"..<"0.10.0"),
+        .package(url: "https://github.com/argmaxinc/argmax-oss-swift", from: "1.1.0"),
         .package(url: "https://github.com/sparkle-project/Sparkle", "2.0.0"..<"3.0.0"),
     ],
     targets: [
         .executableTarget(
             name: "Dikta",
             dependencies: [
-                "WhisperKit",
+                .product(name: "WhisperKit", package: "argmax-oss-swift"),
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
             path: "Dikta",

@@ -22,6 +22,7 @@
 		100000000000000000000012 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000012 /* AudioRecorder.swift */; };
 		100000000000000000000013 /* AudioFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000013 /* AudioFeedback.swift */; };
 		100000000000000000000014 /* Transcriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000014 /* Transcriber.swift */; };
+		100000000000000000000103 /* TranscriptionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000103 /* TranscriptionEngine.swift */; };
 		100000000000000000000016 /* ClipboardManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000016 /* ClipboardManager.swift */; };
 		100000000000000000000017 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* HotkeyManager.swift */; };
 		100000000000000000000018 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000018 /* Logger.swift */; };
@@ -34,7 +35,14 @@
 		100000000000000000000096 /* FocusStash.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000096 /* FocusStash.swift */; };
 		100000000000000000000097 /* MuterRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000097 /* MuterRegistry.swift */; };
 		100000000000000000000098 /* GoogleMeetMuter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000098 /* GoogleMeetMuter.swift */; };
+		100000000000000000000099 /* TeamsMuter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000099 /* TeamsMuter.swift */; };
+		100000000000000000000100 /* SlackMuter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000100 /* SlackMuter.swift */; };
+		100000000000000000000101 /* WhatsAppMuter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000101 /* WhatsAppMuter.swift */; };
+		100000000000000000000102 /* UvenMuter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000102 /* UvenMuter.swift */; };
 		100000000000000000000075 /* MicMutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000075 /* MicMutingTests.swift */; };
+		100000000000000000000104 /* TranscriberPostProcessingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000104 /* TranscriberPostProcessingTests.swift */; };
+		100000000000000000000105 /* FakeTranscriptionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000105 /* FakeTranscriptionEngine.swift */; };
+		100000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */; };
 
 		/* Formatter */
 		100000000000000000000081 /* FormatterEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000081 /* FormatterEngine.swift */; };
@@ -93,6 +101,7 @@
 		200000000000000000000012 /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
 		200000000000000000000013 /* AudioFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFeedback.swift; sourceTree = "<group>"; };
 		200000000000000000000014 /* Transcriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Transcriber.swift; sourceTree = "<group>"; };
+		200000000000000000000103 /* TranscriptionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionEngine.swift; sourceTree = "<group>"; };
 		200000000000000000000016 /* ClipboardManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManager.swift; sourceTree = "<group>"; };
 		200000000000000000000017 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
 		200000000000000000000018 /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
@@ -105,6 +114,10 @@
 		200000000000000000000096 /* FocusStash.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusStash.swift; sourceTree = "<group>"; };
 		200000000000000000000097 /* MuterRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MuterRegistry.swift; sourceTree = "<group>"; };
 		200000000000000000000098 /* GoogleMeetMuter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleMeetMuter.swift; sourceTree = "<group>"; };
+		200000000000000000000099 /* TeamsMuter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamsMuter.swift; sourceTree = "<group>"; };
+		200000000000000000000100 /* SlackMuter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlackMuter.swift; sourceTree = "<group>"; };
+		200000000000000000000101 /* WhatsAppMuter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsAppMuter.swift; sourceTree = "<group>"; };
+		200000000000000000000102 /* UvenMuter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UvenMuter.swift; sourceTree = "<group>"; };
 
 		/* Formatter */
 		200000000000000000000081 /* FormatterEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatterEngine.swift; sourceTree = "<group>"; };
@@ -140,6 +153,9 @@
 		200000000000000000000072 /* FormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatterTests.swift; sourceTree = "<group>"; };
 		200000000000000000000074 /* EmbeddingParagraphSplitterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmbeddingParagraphSplitterTests.swift; sourceTree = "<group>"; };
 		200000000000000000000075 /* MicMutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicMutingTests.swift; sourceTree = "<group>"; };
+		200000000000000000000104 /* TranscriberPostProcessingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriberPostProcessingTests.swift; sourceTree = "<group>"; };
+		200000000000000000000105 /* FakeTranscriptionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeTranscriptionEngine.swift; sourceTree = "<group>"; };
+		200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelSetWhisperModelTests.swift; sourceTree = "<group>"; };
 
 		/* Product */
 		400000000000000000000001 /* Dikta.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Dikta.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -197,6 +213,10 @@
 				200000000000000000000096 /* FocusStash.swift */,
 				200000000000000000000097 /* MuterRegistry.swift */,
 				200000000000000000000098 /* GoogleMeetMuter.swift */,
+				200000000000000000000099 /* TeamsMuter.swift */,
+				200000000000000000000100 /* SlackMuter.swift */,
+				200000000000000000000101 /* WhatsAppMuter.swift */,
+				200000000000000000000102 /* UvenMuter.swift */,
 			);
 			path = MicMuting;
 			sourceTree = "<group>";
@@ -222,6 +242,9 @@
 				200000000000000000000072 /* FormatterTests.swift */,
 				200000000000000000000074 /* EmbeddingParagraphSplitterTests.swift */,
 				200000000000000000000075 /* MicMutingTests.swift */,
+				200000000000000000000104 /* TranscriberPostProcessingTests.swift */,
+				200000000000000000000105 /* FakeTranscriptionEngine.swift */,
+				200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */,
 			);
 			path = DiktaTests;
 			sourceTree = "<group>";
@@ -248,6 +271,7 @@
 				200000000000000000000012 /* AudioRecorder.swift */,
 				200000000000000000000013 /* AudioFeedback.swift */,
 				200000000000000000000014 /* Transcriber.swift */,
+				200000000000000000000103 /* TranscriptionEngine.swift */,
 				200000000000000000000016 /* ClipboardManager.swift */,
 				200000000000000000000017 /* HotkeyManager.swift */,
 				200000000000000000000018 /* Logger.swift */,
@@ -423,6 +447,9 @@
 				100000000000000000000073 /* FormatterTests.swift in Sources */,
 				100000000000000000000074 /* EmbeddingParagraphSplitterTests.swift in Sources */,
 				100000000000000000000075 /* MicMutingTests.swift in Sources */,
+				100000000000000000000104 /* TranscriberPostProcessingTests.swift in Sources */,
+				100000000000000000000105 /* FakeTranscriptionEngine.swift in Sources */,
+				100000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -438,6 +465,7 @@
 				100000000000000000000012 /* AudioRecorder.swift in Sources */,
 				100000000000000000000013 /* AudioFeedback.swift in Sources */,
 				100000000000000000000014 /* Transcriber.swift in Sources */,
+				100000000000000000000103 /* TranscriptionEngine.swift in Sources */,
 				100000000000000000000007 /* AppPaths.swift in Sources */,
 				100000000000000000000016 /* ClipboardManager.swift in Sources */,
 				100000000000000000000017 /* HotkeyManager.swift in Sources */,
@@ -457,6 +485,10 @@
 				100000000000000000000096 /* FocusStash.swift in Sources */,
 				100000000000000000000097 /* MuterRegistry.swift in Sources */,
 				100000000000000000000098 /* GoogleMeetMuter.swift in Sources */,
+				100000000000000000000099 /* TeamsMuter.swift in Sources */,
+				100000000000000000000100 /* SlackMuter.swift in Sources */,
+				100000000000000000000101 /* WhatsAppMuter.swift in Sources */,
+				100000000000000000000102 /* UvenMuter.swift in Sources */,
 				100000000000000000000032 /* HotkeyRecordingWindow.swift in Sources */,
 				100000000000000000000033 /* OnboardingWindow.swift in Sources */,
 				100000000000000000000081 /* FormatterEngine.swift in Sources */,
@@ -714,10 +746,10 @@
 /* Begin XCRemoteSwiftPackageReference section */
 		A00000000000000000000001 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/argmaxinc/WhisperKit";
+			repositoryURL = "https://github.com/argmaxinc/argmax-oss-swift";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.9.0;
+				kind = upToNextMinorVersion;
+				minimumVersion = 1.1.0;
 			};
 		};
 		A00000000000000000000002 /* XCRemoteSwiftPackageReference "Sparkle" */ = {

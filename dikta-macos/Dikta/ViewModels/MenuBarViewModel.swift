@@ -23,7 +23,7 @@ final class MenuBarViewModel: ObservableObject {
     // Services
     let configService: ConfigService
     private var cancellables = Set<AnyCancellable>()
-    private let transcriber: Transcriber
+    private let transcriber: any TranscriptionEngine
     private let audioRecorder: AudioRecorder
     private let audioFeedback: AudioFeedback
     private let clipboardManager: ClipboardManager
@@ -53,9 +53,15 @@ final class MenuBarViewModel: ObservableObject {
     // Window controllers
     let hotkeyWindowController = HotkeyRecordingWindowController()
 
-    init() {
-        self.configService = ConfigService.shared
-        self.transcriber = Transcriber(modelName: configService.whisperModel)
+    /// - Parameters:
+    ///   - engine: Transcription engine to use. Defaults to a real WhisperKit-backed
+    ///     `Transcriber` built from the saved config; tests can inject a fake instead.
+    ///   - configService: Config store to use. Defaults to `.shared` (the real, persisted
+    ///     config); tests can inject an isolated instance instead.
+    init(engine: (any TranscriptionEngine)? = nil, configService: ConfigService? = nil) {
+        let configService = configService ?? .shared
+        self.configService = configService
+        self.transcriber = engine ?? Transcriber(model: WhisperModel(rawValue: configService.whisperModel) ?? .small)
         self.audioRecorder = AudioRecorder()
         self.audioFeedback = AudioFeedback()
         self.clipboardManager = ClipboardManager()
@@ -92,17 +98,22 @@ final class MenuBarViewModel: ObservableObject {
     func initialize() async {
         appState = .loading
 
-        // Always show onboarding on app start
-        OnboardingWindowController.shared.show()
+        // Real-app-only side effects: showing a window, prompting for mic access,
+        // and grabbing global hotkeys don't belong in (and can crash or hang) a
+        // unit test process that constructs a MenuBarViewModel directly.
+        if !isRunningUnderXCTest {
+            // Always show onboarding on app start
+            OnboardingWindowController.shared.show()
 
-        // Now request mic permission (shows system dialog if not determined)
-        let hasMicPermission = await AudioRecorder.checkPermission()
-        if !hasMicPermission {
-            sendNotification(title: "Permission Required", body: "Please grant Microphone access in System Preferences")
+            // Now request mic permission (shows system dialog if not determined)
+            let hasMicPermission = await AudioRecorder.checkPermission()
+            if !hasMicPermission {
+                sendNotification(title: "Permission Required", body: "Please grant Microphone access in System Preferences")
+            }
         }
 
         // Load Whisper model
-        await transcriber.loadModel()
+        await transcriber.load()
 
         if transcriber.isReady {
             appState = .idle
@@ -111,8 +122,10 @@ final class MenuBarViewModel: ObservableObject {
             Self.isModelLoaded = true
             NotificationCenter.default.post(name: .appModelLoaded, object: nil)
 
-            // Start hotkey listener
-            hotkeyManager.start()
+            if !isRunningUnderXCTest {
+                // Start hotkey listener
+                hotkeyManager.start()
+            }
 
             let toggleHotkey = configService.getHotkey(for: .toggle).displayString
             sendNotification(title: "Ready", body: "Whisper model loaded. Use \(toggleHotkey) to record.", isRoutine: true)
@@ -367,13 +380,51 @@ final class MenuBarViewModel: ObservableObject {
 
     // MARK: - Whisper Model
 
-    func setWhisperModel(_ model: WhisperModel) {
-        configService.whisperModel = model.rawValue
-        sendNotification(
-            title: "Model Changed",
-            body: "Switched to \(model.displayName). Restart app to load new model.",
-            isRoutine: true
-        )
+    /// Switches to `model`, reloading it live. Returns the `Task` doing the work
+    /// (nil if the switch was skipped — already idle-blocked, or already on
+    /// `model`) so tests can await its completion instead of polling `appState`.
+    /// Production callers can ignore the return value.
+    @discardableResult
+    func setWhisperModel(_ model: WhisperModel) -> Task<Void, Never>? {
+        guard appState == .idle else { return nil }
+        guard model.rawValue != configService.whisperModel else { return nil }
+
+        let previousModel = WhisperModel(rawValue: configService.whisperModel) ?? .small
+        appState = .loading
+
+        return Task { @MainActor in
+            do {
+                try await transcriber.reload(model: model)
+                // Only persist the new model once it has actually loaded.
+                configService.whisperModel = model.rawValue
+                appState = .idle
+                sendNotification(
+                    title: "Model Changed",
+                    body: "Switched to \(model.displayName).",
+                    isRoutine: true
+                )
+            } catch {
+                // The new model failed to load. Fall back to the model that was
+                // working before, so recording (which requires appState == .idle)
+                // doesn't stay broken until an app restart.
+                do {
+                    try await transcriber.reload(model: previousModel)
+                    appState = .idle
+                    sendNotification(
+                        title: "Error",
+                        body: "Could not load \(model.displayName), kept \(previousModel.displayName)."
+                    )
+                } catch {
+                    // Fallback also failed: mirror the startup-failure path
+                    // (initialize()) by staying out of .idle rather than
+                    // pretending the app is ready to record with no model loaded.
+                    sendNotification(
+                        title: "Error",
+                        body: transcriber.errorMessage ?? "Failed to load Whisper model"
+                    )
+                }
+            }
+        }
     }
 
     // MARK: - TTS Voice
@@ -477,9 +528,21 @@ final class MenuBarViewModel: ObservableObject {
 
     // MARK: - Notifications
 
+    /// True when XCTest is linked into this process — true under both `swift test`
+    /// and `xcodebuild test`, hosted or not. Used to skip real-app side effects
+    /// (notifications, the onboarding window, the global hotkey listener) that
+    /// either crash or misbehave when a `MenuBarViewModel` is constructed directly
+    /// in a unit test, since `init()` kicks them off automatically.
+    private var isRunningUnderXCTest: Bool {
+        NSClassFromString("XCTestCase") != nil
+    }
+
     private var canUseNotifications: Bool {
-        // UNUserNotificationCenter requires a proper app bundle
-        Bundle.main.bundleIdentifier != nil
+        // UNUserNotificationCenter requires a proper app bundle and crashes
+        // (bundleProxyForCurrentProcess is nil) when called from the bare xctest
+        // executable. Bundle.main.bundleIdentifier alone doesn't rule that out
+        // (the xctest tool itself has one), hence the XCTest check too.
+        Bundle.main.bundleIdentifier != nil && !isRunningUnderXCTest
     }
 
     private func sendNotification(title: String, body: String, isRoutine: Bool = false) {

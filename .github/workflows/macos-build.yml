@@ -1,0 +1,52 @@
+name: macOS build
+
+on:
+  push:
+    branches:
+      - main
+      - 'fix/**'
+    paths:
+      - 'dikta-macos/**'
+      - '.github/workflows/macos-build.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'dikta-macos/**'
+      - '.github/workflows/macos-build.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: dikta-macos
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Swift build
+        run: swift build
+
+      - name: Swift test
+        run: swift test
+
+      - name: Build with xcodebuild
+        run: |
+          set -o pipefail
+          xcodebuild -project Dikta.xcodeproj -scheme Dikta -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
+
+      # App target uses manual Developer ID signing; DiktaTests is automatic. Override both to ad-hoc so the test bundle can load into the host.
+      - name: xcodebuild test (ad-hoc signing)
+        run: xcodebuild -project Dikta.xcodeproj -scheme Dikta -destination 'platform=macOS' test CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= CODE_SIGNING_REQUIRED=NO

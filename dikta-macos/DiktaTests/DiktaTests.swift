@@ -1,191 +1,16 @@
 /// DiktaTests — Unit tests for core logic.
 ///
-/// These tests are self-contained: they replicate just enough type definitions
-/// to test the pure algorithms, since the main Dikta target is an executable
-/// (not a library) and cannot be @testable-imported via Swift Package Manager.
-/// The test logic mirrors exactly what is in the production code; if you change
-/// a production algorithm, update the corresponding test type here too.
+/// Uses `@testable import Dikta` to test the real production types directly
+/// (SPM can @testable-import an executable target; see MicMutingTests.swift
+/// for another example). No hand-copied type mirrors here — if a production
+/// type changes shape, these tests fail to compile or fail to pass, instead
+/// of silently drifting from what ships.
 ///
 /// Run via: cd dikta-macos && swift test
 
 import XCTest
 import CoreGraphics
-
-// MARK: - Inlined production types (mirrors production code)
-
-enum ModifierKey: String, Codable, CaseIterable {
-    case shift, ctrl, cmd, alt, fn
-
-    var cgEventFlag: CGEventFlags {
-        switch self {
-        case .shift: return .maskShift
-        case .ctrl:  return .maskControl
-        case .cmd:   return .maskCommand
-        case .alt:   return .maskAlternate
-        case .fn:    return .maskSecondaryFn
-        }
-    }
-}
-
-struct HotkeyConfig: Codable, Equatable {
-    var modifiers: [ModifierKey]
-    var key: String?
-
-    /// Strict modifier matching: all required modifiers must be pressed, no extras allowed.
-    func matchesModifiers(_ flags: CGEventFlags) -> Bool {
-        for modifier in ModifierKey.allCases {
-            let isRequired = modifiers.contains(modifier)
-            let isPressed  = flags.contains(modifier.cgEventFlag)
-            if isRequired != isPressed { return false }
-        }
-        return true
-    }
-}
-
-enum Language: String, Codable, CaseIterable {
-    case english = "en", swedish = "sv", indonesian = "id"
-    case spanish = "es", french = "fr", german = "de", portuguese = "pt"
-    case italian = "it", dutch = "nl", finnish = "fi", norwegian = "no", danish = "da"
-
-    var displayName: String {
-        switch self {
-        case .english:    return "English"
-        case .swedish:    return "Svenska"
-        case .indonesian: return "Bahasa Indonesia"
-        case .spanish:    return "Español"
-        case .french:     return "Français"
-        case .german:     return "Deutsch"
-        case .portuguese: return "Português"
-        case .italian:    return "Italiano"
-        case .dutch:      return "Nederlands"
-        case .finnish:    return "Suomi"
-        case .norwegian:  return "Norsk"
-        case .danish:     return "Dansk"
-        }
-    }
-
-    var whisperCode: String { rawValue }
-
-    func next(in enabledLanguages: [Language]) -> Language {
-        guard !enabledLanguages.isEmpty else { return self }
-        guard let currentIndex = enabledLanguages.firstIndex(of: self) else {
-            return enabledLanguages[0]
-        }
-        return enabledLanguages[(currentIndex + 1) % enabledLanguages.count]
-    }
-}
-enum MicSensitivity: String, Codable { case normal, headset }
-enum OutputMode: String, Codable {
-    case raw, general, custom
-    init(from decoder: Decoder) throws {
-        let raw = try decoder.singleValueContainer().decode(String.self)
-        switch raw {
-        case "code_prompt": self = .custom
-        default: self = OutputMode(rawValue: raw) ?? .general
-        }
-    }
-}
-
-struct HistoryItem: Codable, Identifiable {
-    let id: UUID
-    let text: String
-    let outputMode: OutputMode
-}
-
-struct AppConfig: Codable {
-    var version: Int
-    var hotkeys: HotkeyConfigs
-    var outputMode: OutputMode
-    var history: [HistoryItem]
-    var whisperModel: String
-    var llmModel: String
-    var language: Language
-    var customPrompt: String
-    var micSensitivity: MicSensitivity
-    var muteSounds: Bool
-    var muteNotifications: Bool
-    var diagnosticLogging: Bool
-    var enabledLanguages: [Language]
-
-    struct HotkeyConfigs: Codable {
-        var toggle: HotkeyConfig
-        var pushToTalk: HotkeyConfig
-        var textToSpeech: HotkeyConfig
-        var languageToggle: HotkeyConfig
-
-        static let defaultTextToSpeech  = HotkeyConfig(modifiers: [.cmd, .alt], key: nil)
-        static let defaultLanguageToggle = HotkeyConfig(modifiers: [.cmd, .ctrl], key: nil)
-
-        enum CodingKeys: String, CodingKey {
-            case toggle, pushToTalk = "push_to_talk",
-                 textToSpeech = "text_to_speech", languageToggle = "language_toggle"
-        }
-        init(toggle: HotkeyConfig, pushToTalk: HotkeyConfig,
-             textToSpeech: HotkeyConfig = .init(modifiers: [.cmd, .alt], key: nil),
-             languageToggle: HotkeyConfig = .init(modifiers: [.cmd, .ctrl], key: nil)) {
-            self.toggle = toggle; self.pushToTalk = pushToTalk
-            self.textToSpeech = textToSpeech; self.languageToggle = languageToggle
-        }
-        init(from decoder: Decoder) throws {
-            let c = try decoder.container(keyedBy: CodingKeys.self)
-            toggle       = try c.decode(HotkeyConfig.self, forKey: .toggle)
-            pushToTalk   = try c.decode(HotkeyConfig.self, forKey: .pushToTalk)
-            textToSpeech = try c.decodeIfPresent(HotkeyConfig.self, forKey: .textToSpeech)
-                           ?? Self.defaultTextToSpeech
-            languageToggle = try c.decodeIfPresent(HotkeyConfig.self, forKey: .languageToggle)
-                             ?? Self.defaultLanguageToggle
-        }
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case version, hotkeys, outputMode = "output_mode", history,
-             whisperModel = "whisper_model", llmModel = "llm_model",
-             language, customPrompt = "custom_prompt",
-             micSensitivity = "mic_sensitivity", muteSounds = "mute_sounds",
-             muteNotifications = "mute_notifications",
-             diagnosticLogging = "diagnostic_logging",
-             enabledLanguages = "enabled_languages"
-    }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        let saved = try c.decode(Int.self, forKey: .version)
-        version = max(saved, 3)
-        hotkeys = try c.decode(HotkeyConfigs.self, forKey: .hotkeys)
-        outputMode = try c.decode(OutputMode.self, forKey: .outputMode)
-        history = try c.decode([HistoryItem].self, forKey: .history)
-        let raw = try c.decode(String.self, forKey: .whisperModel)
-        whisperModel = (raw == "base" || raw == "base.en") ? "small" : raw
-        llmModel = try c.decode(String.self, forKey: .llmModel)
-        language = try c.decodeIfPresent(Language.self, forKey: .language) ?? .english
-        customPrompt = try c.decodeIfPresent(String.self, forKey: .customPrompt) ?? ""
-        if let raw = try c.decodeIfPresent(String.self, forKey: .micSensitivity) {
-            switch raw {
-            case "headset", "far": micSensitivity = .headset
-            default: micSensitivity = .normal
-            }
-        } else {
-            micSensitivity = .normal
-        }
-        muteSounds = try c.decodeIfPresent(Bool.self, forKey: .muteSounds) ?? false
-        muteNotifications = try c.decodeIfPresent(Bool.self, forKey: .muteNotifications) ?? false
-        diagnosticLogging = try c.decodeIfPresent(Bool.self, forKey: .diagnosticLogging) ?? false
-        enabledLanguages = try c.decodeIfPresent([Language].self, forKey: .enabledLanguages) ?? [.english, .swedish, .indonesian]
-    }
-}
-
-// UpdateChecker version logic (mirrors production UpdateChecker.isNewer / normalizeTag)
-enum VersionChecker {
-    static func normalizeTag(_ tag: String) -> String {
-        tag.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
-    }
-    static func isNewer(remote: String, than local: String) -> Bool {
-        let validPattern = #"^\d+(\.\d+)*$"#
-        guard remote.range(of: validPattern, options: .regularExpression) != nil,
-              local.range(of: validPattern, options: .regularExpression) != nil else { return false }
-        return remote.compare(local, options: .numeric) == .orderedDescending
-    }
-}
+@testable import Dikta
 
 // MARK: - HotkeyConfig.matchesModifiers Tests
 
@@ -313,7 +138,7 @@ final class AppConfigDecodingTests: XCTestCase {
         XCTAssertFalse(config.muteNotifications)
         XCTAssertGreaterThanOrEqual(config.version, 3)
         XCTAssertEqual(config.hotkeys.languageToggle,
-                       HotkeyConfig.init(modifiers: [.cmd, .ctrl], key: nil))
+                       HotkeyConfig(modifiers: [.cmd, .ctrl], key: nil))
     }
 
     func test_decode_migratesBaseWhisperModel() throws {
@@ -351,63 +176,87 @@ final class AppConfigDecodingTests: XCTestCase {
         let config = try JSONDecoder().decode(AppConfig.self, from: json)
         XCTAssertEqual(config.outputMode, .custom)
     }
+
+    /// The hand-copied AppConfig type this file used to define was missing `formatSelection`
+    /// entirely (see docs/review-2026-09/mac-code-review.md). Decoding straight from the real
+    /// production type closes that gap: this asserts `hotkeys.format_selection` round-trips.
+    func test_decode_includesFormatSelectionHotkey() throws {
+        let json = """
+        {
+            "version": 3,
+            "hotkeys": {
+                "toggle": {"modifiers": ["shift", "ctrl"]},
+                "push_to_talk": {"modifiers": ["cmd", "shift"]},
+                "format_selection": {"modifiers": ["cmd", "shift"], "key": "f"}
+            },
+            "output_mode": "general",
+            "history": [],
+            "whisper_model": "small",
+            "llm_model": "gemma3"
+        }
+        """.data(using: .utf8)!
+        let config = try JSONDecoder().decode(AppConfig.self, from: json)
+        XCTAssertEqual(config.hotkeys.formatSelection,
+                       HotkeyConfig(modifiers: [.cmd, .shift], key: "f"))
+    }
 }
 
 // MARK: - UpdateChecker Version Comparison Tests
 
+@MainActor
 final class UpdateCheckerVersionTests: XCTestCase {
 
     func test_normalizeTag_stripsLowercaseV() {
-        XCTAssertEqual(VersionChecker.normalizeTag("v0.4.1"), "0.4.1")
+        XCTAssertEqual(UpdateChecker.normalizeTag("v0.4.1"), "0.4.1")
     }
 
     func test_normalizeTag_stripsUppercaseV() {
-        XCTAssertEqual(VersionChecker.normalizeTag("V0.4.1"), "0.4.1")
+        XCTAssertEqual(UpdateChecker.normalizeTag("V0.4.1"), "0.4.1")
     }
 
     func test_normalizeTag_noPrefix() {
-        XCTAssertEqual(VersionChecker.normalizeTag("0.4.1"), "0.4.1")
+        XCTAssertEqual(UpdateChecker.normalizeTag("0.4.1"), "0.4.1")
     }
 
     func test_isNewer_newerMinorVersion_returnsTrue() {
-        XCTAssertTrue(VersionChecker.isNewer(remote: "0.5.0", than: "0.4.0"))
+        XCTAssertTrue(UpdateChecker.isNewer(remote: "0.5.0", than: "0.4.0"))
     }
 
     func test_isNewer_newerPatchVersion_returnsTrue() {
-        XCTAssertTrue(VersionChecker.isNewer(remote: "0.4.2", than: "0.4.1"))
+        XCTAssertTrue(UpdateChecker.isNewer(remote: "0.4.2", than: "0.4.1"))
     }
 
     func test_isNewer_sameVersion_returnsFalse() {
-        XCTAssertFalse(VersionChecker.isNewer(remote: "0.4.0", than: "0.4.0"))
+        XCTAssertFalse(UpdateChecker.isNewer(remote: "0.4.0", than: "0.4.0"))
     }
 
     func test_isNewer_olderVersion_returnsFalse() {
-        XCTAssertFalse(VersionChecker.isNewer(remote: "0.3.0", than: "0.4.0"))
+        XCTAssertFalse(UpdateChecker.isNewer(remote: "0.3.0", than: "0.4.0"))
     }
 
     func test_isNewer_majorVersionBump_returnsTrue() {
-        XCTAssertTrue(VersionChecker.isNewer(remote: "1.0.0", than: "0.4.0"))
+        XCTAssertTrue(UpdateChecker.isNewer(remote: "1.0.0", than: "0.4.0"))
     }
 
     func test_isNewer_malformedRemote_returnsFalse() {
-        XCTAssertFalse(VersionChecker.isNewer(remote: "not-a-version", than: "0.4.0"))
+        XCTAssertFalse(UpdateChecker.isNewer(remote: "not-a-version", than: "0.4.0"))
     }
 
     func test_isNewer_malformedLocal_returnsFalse() {
-        XCTAssertFalse(VersionChecker.isNewer(remote: "0.4.1", than: "not-a-version"))
+        XCTAssertFalse(UpdateChecker.isNewer(remote: "0.4.1", than: "not-a-version"))
     }
 
     func test_isNewer_emptyRemote_returnsFalse() {
-        XCTAssertFalse(VersionChecker.isNewer(remote: "", than: "0.4.0"))
+        XCTAssertFalse(UpdateChecker.isNewer(remote: "", than: "0.4.0"))
     }
 
     func test_isNewer_emptyLocal_returnsFalse() {
-        XCTAssertFalse(VersionChecker.isNewer(remote: "0.4.1", than: ""))
+        XCTAssertFalse(UpdateChecker.isNewer(remote: "0.4.1", than: ""))
     }
 
     func test_isNewer_numericNotLexicographic() {
         // "0.10.0" > "0.9.0" numerically but "0.10.0" < "0.9.0" lexicographically
-        XCTAssertTrue(VersionChecker.isNewer(remote: "0.10.0", than: "0.9.0"))
+        XCTAssertTrue(UpdateChecker.isNewer(remote: "0.10.0", than: "0.9.0"))
     }
 }
 
