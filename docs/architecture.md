@@ -11,7 +11,7 @@ Hotkey → Recording → WhisperKit STT → Auto-paste + History
 - **Models/**
   - `AppConfig.swift` — Full config structure, persisted as JSON
   - `HotkeyConfig.swift` — Modifier keys (shift, ctrl, cmd, alt, fn), hotkey matching logic
-  - `WhisperModel.swift` — Available models: small, medium
+  - `WhisperModel.swift` — Available models: small, medium, plus KB-Whisper Small (`kbWhisperSmall`), a Swedish-tuned model that is never user-selectable — `MenuBarViewModel.effectiveModel(for:)` auto-selects it whenever the active language is Svenska, overriding the user's own model preference, and releases back to it for every other language
   - `MicDistance.swift` — Close/Normal/Far presets for speech detection sensitivity
   - `Language.swift` — Supported languages: English, Swedish, Indonesian
 - **Services/**
@@ -69,11 +69,24 @@ Dikta
 │   ├── Svenska
 │   └── Bahasa Indonesia
 ├── Advanced >
-│   ├── Whisper Model: Small / Medium
+│   ├── Whisper Model: Small / Medium (KB-Whisper Small hidden — auto-selected for Svenska, see below)
 │   └── Voice: (Kokoro voices)
 ├── About
 └── Quit
 ```
+
+## Swedish Auto-Select (KB-Whisper)
+
+Whenever the active language (`ConfigService.language`) is Svenska, the transcription
+engine loads KB-Whisper Small instead of the user's chosen Whisper Model preference —
+its Swedish WER is far better than the general models', but it must never be used for
+any other language, where its WER is far worse. This is computed by
+`MenuBarViewModel.effectiveModel(for:)` and is separate from the persisted preference
+(`ConfigService.whisperModel`): picking a different model in the Whisper Model submenu
+while Svenska is active updates the preference but keeps KB-Whisper loaded, and the
+submenu shows a disabled row explaining this. Switching away from Svenska reloads back
+to the preference automatically. KB-Whisper Small is never offered as a manual choice
+(`WhisperModel.isUserSelectable == false`).
 
 ## macOS Permissions
 

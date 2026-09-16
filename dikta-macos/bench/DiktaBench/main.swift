@@ -15,16 +15,25 @@ import AVFoundation
 /// Usage:
 ///   swift run DiktaBench --repo <hf-repo> --variant <name> --language sv|en \
 ///       --audio-dir <dir> --out <results.jsonl>
+///   swift run DiktaBench --model-folder <path> --language sv|en \
+///       --audio-dir <dir> --out <results.jsonl>
 ///   swift run DiktaBench --engine apple --language sv|en \
 ///       --audio-dir <dir> --out <results.jsonl>
 ///
 /// `--engine` defaults to `whisper` (the original behaviour, `--repo`/`--variant`
-/// required). `--engine apple` drives Apple's on-device `DictationTranscriber`
-/// (Speech framework, macOS 26+) instead — `--repo`/`--variant` are ignored, and the
-/// tool exits non-zero with a clear message on older macOS. See
-/// `Dikta/Services/AppleDictationEngine.swift` and
-/// `docs/review-2026-09/apple-dictation-engine-spec.md` for the call pattern this
-/// mirrors.
+/// required, or `--model-folder` to load a local WhisperKit model folder instead
+/// of pulling from Hugging Face — used for benchmarking self-converted models
+/// before they're published anywhere). Note `--model-folder` only skips the
+/// download of the AudioEncoder/MelSpectrogram/TextDecoder files themselves —
+/// it is not fully offline: WhisperKit still falls back to downloading the
+/// tokenizer from Hugging Face if the folder doesn't contain one (see the
+/// comment at the `WhisperKit(modelFolder:...)` call site below). `--engine
+/// apple` drives Apple's on-device
+/// `DictationTranscriber` (Speech framework, macOS 26+) instead — `--repo`/
+/// `--variant`/`--model-folder` are ignored, and the tool exits non-zero with a
+/// clear message on older macOS. See `Dikta/Services/AppleDictationEngine.swift`
+/// and `docs/review-2026-09/apple-dictation-engine-spec.md` for the call pattern
+/// this mirrors.
 ///
 /// For every .wav/.flac file in `--audio-dir`, transcribes it and appends one JSON
 /// line to `--out`: {file, text, seconds_audio, seconds_wall, model_load_seconds}.
@@ -44,6 +53,7 @@ struct BenchArgs {
     var engine: String
     var repo: String?
     var variant: String?
+    var modelFolder: String?
     var language: String
     var audioDir: String
     var out: String
@@ -53,6 +63,7 @@ func parseArgs() -> BenchArgs {
     var engine = "whisper"
     var repo: String?
     var variant: String?
+    var modelFolder: String?
     var language: String?
     var audioDir: String?
     var out: String?
@@ -69,6 +80,7 @@ func parseArgs() -> BenchArgs {
         case "--engine": engine = value
         case "--repo": repo = value
         case "--variant": variant = value
+        case "--model-folder": modelFolder = value
         case "--language": language = value
         case "--audio-dir": audioDir = value
         case "--out": out = value
@@ -86,24 +98,33 @@ func parseArgs() -> BenchArgs {
         fail("""
         Usage: DiktaBench --repo <hf-repo> --variant <name> --language sv|en \
         --audio-dir <dir> --out <results.jsonl>
+               DiktaBench --model-folder <path> --language sv|en \
+        --audio-dir <dir> --out <results.jsonl>
                DiktaBench --engine apple --language sv|en \
         --audio-dir <dir> --out <results.jsonl>
         """)
     }
 
     if engine == "whisper" {
+        if let modelFolder {
+            guard repo == nil, variant == nil else {
+                fail("--model-folder is mutually exclusive with --repo/--variant")
+            }
+            return BenchArgs(engine: engine, repo: nil, variant: nil, modelFolder: modelFolder, language: language, audioDir: audioDir, out: out)
+        }
         guard let repo, let variant else {
             fail("""
-            --engine whisper (the default) requires --repo <hf-repo> --variant <name>.
+            --engine whisper (the default) requires --repo <hf-repo> --variant <name>, \
+            or --model-folder <path> to load a local WhisperKit model folder.
             Usage: DiktaBench --repo <hf-repo> --variant <name> --language sv|en \
             --audio-dir <dir> --out <results.jsonl>
             """)
         }
-        return BenchArgs(engine: engine, repo: repo, variant: variant, language: language, audioDir: audioDir, out: out)
+        return BenchArgs(engine: engine, repo: repo, variant: variant, modelFolder: nil, language: language, audioDir: audioDir, out: out)
     }
 
-    // engine == "apple": --repo/--variant are ignored if passed.
-    return BenchArgs(engine: engine, repo: nil, variant: nil, language: language, audioDir: audioDir, out: out)
+    // engine == "apple": --repo/--variant/--model-folder are ignored if passed.
+    return BenchArgs(engine: engine, repo: nil, variant: nil, modelFolder: nil, language: language, audioDir: audioDir, out: out)
 }
 
 func fail(_ message: String) -> Never {
@@ -353,28 +374,56 @@ struct DiktaBench {
             return
         }
 
-        guard let repo = args.repo, let variant = args.variant else {
-            fail("--engine whisper requires --repo and --variant")
+        guard args.modelFolder != nil || (args.repo != nil && args.variant != nil) else {
+            fail("--engine whisper requires --repo and --variant, or --model-folder")
         }
 
-        print("DiktaBench: repo=\(repo) variant=\(variant) language=\(args.language) files=\(audioFiles.count)")
+        if let modelFolder = args.modelFolder {
+            print("DiktaBench: model-folder=\(modelFolder) language=\(args.language) files=\(audioFiles.count)")
+        } else {
+            print("DiktaBench: repo=\(args.repo!) variant=\(args.variant!) language=\(args.language) files=\(audioFiles.count)")
+        }
 
         // Load model, timing the load.
         let loadStart = Date()
         let whisperKit: WhisperKit
         do {
-            let wk = try await WhisperKit(
-                model: variant,
-                modelRepo: repo,
-                verbose: false,
-                prewarm: false,
-                load: false,
-                download: true
-            )
+            let wk: WhisperKit
+            if let modelFolder = args.modelFolder {
+                // Local model folder: bypasses the Hugging Face download path
+                // for the AudioEncoder/MelSpectrogram/TextDecoder .mlmodelc
+                // files entirely (WhisperKit.setupModels uses modelFolder
+                // as-is when set — see argmax-oss-swift
+                // Sources/WhisperKit/Core/WhisperKit.swift). This is NOT
+                // fully offline, though: if modelFolder has no tokenizer
+                // files, loadTokenizerIfNeeded() still falls back to a Hub
+                // download (WhisperKit.swift's additionalSearchPaths checks
+                // modelFolder first, then downloads). Benchmarking worked
+                // without a network round-trip here only because the
+                // tokenizer was already cached locally from an earlier
+                // --repo/--variant run against argmaxinc/whisperkit-coreml.
+                wk = try await WhisperKit(
+                    modelFolder: modelFolder,
+                    verbose: false,
+                    prewarm: false,
+                    load: false,
+                    download: false
+                )
+            } else {
+                wk = try await WhisperKit(
+                    model: args.variant,
+                    modelRepo: args.repo,
+                    verbose: false,
+                    prewarm: false,
+                    load: false,
+                    download: true
+                )
+            }
             try await wk.loadModels()
             whisperKit = wk
         } catch {
-            fail("Failed to load model \(variant) from \(repo): \(error)")
+            let identity = args.modelFolder ?? "\(args.variant ?? "?") from \(args.repo ?? "?")"
+            fail("Failed to load model \(identity): \(error)")
         }
         let modelLoadSeconds = Date().timeIntervalSince(loadStart)
         print("Model loaded in \(String(format: "%.2f", modelLoadSeconds))s")
