@@ -2,8 +2,24 @@
 
 All notable changes to Dikta will be documented in this file.
 
-- 2026-09-16: macOS — added KB-Whisper Small, a Swedish-tuned Whisper model auto-selected whenever the active language is Svenska (overrides the Whisper Model preference; releases back to it for every other language). Not user-selectable; not bundled, downloads at runtime like `turbo`/`medium`
 - 2026-04-17: DiagnosticLogger (Windows) now correctly gated behind `[Conditional("DIAGNOSTICS")]` compile flag — release builds produce no log output
+
+## [1.3] - 2026-09-16 — Svenska & Turbo
+
+### Features
+- Swedish dictation now uses KB-Whisper Small, the Swedish-tuned Whisper model from the National Library of Sweden, converted to CoreML by us and published at `sebastian-duadigital/whisperkit-kb-whisper-small`. It is selected automatically whenever the language is Svenska and released again for every other language. Measured word error rate on Swedish test speech dropped from 18.5% (Small) to 3.5%. Downloads once on first Swedish use (about 460 MB).
+- New model option "Large v3 Turbo (Recommended)": better than Small in every language at about 650 MB. "Medium" stays available as Legacy.
+- Switching models no longer requires a restart. Downloads show progress in the menu, and a free-space check refuses downloads that would not fit.
+- WhisperKit updated to argmax-oss-swift 1.1.0.
+
+### Fixes
+- Release builds were failing since May because four source files were not registered in the Xcode project. Fixed, and CI now builds with both `swift build` and `xcodebuild`.
+- If a model fails to load, the app falls back to the previously loaded model, and as a last resort to the bundled Small, instead of getting stuck.
+
+### Internal
+- Benchmark harness under `dikta-macos/bench/` (FLEURS clips, word error rate scoring, reproducible KB-Whisper conversion).
+- Apple Dictation (macOS 26) was evaluated as an engine and dropped: worse accuracy than Turbo in both languages and no benefit over built-in dictation.
+- 268 tests.
 
 ## [1.2] - 2026-03-31
 

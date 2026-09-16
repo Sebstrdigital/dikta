@@ -16,6 +16,7 @@ set -euo pipefail
 #
 # Usage:
 #   ./scripts/build-release.sh
+#   ./scripts/build-release.sh --no-publish   # DMG only, no appcast/release
 # ============================================================
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -195,6 +196,15 @@ echo "============================================================"
 echo "  BUILD COMPLETE"
 echo "  DMG: ${DMG_PATH}"
 echo "============================================================"
+
+# --no-publish: stop after the notarized DMG so it can be installed and
+# smoke-tested before the appcast and GitHub release reach users. Re-run
+# without the flag to publish; the build steps are idempotent.
+if [ "${1:-}" = "--no-publish" ]; then
+    echo "==> --no-publish given: skipping appcast + GitHub release."
+    echo "    Install and test ${DMG_PATH}, then re-run without --no-publish."
+    exit 0
+fi
 
 # ============================================================
 # Step 7: Appcast + GitHub Release (Sparkle auto-update)
