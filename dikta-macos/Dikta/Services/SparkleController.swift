@@ -18,7 +18,9 @@ final class SparkleController: NSObject, ObservableObject, SPUUpdaterDelegate {
     override init() {
         super.init()
         updaterController = SPUStandardUpdaterController(
-            startingUpdater: true,
+            // Never start the updater when Dikta.app is only the XCTest host:
+            // a started updater fetches the appcast over the network during tests.
+            startingUpdater: !MenuBarViewModel.isRunningUnderXCTestHost,
             updaterDelegate: self,
             userDriverDelegate: nil
         )

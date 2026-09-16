@@ -93,7 +93,20 @@ final class MenuBarViewModel: ObservableObject {
         let preferenceModel = WhisperModel(rawValue: configService.whisperModel) ?? .small
         let startupModel = Self.effectiveModel(for: configService.language, preference: preferenceModel)
         self.loadedModel = startupModel
-        self.transcriber = engine ?? engineFactory?(startupModel) ?? Transcriber(model: startupModel)
+        self.transcriber = engine ?? engineFactory?(startupModel) ?? {
+            // A `MenuBarViewModel` built without an injected engine while XCTest is
+            // linked into this process (a unit test, or `Dikta.app` itself hosting
+            // one — see `DiktaApp`) would fall through to a real `Transcriber` here
+            // and attempt a live WhisperKit model download/network call as a side
+            // effect of the app merely launching. That's silent and harmless on a
+            // machine with the model already cached, but hangs or crashes the test
+            // host on a clean CI runner. Fail loudly instead of downloading.
+            assert(
+                !Self.isRunningUnderXCTestHost,
+                "MenuBarViewModel() constructed under XCTest without engine:/engineFactory: — this would build a real, network-touching Transcriber. Inject a fake engine."
+            )
+            return Transcriber(model: startupModel)
+        }()
         self.audioRecorder = AudioRecorder()
         self.audioFeedback = AudioFeedback()
         self.clipboardManager = ClipboardManager()
@@ -729,13 +742,19 @@ final class MenuBarViewModel: ObservableObject {
     // MARK: - Notifications
 
     /// True when XCTest is linked into this process — true under both `swift test`
-    /// and `xcodebuild test`, hosted or not. Used to skip real-app side effects
-    /// (notifications, the onboarding window, the global hotkey listener) that
-    /// either crash or misbehave when a `MenuBarViewModel` is constructed directly
-    /// in a unit test, since `init()` kicks them off automatically.
-    private var isRunningUnderXCTest: Bool {
-        NSClassFromString("XCTestCase") != nil
-    }
+    /// and `xcodebuild test`, hosted or not (including `Dikta.app` itself, when it's
+    /// acting as the unit-test host for `xcodebuild test -scheme Dikta`). Used to
+    /// skip real-app side effects (notifications, the onboarding window, the global
+    /// hotkey listener) that either crash or misbehave when a `MenuBarViewModel` is
+    /// constructed directly in a unit test, since `init()` kicks them off
+    /// automatically — and, via `init`'s engine-construction guard below, to catch
+    /// any `MenuBarViewModel()` built under XCTest without an injected `engine`/
+    /// `engineFactory`, which would otherwise silently build a real, network-touching
+    /// `Transcriber` (see `DiktaApp`, which must inject a no-op engine for exactly
+    /// this reason).
+    static let isRunningUnderXCTestHost: Bool = NSClassFromString("XCTestCase") != nil
+
+    private var isRunningUnderXCTest: Bool { Self.isRunningUnderXCTestHost }
 
     private var canUseNotifications: Bool {
         // UNUserNotificationCenter requires a proper app bundle and crashes
