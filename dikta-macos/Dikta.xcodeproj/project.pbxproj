@@ -43,6 +43,12 @@
 		100000000000000000000104 /* TranscriberPostProcessingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000104 /* TranscriberPostProcessingTests.swift */; };
 		100000000000000000000105 /* FakeTranscriptionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000105 /* FakeTranscriptionEngine.swift */; };
 		100000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */; };
+		100000000000000000000107 /* AppleDictationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000107 /* AppleDictationEngine.swift */; };
+		100000000000000000000108 /* TranscriptionEngineFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000108 /* TranscriptionEngineFactory.swift */; };
+		100000000000000000000109 /* TranscriptionEngineKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000109 /* TranscriptionEngineKind.swift */; };
+		100000000000000000000110 /* MenuBarViewModelSetEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000110 /* MenuBarViewModelSetEngineTests.swift */; };
+		100000000000000000000112 /* MenuBarViewModelLanguageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000112 /* MenuBarViewModelLanguageTests.swift */; };
+		100000000000000000000111 /* AppleDictationEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000111 /* AppleDictationEngineTests.swift */; };
 
 		/* Formatter */
 		100000000000000000000081 /* FormatterEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000081 /* FormatterEngine.swift */; };
@@ -95,6 +101,7 @@
 		200000000000000000000006 /* WhisperModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperModel.swift; sourceTree = "<group>"; };
 		200000000000000000000007 /* AppPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPaths.swift; sourceTree = "<group>"; };
 		200000000000000000000008 /* MicSensitivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicSensitivity.swift; sourceTree = "<group>"; };
+		200000000000000000000109 /* TranscriptionEngineKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionEngineKind.swift; sourceTree = "<group>"; };
 
 		/* Services */
 		200000000000000000000011 /* ConfigService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigService.swift; sourceTree = "<group>"; };
@@ -102,6 +109,8 @@
 		200000000000000000000013 /* AudioFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFeedback.swift; sourceTree = "<group>"; };
 		200000000000000000000014 /* Transcriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Transcriber.swift; sourceTree = "<group>"; };
 		200000000000000000000103 /* TranscriptionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionEngine.swift; sourceTree = "<group>"; };
+		200000000000000000000107 /* AppleDictationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleDictationEngine.swift; sourceTree = "<group>"; };
+		200000000000000000000108 /* TranscriptionEngineFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionEngineFactory.swift; sourceTree = "<group>"; };
 		200000000000000000000016 /* ClipboardManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManager.swift; sourceTree = "<group>"; };
 		200000000000000000000017 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
 		200000000000000000000018 /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
@@ -156,6 +165,9 @@
 		200000000000000000000104 /* TranscriberPostProcessingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriberPostProcessingTests.swift; sourceTree = "<group>"; };
 		200000000000000000000105 /* FakeTranscriptionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeTranscriptionEngine.swift; sourceTree = "<group>"; };
 		200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelSetWhisperModelTests.swift; sourceTree = "<group>"; };
+		200000000000000000000110 /* MenuBarViewModelSetEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelSetEngineTests.swift; sourceTree = "<group>"; };
+		200000000000000000000112 /* MenuBarViewModelLanguageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelLanguageTests.swift; sourceTree = "<group>"; };
+		200000000000000000000111 /* AppleDictationEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleDictationEngineTests.swift; sourceTree = "<group>"; };
 
 		/* Product */
 		400000000000000000000001 /* Dikta.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Dikta.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -245,6 +257,9 @@
 				200000000000000000000104 /* TranscriberPostProcessingTests.swift */,
 				200000000000000000000105 /* FakeTranscriptionEngine.swift */,
 				200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */,
+				200000000000000000000110 /* MenuBarViewModelSetEngineTests.swift */,
+				200000000000000000000112 /* MenuBarViewModelLanguageTests.swift */,
+				200000000000000000000111 /* AppleDictationEngineTests.swift */,
 			);
 			path = DiktaTests;
 			sourceTree = "<group>";
@@ -260,6 +275,7 @@
 				200000000000000000000006 /* WhisperModel.swift */,
 				200000000000000000000007 /* AppPaths.swift */,
 				200000000000000000000008 /* MicSensitivity.swift */,
+				200000000000000000000109 /* TranscriptionEngineKind.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -272,6 +288,8 @@
 				200000000000000000000013 /* AudioFeedback.swift */,
 				200000000000000000000014 /* Transcriber.swift */,
 				200000000000000000000103 /* TranscriptionEngine.swift */,
+				200000000000000000000107 /* AppleDictationEngine.swift */,
+				200000000000000000000108 /* TranscriptionEngineFactory.swift */,
 				200000000000000000000016 /* ClipboardManager.swift */,
 				200000000000000000000017 /* HotkeyManager.swift */,
 				200000000000000000000018 /* Logger.swift */,
@@ -450,6 +468,9 @@
 				100000000000000000000104 /* TranscriberPostProcessingTests.swift in Sources */,
 				100000000000000000000105 /* FakeTranscriptionEngine.swift in Sources */,
 				100000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift in Sources */,
+				100000000000000000000110 /* MenuBarViewModelSetEngineTests.swift in Sources */,
+				100000000000000000000112 /* MenuBarViewModelLanguageTests.swift in Sources */,
+				100000000000000000000111 /* AppleDictationEngineTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -466,6 +487,9 @@
 				100000000000000000000013 /* AudioFeedback.swift in Sources */,
 				100000000000000000000014 /* Transcriber.swift in Sources */,
 				100000000000000000000103 /* TranscriptionEngine.swift in Sources */,
+				100000000000000000000107 /* AppleDictationEngine.swift in Sources */,
+				100000000000000000000108 /* TranscriptionEngineFactory.swift in Sources */,
+				100000000000000000000109 /* TranscriptionEngineKind.swift in Sources */,
 				100000000000000000000007 /* AppPaths.swift in Sources */,
 				100000000000000000000016 /* ClipboardManager.swift in Sources */,
 				100000000000000000000017 /* HotkeyManager.swift in Sources */,

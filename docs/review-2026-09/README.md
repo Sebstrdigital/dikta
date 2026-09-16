@@ -48,6 +48,23 @@ PR #13 `fix/review-2026-09` → main. 15 commits, skeptic-approved (opus, 3 roun
 
 New follow-ups from skeptic: replace `isRunningUnderXCTest` guard in `MenuBarViewModel` with defaulted init param; align DiktaTests signing with app target (Manual/Developer ID vs Automatic). Note: `.claude/worktrees/` in dikta has 3 stale locked agent worktrees at 608b669 from earlier runs — cleanup candidate.
 
+## Status — second update (branch `feat/update-2-models`, 2026-09-15)
+
+Stacked on PR #13. Reports: [benchmark-2026-09-15.md](benchmark-2026-09-15.md), [apple-dictation-engine-spec.md](apple-dictation-engine-spec.md).
+
+| Item | Status |
+|---|---|
+| Benchmark harness `dikta-macos/bench/` (DiktaBench + FLEURS + jiwer) | ✅ |
+| `large-v3-turbo` option + download progress + disk guard | ✅ |
+| Apple `DictationTranscriber` engine, opt-in, macOS 26 | ✅ (ITN unconfigurable, fresh instance per utterance) |
+| KB-Whisper sv tier | ⏸ **decision needed** — see below |
+| `medium` download UX | ✅ (progress row covers it) |
+| Paste off MainActor, `DiktaCore` target, XCTest guard → init param | ⏳ update 3 |
+
+**Measured (FLEURS test, 20 clips/lang, this Mac):** small sv 18.5% / en 9.9%. turbo sv 10.1% / en 6.7%. **kb-whisper-small sv 3.5%** / en 54.2%.
+
+Conclusion: turbo = solid default upgrade both languages. KB-Whisper = 3× better Swedish than turbo, useless for English → only viable as sv-gated tier. Blocker is provenance: only CoreML conversion is community upload `Leonidng/whisperkit-kb-whisper-small`. Options: (a) convert `KBLab/kb-whisper-small` + `-medium` ourselves with `whisperkittools`, publish under own HF org (~hours, python/torch/coremltools env); (b) ship community repo pinned to a revision hash; (c) skip. Apple sv quality vs these: unmeasured (harness doesn't drive Apple engine yet).
+
 ## Proposed Order (original)
 
 1. **Unblock release.** Register 4 Muter files in pbxproj. Add CI step: `xcodebuild build` (SPM alone hides this class of bug). Effort: XS.

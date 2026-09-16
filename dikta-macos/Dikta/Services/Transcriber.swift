@@ -16,12 +16,28 @@ final class Transcriber: ObservableObject, TranscriptionEngine {
     @Published private(set) var isLoading = false
     @Published private(set) var isReady = false
     @Published private(set) var errorMessage: String?
+    @Published private(set) var downloadProgress: Double?
 
     private var whisperKit: WhisperKit?
     private var model: WhisperModel
+    private let freeDiskSpaceProvider: () -> Int64
 
-    init(model: WhisperModel) {
+    /// Bumped at the start and end of every `loadModel` call. `progressCallback`
+    /// hops to `@MainActor` asynchronously (it's invoked from WhisperKit's
+    /// download machinery, possibly off-MainActor), so a hop queued just before
+    /// `loadModel` finishes can otherwise land *after* the end-of-call
+    /// `downloadProgress = nil` reset and resurrect a stale percentage on an
+    /// already-finished (or already-superseded) load. Each hop captures the
+    /// generation it was scheduled under and is a no-op unless it still matches.
+    private var downloadGeneration = 0
+
+    /// - Parameter freeDiskSpaceProvider: Returns bytes free on the volume that
+    ///   will hold a downloaded model. Defaults to a real filesystem probe;
+    ///   tests inject a fixed value to exercise the disk-space guard without
+    ///   depending on the host machine's actual free space.
+    init(model: WhisperModel, freeDiskSpaceProvider: @escaping () -> Int64 = Transcriber.defaultFreeDiskSpace) {
         self.model = model
+        self.freeDiskSpaceProvider = freeDiskSpaceProvider
     }
 
     /// Load the currently configured model. No-op if already loading or ready.
@@ -48,10 +64,15 @@ final class Transcriber: ObservableObject, TranscriptionEngine {
         }
     }
 
-    /// Load `model`, preferring a bundled copy over downloading one.
+    /// Load `model`, preferring a bundled copy over downloading one. When a
+    /// download is needed, `downloadProgress` is published from 0...1 for the
+    /// duration; it stays nil for a bundled load, since nothing is downloaded.
     private func loadModel(_ model: WhisperModel) async {
         isLoading = true
         errorMessage = nil
+        downloadGeneration += 1
+        let generation = downloadGeneration
+        downloadProgress = nil
 
         do {
             if let bundledPath = getBundledModelPath(for: model) {
@@ -66,14 +87,38 @@ final class Transcriber: ObservableObject, TranscriptionEngine {
                 try await wk.loadModels()
                 whisperKit = wk
             } else {
+                guard hasEnoughDiskSpace(for: model) else {
+                    throw TranscriberError.insufficientDiskSpace(
+                        model: model,
+                        requiredMB: model.approximateSizeMB * 2
+                    )
+                }
+
                 AppLogger.transcription.info("Downloading model: \(model.variant) from \(model.repo)")
+                downloadProgress = 0
+
+                // WhisperKit's convenience init (`download: true`) performs the
+                // same download internally but exposes no progress hook, so we
+                // call the underlying static download explicitly to observe
+                // progress, then load the downloaded folder like a bundled model.
+                let modelFolder = try await WhisperKit.download(
+                    variant: model.variant,
+                    from: model.repo,
+                    progressCallback: { [weak self] progress in
+                        let fraction = progress.fractionCompleted
+                        Task { @MainActor in
+                            guard let self, self.downloadGeneration == generation else { return }
+                            self.downloadProgress = fraction
+                        }
+                    }
+                )
+
                 let wk = try await WhisperKit(
-                    model: model.variant,
-                    modelRepo: model.repo,
+                    modelFolder: modelFolder.path,
                     verbose: false,
                     prewarm: false,
                     load: false,
-                    download: true
+                    download: false
                 )
                 try await wk.loadModels()
                 whisperKit = wk
@@ -84,6 +129,12 @@ final class Transcriber: ObservableObject, TranscriptionEngine {
             AppLogger.transcription.error("Whisper model loading error: \(error.localizedDescription)")
         }
 
+        // Bump the generation *before* clearing downloadProgress so any hop
+        // still in flight for this (now-finished) load compares stale and
+        // no-ops, rather than potentially landing after this reset and
+        // resurrecting a stray percentage.
+        downloadGeneration += 1
+        downloadProgress = nil
         isLoading = false
     }
 
@@ -94,6 +145,28 @@ final class Transcriber: ObservableObject, TranscriptionEngine {
         guard let resourcePath = Bundle.main.resourcePath else { return nil }
         let modelPath = "\(resourcePath)/WhisperModels/\(model.variant)"
         return FileManager.default.fileExists(atPath: modelPath) ? modelPath : nil
+    }
+
+    /// True if there's at least 2x `model`'s approximate download size free,
+    /// so the download has headroom for the model's own decompressed/converted
+    /// footprint rather than failing partway through.
+    private func hasEnoughDiskSpace(for model: WhisperModel) -> Bool {
+        let requiredBytes = Int64(model.approximateSizeMB) * 2 * 1_048_576
+        return freeDiskSpaceProvider() >= requiredBytes
+    }
+
+    /// Bytes free on the volume holding the app's Application Support
+    /// directory (where WhisperKit downloads models). Returns `Int64.max`
+    /// (i.e. "assume enough space") if the filesystem can't be queried, so a
+    /// probe failure never blocks a download that would otherwise succeed.
+    nonisolated static func defaultFreeDiskSpace() -> Int64 {
+        let path = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.path
+            ?? NSHomeDirectory()
+        guard let attributes = try? FileManager.default.attributesOfFileSystem(forPath: path),
+              let freeSize = attributes[.systemFreeSize] as? NSNumber else {
+            return .max
+        }
+        return freeSize.int64Value
     }
 
     /// Transcribe audio samples
@@ -178,6 +251,7 @@ enum TranscriberError: Error, LocalizedError {
     case noSpeechDetected
     case reloadFailed(String)
     case reloadInProgress
+    case insufficientDiskSpace(model: WhisperModel, requiredMB: Int)
 
     var errorDescription: String? {
         switch self {
@@ -191,6 +265,8 @@ enum TranscriberError: Error, LocalizedError {
             return message
         case .reloadInProgress:
             return "A model reload is already in progress"
+        case .insufficientDiskSpace(let model, let requiredMB):
+            return "Not enough free disk space to download \(model.displayName) (~\(model.approximateSizeMB) MB model). Free at least \(requiredMB) MB and try again."
         }
     }
 }

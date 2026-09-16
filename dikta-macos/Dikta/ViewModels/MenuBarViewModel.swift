@@ -18,12 +18,27 @@ enum AppState {
 final class MenuBarViewModel: ObservableObject {
     // State
     @Published var appState: AppState = .loading
+    /// Fraction (0...1) of an in-progress Whisper model download, mirrored from
+    /// `transcriber.downloadProgress` while `appState == .loading`. Nil when no
+    /// download is happening (bundled load, or not currently loading at all).
+    @Published private(set) var downloadProgress: Double?
     static var isModelLoaded = false
+    /// Which engine is actually active. Normally mirrors `configService.engine`,
+    /// but can differ right after a factory substitution (e.g. `.appleDictation`
+    /// requested on a pre-macOS 26 system, silently built as Whisper instead) —
+    /// UI must read this, not `configService.engine`, to never claim an engine
+    /// that isn't the one actually running.
+    @Published private(set) var activeEngineKind: TranscriptionEngineKind
 
     // Services
     let configService: ConfigService
     private var cancellables = Set<AnyCancellable>()
-    private let transcriber: any TranscriptionEngine
+    private var transcriber: any TranscriptionEngine
+    /// Builds a `TranscriptionEngine` for a given kind/model, returning the
+    /// engine plus the kind actually built (see `TranscriptionEngineFactory.make`).
+    /// Defaults to `TranscriptionEngineFactory.make`; tests inject a fake so
+    /// `setEngine` can be exercised without touching WhisperKit or Speech.
+    private let engineFactory: (TranscriptionEngineKind, WhisperModel, ConfigService) -> (engine: any TranscriptionEngine, effectiveKind: TranscriptionEngineKind)
     private let audioRecorder: AudioRecorder
     private let audioFeedback: AudioFeedback
     private let clipboardManager: ClipboardManager
@@ -54,14 +69,44 @@ final class MenuBarViewModel: ObservableObject {
     let hotkeyWindowController = HotkeyRecordingWindowController()
 
     /// - Parameters:
-    ///   - engine: Transcription engine to use. Defaults to a real WhisperKit-backed
-    ///     `Transcriber` built from the saved config; tests can inject a fake instead.
+    ///   - engine: Transcription engine to use. Defaults to one built by
+    ///     `engineFactory` from the saved config's engine kind; tests can
+    ///     inject a fake instead.
     ///   - configService: Config store to use. Defaults to `.shared` (the real, persisted
     ///     config); tests can inject an isolated instance instead.
-    init(engine: (any TranscriptionEngine)? = nil, configService: ConfigService? = nil) {
+    ///   - engineFactory: Builds the default `engine` when none is injected, and
+    ///     builds every engine `setEngine` switches to. Defaults to
+    ///     `TranscriptionEngineFactory.make`; tests inject a fake factory.
+    init(
+        engine: (any TranscriptionEngine)? = nil,
+        configService: ConfigService? = nil,
+        engineFactory: @escaping (TranscriptionEngineKind, WhisperModel, ConfigService) -> (engine: any TranscriptionEngine, effectiveKind: TranscriptionEngineKind) = TranscriptionEngineFactory.make
+    ) {
         let configService = configService ?? .shared
         self.configService = configService
-        self.transcriber = engine ?? Transcriber(model: WhisperModel(rawValue: configService.whisperModel) ?? .small)
+        self.engineFactory = engineFactory
+        let model = WhisperModel(rawValue: configService.whisperModel) ?? .small
+
+        let requestedKind = configService.engine
+        let initialEngine: any TranscriptionEngine
+        let effectiveKind: TranscriptionEngineKind
+        if let engine {
+            // An injected engine is assumed to already match the requested
+            // kind — there's no factory call to report otherwise.
+            initialEngine = engine
+            effectiveKind = requestedKind
+        } else {
+            (initialEngine, effectiveKind) = engineFactory(requestedKind, model, configService)
+        }
+        self.transcriber = initialEngine
+        self.activeEngineKind = effectiveKind
+        if effectiveKind != requestedKind {
+            // The factory silently substituted a different engine than
+            // requested (e.g. Apple Dictation asked for on a pre-macOS 26
+            // config). Persist what's actually running so the menu/config
+            // never claims an engine that isn't the one in use.
+            configService.engine = effectiveKind
+        }
         self.audioRecorder = AudioRecorder()
         self.audioFeedback = AudioFeedback()
         self.clipboardManager = ClipboardManager()
@@ -94,6 +139,32 @@ final class MenuBarViewModel: ObservableObject {
         }
     }
 
+    /// Runs `work` (a `load()`/`reload(model:)` call on `engine`) while mirroring
+    /// `engine.downloadProgress` into `downloadProgress` on a short poll, so
+    /// a menu re-render picks up the current download percentage. Polling (rather
+    /// than a Combine subscription) is used because engines are held as
+    /// `any TranscriptionEngine` for testability, which doesn't expose a publisher.
+    /// Always resets `downloadProgress` to nil when `work` finishes, success or not.
+    ///
+    /// `engine` defaults to the currently active `transcriber`, which is what
+    /// every call site wants except `setEngine` — that one is loading a brand
+    /// new engine instance that isn't `transcriber` yet, so it passes that
+    /// instance explicitly.
+    private func withDownloadProgressPolling<T>(observing engine: (any TranscriptionEngine)? = nil, _ work: () async throws -> T) async rethrows -> T {
+        let engine = engine ?? transcriber
+        let pollingTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                self?.downloadProgress = engine.downloadProgress
+                try? await Task.sleep(nanoseconds: 150_000_000) // 150ms
+            }
+        }
+        defer {
+            pollingTask.cancel()
+            downloadProgress = nil
+        }
+        return try await work()
+    }
+
     /// Initialize the app (load models, check permissions, etc.)
     func initialize() async {
         appState = .loading
@@ -113,7 +184,9 @@ final class MenuBarViewModel: ObservableObject {
         }
 
         // Load Whisper model
-        await transcriber.load()
+        await withDownloadProgressPolling {
+            await transcriber.load()
+        }
 
         if transcriber.isReady {
             appState = .idle
@@ -330,44 +403,112 @@ final class MenuBarViewModel: ObservableObject {
 
     // MARK: - Language
 
-    func setLanguage(_ language: Language) {
-        // Auto-enable if the chosen language is currently disabled
-        configService.enableLanguage(language)
-        configService.language = language
-        sendNotification(title: "Write in", body: language.displayName, isRoutine: true)
+    /// Switches the active dictation language to `language`, `prepare`-ing
+    /// the active engine for it first (see `TranscriptionEngine.prepare(language:)`).
+    /// Matters for Apple Dictation, which must resolve/install the new
+    /// language's assets before `transcribe` can use it — without this step,
+    /// switching languages while Apple Dictation is active left `transcribe`
+    /// throwing `.assetsNotInstalled` until the app restarted. WhisperKit's
+    /// `Transcriber` no-ops `prepare` (it takes a language code per-call).
+    ///
+    /// Mirrors `setWhisperModel`/`setEngine`'s safe-switch pattern: only runs
+    /// when idle, goes `.loading` during the switch, and only persists the
+    /// new language once `prepare` has actually succeeded — on failure the
+    /// previous language stays configured and a notification explains why.
+    /// Returns the `Task` doing the work (nil if skipped — not idle, or
+    /// already on `language`) so tests can await completion instead of
+    /// polling `appState`; production callers can ignore the return value.
+    ///
+    /// - Parameters:
+    ///   - notifyOnSuccess: Whether to send a "Write in: <language>"
+    ///     notification once switched — existing callers only want that for
+    ///     a deliberate language pick, not `toggleLanguage`'s "cycle away
+    ///     from the language being disabled" step.
+    ///   - onSuccess: Runs after the language switch (and its notification)
+    ///     succeeds. `toggleLanguage` uses this to disable the old language
+    ///     only once cycling away from it has actually worked.
+    @discardableResult
+    private func activateLanguage(_ language: Language, notifyOnSuccess: Bool, onSuccess: (() -> Void)? = nil) -> Task<Void, Never>? {
+        guard appState == .idle else { return nil }
+        guard language != configService.language else { return nil }
+
+        let previousLanguage = configService.language
+        appState = .loading
+
+        return Task { @MainActor in
+            do {
+                try await withDownloadProgressPolling {
+                    try await transcriber.prepare(language: language)
+                }
+                // Only persist the new language once the engine has actually
+                // prepared for it.
+                configService.language = language
+                appState = .idle
+                if notifyOnSuccess {
+                    sendNotification(title: "Write in", body: language.displayName, isRoutine: true)
+                }
+                onSuccess?()
+            } catch {
+                // The engine couldn't prepare for the new language (e.g.
+                // Apple Dictation doesn't support it, or its assets failed to
+                // install) — keep the previous language active/configured
+                // rather than leaving transcribe() broken until restart.
+                appState = .idle
+                sendNotification(
+                    title: "Error",
+                    body: "Could not switch to \(language.displayName), kept \(previousLanguage.displayName). \(error.localizedDescription)"
+                )
+            }
+        }
     }
 
-    func cycleLanguage() {
+    @discardableResult
+    func setLanguage(_ language: Language) -> Task<Void, Never>? {
+        // Auto-enable if the chosen language is currently disabled
+        configService.enableLanguage(language)
+        return activateLanguage(language, notifyOnSuccess: true)
+    }
+
+    @discardableResult
+    func cycleLanguage() -> Task<Void, Never>? {
         let enabled = configService.enabledLanguages
         let next = configService.language.next(in: enabled)
-        setLanguage(next)
+        return setLanguage(next)
     }
 
     /// Toggle a language's enabled state in the carousel.
     /// - If enabling: also sets it as the active language.
     /// - If disabling and it was the active language: cycles to the next enabled language.
     /// - No-op if it is the last enabled language (enforced by ConfigService).
-    func toggleLanguage(_ language: Language) {
+    @discardableResult
+    func toggleLanguage(_ language: Language) -> Task<Void, Never>? {
         let wasEnabled = configService.isLanguageEnabled(language)
         let isActive = configService.language == language
         let isLastEnabled = configService.enabledLanguages.count == 1 && wasEnabled
 
-        guard !isLastEnabled else { return }
+        guard !isLastEnabled else { return nil }
 
         if wasEnabled {
-            // If disabling the active language, cycle away first
-            if isActive {
-                // Compute next among remaining enabled (excluding this one)
-                let remaining = configService.enabledLanguages.filter { $0 != language }
-                let nextLang = remaining.first ?? language
-                configService.language = nextLang
+            guard isActive else {
+                // Disabling a language that isn't the active one touches
+                // neither the active language nor the engine.
+                configService.disableLanguage(language)
+                return nil
             }
-            configService.disableLanguage(language)
+            // Disabling the active language: cycle to the next enabled one
+            // first, through the same prepare-before-persist path as
+            // `setLanguage`, and only disable `language` once that's
+            // actually succeeded — a failed engine prepare must not leave
+            // the carousel with no active language.
+            let remaining = configService.enabledLanguages.filter { $0 != language }
+            guard let nextLanguage = remaining.first else { return nil }
+            return activateLanguage(nextLanguage, notifyOnSuccess: false) { [weak self] in
+                self?.configService.disableLanguage(language)
+            }
         } else {
             // Enable and activate
             configService.enableLanguage(language)
-            configService.language = language
-            sendNotification(title: "Write in", body: language.displayName, isRoutine: true)
+            return activateLanguage(language, notifyOnSuccess: true)
         }
     }
 
@@ -394,7 +535,9 @@ final class MenuBarViewModel: ObservableObject {
 
         return Task { @MainActor in
             do {
-                try await transcriber.reload(model: model)
+                try await withDownloadProgressPolling {
+                    try await transcriber.reload(model: model)
+                }
                 // Only persist the new model once it has actually loaded.
                 configService.whisperModel = model.rawValue
                 appState = .idle
@@ -408,7 +551,9 @@ final class MenuBarViewModel: ObservableObject {
                 // working before, so recording (which requires appState == .idle)
                 // doesn't stay broken until an app restart.
                 do {
-                    try await transcriber.reload(model: previousModel)
+                    try await withDownloadProgressPolling {
+                        try await transcriber.reload(model: previousModel)
+                    }
                     appState = .idle
                     sendNotification(
                         title: "Error",
@@ -423,6 +568,58 @@ final class MenuBarViewModel: ObservableObject {
                         body: transcriber.errorMessage ?? "Failed to load Whisper model"
                     )
                 }
+            }
+        }
+    }
+
+    // MARK: - Transcription Engine
+
+    /// Switches the active transcription engine to `kind`. Returns the `Task`
+    /// doing the work (nil if the switch was skipped — already idle-blocked,
+    /// or already on `kind`) so tests can await its completion instead of
+    /// polling `appState`. Production callers can ignore the return value.
+    ///
+    /// Unlike `setWhisperModel` (which reloads WhisperKit's *same* long-lived
+    /// instance in place), this builds a brand new engine via `engineFactory`
+    /// and only swaps `transcriber` to it once its `load()` has actually
+    /// succeeded. The previous engine is never touched, so on failure it's
+    /// still loaded and ready — "falling back" to it is just not swapping,
+    /// with no extra reload step needed.
+    @discardableResult
+    func setEngine(_ kind: TranscriptionEngineKind) -> Task<Void, Never>? {
+        guard appState == .idle else { return nil }
+        guard kind != activeEngineKind else { return nil }
+
+        let previousKind = activeEngineKind
+        let model = WhisperModel(rawValue: configService.whisperModel) ?? .small
+        appState = .loading
+
+        return Task { @MainActor in
+            let (newEngine, effectiveKind) = engineFactory(kind, model, configService)
+            await withDownloadProgressPolling(observing: newEngine) {
+                await newEngine.load()
+            }
+
+            if newEngine.isReady {
+                transcriber = newEngine
+                activeEngineKind = effectiveKind
+                // Only persist the new engine once it has actually loaded.
+                // Persist effectiveKind (not kind) so config never claims an
+                // engine that isn't the one actually running.
+                configService.engine = effectiveKind
+                appState = .idle
+                sendNotification(
+                    title: "Engine Changed",
+                    body: "Switched to \(effectiveKind.displayName).",
+                    isRoutine: true
+                )
+            } else {
+                appState = .idle
+                let detail = newEngine.errorMessage.map { " \($0)" } ?? ""
+                sendNotification(
+                    title: "Error",
+                    body: "Could not switch to \(kind.displayName), kept \(previousKind.displayName).\(detail)"
+                )
             }
         }
     }
