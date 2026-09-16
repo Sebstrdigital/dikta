@@ -50,20 +50,20 @@ New follow-ups from skeptic: replace `isRunningUnderXCTest` guard in `MenuBarVie
 
 ## Status — second update (branch `feat/update-2-models`, 2026-09-15)
 
-Stacked on PR #13. Reports: [benchmark-2026-09-15.md](benchmark-2026-09-15.md), [apple-dictation-engine-spec.md](apple-dictation-engine-spec.md).
+Stacked on PR #13. Reports: [benchmark-2026-09-15.md](benchmark-2026-09-15.md), [apple-dictation-engine-spec.md](apple-dictation-engine-spec.md), [foundation-models-probe-2026-09-16.md](foundation-models-probe-2026-09-16.md) (blocked — `SensitiveContentAnalysisML`/`ModelManagerError 1013` fails every `LanguageModelSession.respond` call on this Mac before any formatting could be tested), [benchmark-2026-09-16-apple.md](benchmark-2026-09-16-apple.md) (Apple Dictation engine now driven by DiktaBench: sv 11.68% / en 11.18% WER, ~1.2s load).
 
 | Item | Status |
 |---|---|
 | Benchmark harness `dikta-macos/bench/` (DiktaBench + FLEURS + jiwer) | ✅ |
 | `large-v3-turbo` option + download progress + disk guard | ✅ |
-| Apple `DictationTranscriber` engine, opt-in, macOS 26 | ✅ (ITN unconfigurable, fresh instance per utterance) |
+| Apple `DictationTranscriber` engine | ❌ removed 2026-09-16 — decision: not shipping Apple STT (worse WER than turbo/KB-Whisper, no benefit over built-in macOS dictation; see [benchmark-2026-09-16-apple.md](benchmark-2026-09-16-apple.md)) |
 | KB-Whisper sv tier | ⏸ **decision needed** — see below |
 | `medium` download UX | ✅ (progress row covers it) |
 | Paste off MainActor, `DiktaCore` target, XCTest guard → init param | ⏳ update 3 |
 
 **Measured (FLEURS test, 20 clips/lang, this Mac):** small sv 18.5% / en 9.9%. turbo sv 10.1% / en 6.7%. **kb-whisper-small sv 3.5%** / en 54.2%.
 
-Conclusion: turbo = solid default upgrade both languages. KB-Whisper = 3× better Swedish than turbo, useless for English → only viable as sv-gated tier. Blocker is provenance: only CoreML conversion is community upload `Leonidng/whisperkit-kb-whisper-small`. Options: (a) convert `KBLab/kb-whisper-small` + `-medium` ourselves with `whisperkittools`, publish under own HF org (~hours, python/torch/coremltools env); (b) ship community repo pinned to a revision hash; (c) skip. Apple sv quality vs these: unmeasured (harness doesn't drive Apple engine yet).
+Conclusion: turbo = solid default upgrade both languages. KB-Whisper = 3× better Swedish than turbo, useless for English → only viable as sv-gated tier. Blocker is provenance: only CoreML conversion is community upload `Leonidng/whisperkit-kb-whisper-small`. Options: (a) convert `KBLab/kb-whisper-small` + `-medium` ourselves with `whisperkittools`, publish under own HF org (~hours, python/torch/coremltools env); (b) ship community repo pinned to a revision hash; (c) skip. Apple DictationTranscriber sv 11.7% / en 11.2% WER vs turbo sv 10.1% / en 6.7%, KB-Whisper sv 3.5% — see [benchmark-2026-09-16-apple.md](benchmark-2026-09-16-apple.md).
 
 ## Proposed Order (original)
 
