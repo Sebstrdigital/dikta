@@ -118,33 +118,114 @@ final class TextToSpeechService: NSObject {
         serverProcess = nil
     }
 
-    /// Kill any stale server process on port 59123
-    private func killStaleServer() {
+    /// Runs `executable` with `args` and returns its stdout.
+    ///
+    /// Blocking: it waits for the child to exit, so it must not run on a Swift
+    /// concurrency cooperative-pool thread. Call it through `offCooperativePool`.
+    private static func captureOutput(of executable: String, _ args: [String]) -> String {
         let pipe = Pipe()
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        process.arguments = ["-ti", ":\(Self.serverPort)"]
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = args
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
 
         do {
             try process.run()
-            process.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !output.isEmpty {
-                // Kill stale processes
-                for pidString in output.components(separatedBy: "\n") {
-                    if let pid = Int32(pidString.trimmingCharacters(in: .whitespaces)) {
-                        kill(pid, SIGTERM)
-                    }
-                }
-                // Brief wait for processes to exit
-                usleep(500_000)
-            }
         } catch {
-            // lsof not available or no process found — fine
+            // Tool missing or not executable — treat as "no information".
+            return ""
         }
+        // Read before waiting: the child blocks once the pipe buffer fills, and
+        // waiting first would then deadlock.
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    /// Runs blocking work on a background dispatch queue instead of a Swift
+    /// concurrency cooperative-pool thread, which is a fixed, small resource
+    /// (roughly one thread per core) that must never be parked in a
+    /// `waitUntilExit()`.
+    private static func offCooperativePool<T: Sendable>(
+        _ work: @escaping @Sendable () -> T
+    ) async -> T {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: work())
+            }
+        }
+    }
+
+    /// PIDs of processes *listening* on `port`, never merely connected to it,
+    /// and never this process.
+    ///
+    /// `lsof -i :<port>` matches a port in either the local *or* the remote
+    /// endpoint, so it also reports every client with an open connection to
+    /// `port`. Dikta pings `127.0.0.1:59123` itself (`checkAvailable`), so the
+    /// unfiltered form reported Dikta's own PID whenever one of those sockets
+    /// was still open — and `killStaleServer` then SIGTERMed Dikta, a silent
+    /// exit with no crash report.
+    ///
+    /// `-sTCP:LISTEN` restricts the match to listening sockets, which only a
+    /// server has; the explicit `getpid()` check is a second line of defence so
+    /// no future change to the command can make Dikta kill itself.
+    ///
+    /// This answers "who is listening", not "who may be killed" — 59123 is an
+    /// ordinary port that any program may legitimately occupy, so callers must
+    /// still confirm identity via `staleKokoroServerPIDs(onPort:commandMarker:)`
+    /// before signalling anything.
+    static func listeningServerPIDs(onPort port: Int) -> [Int32] {
+        let ownPID = getpid()
+        return captureOutput(of: "/usr/sbin/lsof", ["-ti", "tcp:\(port)", "-sTCP:LISTEN"])
+            .components(separatedBy: .newlines)
+            .compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) }
+            .filter { $0 != ownPID }
+    }
+
+    /// PIDs listening on `port` whose command line identifies them as one of
+    /// *our* Kokoro servers — a leftover from a previous crash.
+    ///
+    /// Port 59123 sits in macOS's ephemeral range (49152–65535), so it is not
+    /// reserved for Dikta: another program can hold it either deliberately or
+    /// because the kernel handed it out as a local port. Killing whatever
+    /// answers there would terminate an unrelated process, so the command line
+    /// must contain `commandMarker` (in production, the full path of the
+    /// Kokoro server script this app launches) before we signal it.
+    static func staleKokoroServerPIDs(
+        onPort port: Int,
+        commandMarker: String = AppPaths.kokoroServerScript
+    ) -> [Int32] {
+        listeningServerPIDs(onPort: port).filter { pid in
+            captureOutput(of: "/bin/ps", ["-o", "command=", "-p", "\(pid)"])
+                .contains(commandMarker)
+        }
+    }
+
+    /// SIGTERMs every stale Kokoro server listening on `port` and returns the
+    /// PIDs actually signalled (empty when the port is free, or held by
+    /// something that is not ours).
+    @discardableResult
+    static func terminateStaleKokoroServers(
+        onPort port: Int,
+        commandMarker: String = AppPaths.kokoroServerScript
+    ) -> [Int32] {
+        let pids = staleKokoroServerPIDs(onPort: port, commandMarker: commandMarker)
+        for pid in pids {
+            kill(pid, SIGTERM)
+        }
+        return pids
+    }
+
+    /// Kill a Kokoro server left listening on port 59123 by a previous crash.
+    private func killStaleServer() async {
+        let signalled = await Self.offCooperativePool {
+            Self.terminateStaleKokoroServers(onPort: Self.serverPort)
+        }
+        guard !signalled.isEmpty else { return }
+        // Brief wait for the signalled processes to exit, without blocking a
+        // cooperative-pool thread the way `usleep` did.
+        try? await Task.sleep(nanoseconds: 500_000_000)
     }
 
     /// Check if TTS server is available
@@ -182,9 +263,6 @@ final class TextToSpeechService: NSObject {
 
     /// Start the Kokoro server
     private func startServer() async {
-        // Kill any stale server from a previous crash
-        killStaleServer()
-
         let serverScript = AppPaths.kokoroServerScript
         let pythonPath = AppPaths.venvPython
 
@@ -193,6 +271,12 @@ final class TextToSpeechService: NSObject {
             AppLogger.tts.warning("Kokoro not set up — use onboarding to install")
             return
         }
+
+        // Only now that TTS is known to be installed: clear a server left
+        // behind by a previous crash. A user who never installed TTS has no
+        // Kokoro server to clean up, so this must not run `lsof`/`ps` or go
+        // anywhere near port 59123 on their machine.
+        await killStaleServer()
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: pythonPath)
