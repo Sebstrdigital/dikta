@@ -16,6 +16,17 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     /// Every model passed to `reload(model:)`, in call order.
     private(set) var reloadedModels: [WhisperModel] = []
 
+    /// Text returned by `transcribe`. Empty by default, which is what the
+    /// pre-debrief tests relied on.
+    var transcriptToReturn: String = ""
+
+    /// Artificial delay before `transcribe` returns, so timeout paths can be
+    /// exercised without waiting on a real model.
+    var transcribeDelay: TimeInterval = 0
+
+    /// Number of `transcribe` calls, for tests that assert the engine ran.
+    private(set) var transcribeCallCount = 0
+
     func load() async {
         isReady = true
     }
@@ -34,6 +45,10 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     }
 
     func transcribe(_ audioSamples: [Float], language: String?, micSensitivity: MicSensitivity) async throws -> String {
-        ""
+        transcribeCallCount += 1
+        if transcribeDelay > 0 {
+            try await Task.sleep(nanoseconds: UInt64(transcribeDelay * 1_000_000_000))
+        }
+        return transcriptToReturn
     }
 }

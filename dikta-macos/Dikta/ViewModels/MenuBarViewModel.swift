@@ -3,6 +3,7 @@ import AppKit
 import UserNotifications
 import Combine
 import ServiceManagement
+import UniformTypeIdentifiers
 
 /// State for the menu bar app
 enum AppState {
@@ -52,10 +53,33 @@ final class MenuBarViewModel: ObservableObject {
     private let textSelectionService: TextSelectionService
     private let muterRegistry: MuterRegistry
 
+    // Debrief services. Injected ones win; otherwise they are built lazily —
+    // the summarizer is rebuilt whenever the configured engine kind or Ollama
+    // model changes, so switching engines in the menu takes effect immediately.
+    private let injectedDebriefSummarizer: DebriefSummarizer?
+    private var builtDebriefSummarizer: DebriefSummarizer?
+    private var builtDebriefSummarizerKind: DebriefEngineKind?
+    private var builtDebriefSummarizerModel: String?
+    private let injectedDebriefStore: DebriefStore?
+    private var builtDebriefStore: DebriefStore?
+
+    /// Decodes an audio file to 16 kHz mono. A closure rather than the concrete
+    /// `AudioFileLoader` so tests can inject a slow or failing loader and drive
+    /// the state machine around it.
+    private let audioFileLoader: @Sendable (URL) throws -> [Float]
+
     // Track which mode initiated a recording (nil when not recording)
     private var activeRecordingMode: HotkeyMode? = nil
     private var recordingStartDate: Date?
     private var activeMuteTokens: [MuteToken] = []
+
+    // Debrief state
+    /// True for the whole debrief run (transcribe → summarize → save → paste).
+    @Published var isSummarizing = false
+    /// Human-readable stage text shown in the menu while `isSummarizing`.
+    @Published var debriefStatus: String?
+    /// Name of the summarizer engine that produced the most recent debrief.
+    var lastDebriefEngineName: String?
 
     // Hotkey recording state
     @Published var isRecordingHotkey = false
@@ -83,13 +107,27 @@ final class MenuBarViewModel: ObservableObject {
     ///     the real `Transcriber(model:)`.
     ///   - configService: Config store to use. Defaults to `.shared` (the real, persisted
     ///     config); tests can inject an isolated instance instead.
+    ///   - debriefSummarizer: Summarizer for debrief mode. Defaults to one built lazily
+    ///     from the configured engine kind; tests inject a fake so no Ollama or
+    ///     Foundation Models call is ever made.
+    ///   - debriefStore: Session folder writer. Defaults to `~/Documents/Dikta`; tests
+    ///     inject one rooted in a temp directory.
+    ///   - clipboardManager: Paste path. Defaults to the real one; tests inject a
+    ///     subclass so a test run never posts Cmd+V or clobbers the clipboard.
     init(
         engine: (any TranscriptionEngine)? = nil,
         engineFactory: ((WhisperModel) -> any TranscriptionEngine)? = nil,
-        configService: ConfigService? = nil
+        configService: ConfigService? = nil,
+        debriefSummarizer: DebriefSummarizer? = nil,
+        debriefStore: DebriefStore? = nil,
+        clipboardManager: ClipboardManager? = nil,
+        audioFileLoader: (@Sendable (URL) throws -> [Float])? = nil
     ) {
         let configService = configService ?? .shared
         self.configService = configService
+        self.injectedDebriefSummarizer = debriefSummarizer
+        self.injectedDebriefStore = debriefStore
+        self.audioFileLoader = audioFileLoader ?? { try AudioFileLoader().load(url: $0) }
         let preferenceModel = WhisperModel(rawValue: configService.whisperModel) ?? .small
         let startupModel = Self.effectiveModel(for: configService.language, preference: preferenceModel)
         self.loadedModel = startupModel
@@ -109,10 +147,11 @@ final class MenuBarViewModel: ObservableObject {
         }()
         self.audioRecorder = AudioRecorder()
         self.audioFeedback = AudioFeedback()
-        self.clipboardManager = ClipboardManager()
+        let resolvedClipboardManager = clipboardManager ?? ClipboardManager()
+        self.clipboardManager = resolvedClipboardManager
         self.hotkeyManager = HotkeyManager()
         self.ttsService = TextToSpeechService()
-        self.textSelectionService = TextSelectionService(clipboardManager: clipboardManager)
+        self.textSelectionService = TextSelectionService(clipboardManager: resolvedClipboardManager)
         self.muterRegistry = MuterRegistry()
 
         // Sync mute state from config
@@ -225,6 +264,12 @@ final class MenuBarViewModel: ObservableObject {
     func startRecording() {
         guard appState == .idle else { return }
 
+        // Debrief mode records until the user stops it: no silence auto-stop,
+        // and a 2-hour cap instead of the 5-minute dictation cap.
+        let overrides = recorderOverrides(debriefEnabled: configService.debriefModeEnabled)
+        audioRecorder.silenceAutoStopEnabled = overrides.silenceAutoStop
+        audioRecorder.maxBufferSamples = overrides.maxBufferSamples
+
         // Set up silence auto-stop: when 10s of silence is detected, stop and process audio
         audioRecorder.onSilenceAutoStop = { [weak self] samples in
             guard let self, self.appState == .recording else { return }
@@ -275,7 +320,9 @@ final class MenuBarViewModel: ObservableObject {
     /// Timeout for transcription (seconds)
     private static let transcriptionTimeout: UInt64 = 60
 
-    private func processAudio(_ samples: [Float]) async {
+    /// Internal rather than private so tests can drive the post-recording path
+    /// directly without faking a live microphone.
+    func processAudio(_ samples: [Float]) async {
         // Diagnostic: log audio buffer stats
         let duration = recordingStartDate.map { Date().timeIntervalSince($0) } ?? 0
         let bufferRMS: Float = samples.isEmpty ? 0 :
@@ -285,6 +332,13 @@ final class MenuBarViewModel: ObservableObject {
             + " | routeChanges=\(audioRecorder.routeChangeCount) | converterErrors=\(audioRecorder.converterErrorCount) | emptyBuffers=\(audioRecorder.emptyBufferCount)"
         )
         recordingStartDate = nil
+
+        // Debrief mode replaces the whole dictation path: longer transcription
+        // timeout, a summarization step, and a multi-line paste.
+        if configService.debriefModeEnabled {
+            await runDebrief(samples: samples, originalFile: nil)
+            return
+        }
 
         do {
             // Transcribe with a 60-second timeout to prevent hanging
@@ -313,13 +367,11 @@ final class MenuBarViewModel: ObservableObject {
                 AppLogger.transcription.info("Memory after transcription: \(String(format: "%.1f", memAfter)) MB")
             }
 
-            // Check for silence/empty output from Whisper
-            let silenceIndicators = ["[silence]", "[blank_audio]", "[no speech]", "(silence)", "[ silence ]"]
-            let lowerText = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-
-            let matchedIndicator = silenceIndicators.first(where: { lowerText.contains($0) })
-            if lowerText.isEmpty || matchedIndicator != nil {
-                let reason = lowerText.isEmpty ? "empty text" : "matched=\"\(matchedIndicator!)\""
+            // Check for silence/empty output from Whisper (same rules the
+            // debrief pipeline applies — see TranscriptSanitizer)
+            if TranscriptSanitizer.isEffectivelyEmpty(text) {
+                let matchedIndicator = TranscriptSanitizer.matchedSilenceIndicator(text)
+                let reason = matchedIndicator.map { "matched=\"\($0)\"" } ?? "empty text"
                 DiagnosticLogger.shared.log("RESULT | no_speech (\(reason)) | text=\"\(text)\"")
                 sendNotification(
                     title: "No Speech",
@@ -356,7 +408,7 @@ final class MenuBarViewModel: ObservableObject {
         configService.addHistoryItem(text: text)
 
         // Paste text
-        clipboardManager.pasteText(text)
+        paste(text)
 
         // Beep and notify
         audioFeedback.beepOff()
@@ -365,9 +417,223 @@ final class MenuBarViewModel: ObservableObject {
         sendNotification(title: "Pasted", body: preview, isRoutine: true)
     }
 
+    /// Routes `text` through `pasteMultiline` when it contains a newline,
+    /// preserving structure (e.g. a re-pasted, rendered debrief summary);
+    /// otherwise through `pasteText`, whose keystroke simulation flattens
+    /// newlines to spaces.
+    private func paste(_ text: String) {
+        if text.contains("\n") || text.contains("\r") {
+            clipboardManager.pasteMultiline(text)
+        } else {
+            clipboardManager.pasteText(text)
+        }
+    }
+
     /// Paste a history item
     func pasteHistoryItem(_ item: HistoryItem) {
-        clipboardManager.pasteText(item.text)
+        paste(item.text)
+    }
+
+    // MARK: - Debrief Mode
+
+    /// The summarizer used for the next debrief. An injected one (tests) always
+    /// wins; otherwise one is built from config and cached until the configured
+    /// engine kind or Ollama model changes.
+    private var debriefSummarizer: DebriefSummarizer {
+        if let injectedDebriefSummarizer { return injectedDebriefSummarizer }
+
+        let kind = configService.debriefEngine
+        let model = configService.ollamaModel
+        if let built = builtDebriefSummarizer,
+           builtDebriefSummarizerKind == kind,
+           builtDebriefSummarizerModel == model {
+            return built
+        }
+
+        let summarizer = DebriefSummarizerFactory.make(kind: kind, ollamaModel: model)
+        builtDebriefSummarizer = summarizer
+        builtDebriefSummarizerKind = kind
+        builtDebriefSummarizerModel = model
+        return summarizer
+    }
+
+    private var debriefStore: DebriefStore {
+        if let injectedDebriefStore { return injectedDebriefStore }
+        if let builtDebriefStore { return builtDebriefStore }
+        let store = DebriefStore()
+        builtDebriefStore = store
+        return store
+    }
+
+    func toggleDebriefMode() {
+        configService.debriefModeEnabled.toggle()
+    }
+
+    func setDebriefEngine(_ kind: DebriefEngineKind) {
+        configService.debriefEngine = kind
+    }
+
+    /// The recorder settings the next recording runs with. Pure so it can be
+    /// tested without a microphone; `startRecording` is its only caller.
+    func recorderOverrides(debriefEnabled: Bool) -> (silenceAutoStop: Bool, maxBufferSamples: Int) {
+        debriefEnabled
+            ? (silenceAutoStop: false, maxBufferSamples: Self.debriefMaxBufferSamples)
+            : (silenceAutoStop: true, maxBufferSamples: AudioRecorder.defaultMaxBufferSamples)
+    }
+
+    /// Two hours at 16 kHz. A debrief is minutes, not hours; this is a runaway
+    /// guard, not an expected limit.
+    static let debriefMaxBufferSamples: Int = 16_000 * 60 * 120
+
+    /// Takes ownership of the debrief UI state, or returns false when another
+    /// debrief already holds it. Claim and release are split out because
+    /// `importAudioFile` must claim *before* it starts decoding a file, which
+    /// happens well before there are any samples to hand `runDebrief`.
+    private func claimDebrief(status: String) -> Bool {
+        guard !isSummarizing else { return false }
+        isSummarizing = true
+        debriefStatus = status
+        appState = .processing
+        return true
+    }
+
+    private func releaseDebrief() {
+        isSummarizing = false
+        debriefStatus = nil
+        appState = .idle
+    }
+
+    /// Runs the debrief pipeline and pastes the rendered summary. Owns all the
+    /// UI state around the run; `DebriefPipeline` itself stays UI-free.
+    func runDebrief(samples: [Float], originalFile: URL?) async {
+        guard claimDebrief(status: "Transcribing…") else {
+            sendNotification(title: "Debrief Busy", body: "Debrief already in progress.")
+            return
+        }
+        await runClaimedDebrief(samples: samples, originalFile: originalFile)
+    }
+
+    /// The body of a debrief run, for callers that already hold the claim.
+    /// Always releases it, on every exit path.
+    private func runClaimedDebrief(samples: [Float], originalFile: URL?) async {
+        debriefStatus = "Transcribing…"
+        defer { releaseDebrief() }
+
+        let pipeline = DebriefPipeline(
+            engine: transcriber,
+            summarizer: debriefSummarizer,
+            store: debriefStore
+        )
+
+        do {
+            let result = try await pipeline.run(
+                samples: samples,
+                language: configService.language.whisperCode,
+                micSensitivity: configService.micSensitivity,
+                originalFile: originalFile
+            ) { [weak self] stage in
+                guard let self else { return }
+                switch stage {
+                case .transcribing: self.debriefStatus = "Transcribing…"
+                case .summarizing: self.debriefStatus = "Summarizing…"
+                case .saving: self.debriefStatus = "Saving…"
+                }
+            }
+
+            lastDebriefEngineName = result.engineName
+            DiagnosticLogger.shared.log(
+                "DEBRIEF | engine=\(result.engineName) | chars=\(result.renderedText.count)"
+                + " | folder=\(result.paths.folder.lastPathComponent)"
+            )
+
+            // Same history bookkeeping as a normal transcript (see outputText),
+            // but pasted through the multi-line path so the headings survive.
+            configService.addHistoryItem(text: result.renderedText)
+            clipboardManager.pasteMultiline(result.renderedText)
+            audioFeedback.beepOff()
+
+            let preview = result.renderedText.count > 50
+                ? String(result.renderedText.prefix(50)) + "..."
+                : result.renderedText
+            sendNotification(title: "Debrief Pasted", body: preview, isRoutine: true)
+
+        } catch is TranscriptionTimeoutError {
+            DiagnosticLogger.shared.log("DEBRIEF | timeout")
+            sendNotification(title: "Transcription Timeout", body: "Processing took too long and was cancelled.")
+        } catch {
+            DiagnosticLogger.shared.log("DEBRIEF | error | \(error.localizedDescription)")
+            sendNotification(title: "Debrief Failed", body: error.localizedDescription)
+        }
+    }
+
+    /// Runs the same debrief pipeline on an existing recording (a Voice Memo,
+    /// say) instead of freshly captured microphone audio.
+    ///
+    /// The debrief state is claimed *before* the file is decoded. Decoding a
+    /// long recording takes seconds, and until the claim exists `appState` is
+    /// still `.idle`, so the dictation hotkey would happily start a recording
+    /// on top of the import — after which `stopRecording` refuses to run
+    /// (`appState` is no longer `.recording`) and the microphone never stops.
+    func importAudioFile(url: URL) async {
+        guard appState != .recording else { return }
+        guard claimDebrief(status: "Loading audio…") else {
+            sendNotification(title: "Debrief Busy", body: "Debrief already in progress.")
+            return
+        }
+
+        let load = audioFileLoader
+        let samples: [Float]
+        do {
+            // Decoding and resampling a long recording is CPU/IO work; keep it
+            // off the main actor so the menu stays responsive.
+            samples = try await Task.detached(priority: .userInitiated) {
+                try load(url)
+            }.value
+        } catch {
+            DiagnosticLogger.shared.log("DEBRIEF | load_failed | \(error.localizedDescription)")
+            sendNotification(title: "Could Not Load Audio", body: error.localizedDescription)
+            releaseDebrief()
+            return
+        }
+
+        await runClaimedDebrief(samples: samples, originalFile: url)
+    }
+
+    /// Menu action: pick an audio file, then run `importAudioFile` on it.
+    func loadAudioFileFromPanel() {
+        // A menu-bar-only app isn't frontmost when the menu is open, so the
+        // panel would otherwise appear behind other windows.
+        NSApp.activate(ignoringOtherApps: true)
+
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.message = "Choose a recording to run through the debrief pipeline"
+        // If none of the extensions resolve to a UTType, fall back to the audio
+        // supertype rather than leaving the list empty — an empty
+        // `allowedContentTypes` means "allow everything", which would let the
+        // user pick a file the loader is guaranteed to reject.
+        let contentTypes = AudioFileLoader.supportedExtensions.compactMap {
+            UTType(filenameExtension: $0)
+        }
+        panel.allowedContentTypes = contentTypes.isEmpty ? [.audio] : contentTypes
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        Task { await importAudioFile(url: url) }
+    }
+
+    /// Menu action: reveal `~/Documents/Dikta` in Finder, creating it if the
+    /// user hasn't run a debrief yet.
+    func openDebriefFolder() {
+        let root = DebriefStore.defaultRoot
+        do {
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        } catch {
+            AppLogger.general.error("Failed to create debrief folder: \(error.localizedDescription)")
+        }
+        NSWorkspace.shared.open(root)
     }
 
     // MARK: - Launch at Login
@@ -939,6 +1205,8 @@ extension MenuBarViewModel: HotkeyManagerDelegate {
 // MARK: - Supporting Types
 
 /// Thrown when transcription exceeds the timeout limit
-private struct TranscriptionTimeoutError: Error, LocalizedError {
+/// Internal rather than private so `DebriefPipeline` (which races the same
+/// transcription call against its own, much longer timeout) can throw it too.
+struct TranscriptionTimeoutError: Error, LocalizedError {
     var errorDescription: String? { "Transcription timed out" }
 }

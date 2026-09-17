@@ -25,8 +25,13 @@ struct MenuBarView: View {
                     Text("Stop Speaking")
                 }
             } else if viewModel.appState == .processing {
-                Text("Processing...")
-                    .foregroundColor(.secondary)
+                if viewModel.isSummarizing, let status = viewModel.debriefStatus {
+                    Text(status)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Processing...")
+                        .foregroundColor(.secondary)
+                }
             } else if viewModel.appState == .loading {
                 if let progress = viewModel.downloadProgress {
                     Text("Downloading model… \(Int(progress * 100))%")
@@ -50,6 +55,9 @@ struct MenuBarView: View {
 
             // Write in (language) submenu
             WriteInMenu(viewModel: viewModel)
+
+            // Post-meeting debrief submenu
+            DebriefMenu(viewModel: viewModel)
 
             // Advanced submenu (includes update controls - US-003)
             AdvancedMenu(viewModel: viewModel)
@@ -145,6 +153,71 @@ struct AudioMenu: View {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/// Post-meeting debrief submenu
+struct DebriefMenu: View {
+    @ObservedObject var viewModel: MenuBarViewModel
+
+    /// Foundation Models only exists on macOS 26 and later; on anything older
+    /// the engine is listed but not selectable.
+    private var appleIntelligenceAvailable: Bool {
+        if #available(macOS 26, *) {
+            return true
+        }
+        return false
+    }
+
+    private func displayName(for kind: DebriefEngineKind) -> String {
+        switch kind {
+        case .auto: return "Auto"
+        case .foundationModels: return "Apple Intelligence (macOS 26)"
+        case .ollama: return "Ollama (local)"
+        case .heuristic: return "Heuristic"
+        }
+    }
+
+    var body: some View {
+        Menu("Debrief") {
+            Button(action: { viewModel.toggleDebriefMode() }) {
+                HStack {
+                    Text("Debrief mode")
+                    if viewModel.configService.debriefModeEnabled {
+                        Spacer()
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+
+            Button("Load audio file…") {
+                viewModel.loadAudioFileFromPanel()
+            }
+            .disabled(viewModel.appState == .recording || viewModel.isSummarizing)
+
+            Divider()
+
+            Menu("Engine") {
+                ForEach(DebriefEngineKind.allCases, id: \.self) { kind in
+                    Button(action: { viewModel.setDebriefEngine(kind) }) {
+                        HStack {
+                            Text(displayName(for: kind))
+                            if viewModel.configService.debriefEngine == kind {
+                                Spacer()
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                    .disabled(kind == .foundationModels && !appleIntelligenceAvailable)
+                }
+            }
+
+            Divider()
+
+            Button("Open Dikta folder") {
+                viewModel.openDebriefFolder()
             }
         }
     }

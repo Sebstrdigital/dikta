@@ -240,4 +240,33 @@ final class ConfigService: ObservableObject {
         objectWillChange.send()
         save()
     }
+
+    // MARK: - Debrief Mode
+
+    var debriefModeEnabled: Bool {
+        get { config.debriefModeEnabled }
+        set {
+            config.debriefModeEnabled = newValue
+            objectWillChange.send()
+            save()
+        }
+    }
+
+    var debriefEngine: DebriefEngineKind {
+        get { config.debriefEngine }
+        set {
+            config.debriefEngine = newValue
+            objectWillChange.send()
+            save()
+        }
+    }
+
+    var ollamaModel: String {
+        get { config.ollamaModel }
+        set {
+            config.ollamaModel = newValue
+            objectWillChange.send()
+            save()
+        }
+    }
 }

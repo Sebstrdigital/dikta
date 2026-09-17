@@ -21,6 +21,11 @@ final class AudioRecorder {
     /// Receives the captured audio samples for processing.
     var onSilenceAutoStop: (([Float]) -> Void)?
 
+    /// Set to false to disable silence auto-stop entirely for the next
+    /// recording (debrief mode records until the user stops it manually).
+    /// Defaults to true, which is the normal dictation behaviour.
+    var silenceAutoStopEnabled: Bool = true
+
     private var silenceStartDate: Date?
     private let silenceAutoStopThreshold: TimeInterval = 10.0
     /// RMS energy below this level is considered silence (set per-recording based on MicSensitivity)
@@ -29,9 +34,14 @@ final class AudioRecorder {
     /// Target sample rate for Whisper (16kHz)
     static let sampleRate: Double = 16000
 
-    /// Maximum audio buffer size: 5 minutes at 16kHz (4,800,000 samples).
+    /// Default maximum audio buffer size: 5 minutes at 16kHz (4,800,000 samples).
     /// When reached the captured audio is sent for processing immediately.
-    static let maxBufferSamples: Int = 4_800_000
+    static let defaultMaxBufferSamples: Int = 4_800_000
+
+    /// Effective cap for the next recording. Debrief mode raises this so a
+    /// multi-minute debrief isn't cut short; normal dictation leaves it at
+    /// `defaultMaxBufferSamples`.
+    var maxBufferSamples: Int = AudioRecorder.defaultMaxBufferSamples
 
     /// Check if microphone permission is granted
     static func checkPermission() async -> Bool {
@@ -194,13 +204,13 @@ final class AudioRecorder {
 
             bufferLock.lock()
             audioBuffer.append(contentsOf: samples)
-            let captured = audioBuffer
-            let bufferFull = audioBuffer.count >= Self.maxBufferSamples
+            let bufferFull = audioBuffer.count >= maxBufferSamples
             bufferLock.unlock()
 
-            // Hard buffer limit: 5 minutes at 16kHz — trigger processing immediately
+            // Hard buffer limit — trigger processing immediately
             if bufferFull {
                 silenceStartDate = nil
+                let captured = snapshotBuffer()
                 let callback = onSilenceAutoStop
                 DispatchQueue.main.async {
                     callback?(captured)
@@ -208,39 +218,67 @@ final class AudioRecorder {
                 return
             }
 
-            // Silence detection: compute RMS of this buffer chunk
-            checkSilenceAutoStop(samples: samples, captured: captured)
+            // Silence detection. This guard sits above everything that touches
+            // the capture buffer: debrief mode records for up to two hours and
+            // must not pay for bookkeeping it has switched off.
+            guard silenceAutoStopEnabled else { return }
+
+            guard let trimCount = silenceAutoStopTrimCount(samples: samples) else { return }
+
+            // Only now — on the one callback that actually fires auto-stop — is
+            // the capture buffer read.
+            let captured = snapshotBuffer()
+            let trimmedEnd = max(0, captured.count - trimCount)
+            let trimmed = trimmedEnd > 0 ? Array(captured[..<trimmedEnd]) : captured
+            let callback = onSilenceAutoStop
+            DispatchQueue.main.async {
+                callback?(trimmed)
+            }
         }
     }
 
-    private func checkSilenceAutoStop(samples: [Float], captured: [Float]) {
-        guard !samples.isEmpty else { return }
+    private func snapshotBuffer() -> [Float] {
+        bufferLock.lock()
+        defer { bufferLock.unlock() }
+        return audioBuffer
+    }
+
+    /// Updates silence bookkeeping with the newest chunk and returns how many
+    /// trailing samples to trim when auto-stop should fire now, or nil when it
+    /// shouldn't.
+    ///
+    /// Takes only the new chunk, never the capture buffer. Binding the capture
+    /// buffer to a local on every tap callback is cheap on its own (Swift
+    /// arrays are copy-on-write, and a binding that dies inside the callback
+    /// never breaks uniqueness) but it escaped into the auto-stop callback,
+    /// which makes the *next* `append` copy the entire buffer — 460 MB at the
+    /// debrief cap. Deciding first and snapshotting only when firing keeps the
+    /// hot path free of the buffer entirely.
+    ///
+    /// Internal so it can be unit-tested without a microphone.
+    func silenceAutoStopTrimCount(samples: [Float], now: Date = Date()) -> Int? {
+        guard !samples.isEmpty else { return nil }
 
         // RMS energy of this chunk
         let sumOfSquares = samples.reduce(0.0) { $0 + $1 * $1 }
         let rms = (sumOfSquares / Float(samples.count)).squareRoot()
 
-        let now = Date()
-        if rms < silenceRMSThreshold {
-            if silenceStartDate == nil {
-                silenceStartDate = now
-            } else if let start = silenceStartDate,
-                      now.timeIntervalSince(start) >= silenceAutoStopThreshold {
-                // Silence threshold exceeded — trim trailing silence and trigger auto-stop
-                let silenceSamples = Int(now.timeIntervalSince(start) * Self.sampleRate)
-                let trimmedEnd = max(0, captured.count - silenceSamples)
-                let trimmed = trimmedEnd > 0 ? Array(captured[..<trimmedEnd]) : captured
-
-                silenceStartDate = nil
-                let callback = onSilenceAutoStop
-                DispatchQueue.main.async {
-                    callback?(trimmed)
-                }
-            }
-        } else {
+        guard rms < silenceRMSThreshold else {
             // Speech detected — reset silence timer
             silenceStartDate = nil
+            return nil
         }
+
+        guard let start = silenceStartDate else {
+            silenceStartDate = now
+            return nil
+        }
+
+        let silentFor = now.timeIntervalSince(start)
+        guard silentFor >= silenceAutoStopThreshold else { return nil }
+
+        silenceStartDate = nil
+        return Int(silentFor * Self.sampleRate)
     }
 
     /// Stop recording and return the audio buffer

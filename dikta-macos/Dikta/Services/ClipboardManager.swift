@@ -2,8 +2,11 @@ import Foundation
 import AppKit
 import Carbon.HIToolbox
 
-/// Service for clipboard operations and auto-paste
-final class ClipboardManager {
+/// Service for clipboard operations and auto-paste.
+///
+/// Not `final` so tests can substitute a subclass that records paste calls
+/// instead of posting real CGEvents and clobbering the developer's clipboard.
+class ClipboardManager {
     /// Copy text to the system clipboard
     func copy(_ text: String) {
         let pasteboard = NSPasteboard.general
@@ -47,6 +50,34 @@ final class ClipboardManager {
         // Type text directly - bypasses clipboard entirely
         typeText(text)
         AppLogger.general.debug("Typed \(text.count) characters directly")
+    }
+
+    /// Output multi-line text via the pasteboard and Cmd+V, preserving line
+    /// breaks. `pasteText` types characters one by one and deliberately
+    /// flattens newlines to spaces, which destroys the structure of a rendered
+    /// debrief summary, so that path can't be reused here.
+    ///
+    /// The previous clipboard contents are put back after a short delay, once
+    /// the receiving app has had time to read the pasteboard.
+    func pasteMultiline(_ text: String) {
+        let previous = getText()
+
+        copy(text)
+
+        // Same 0.05 s settle as formatSelection: Cmd+V posted in the same
+        // runloop turn as the pasteboard write can land before the receiving
+        // app sees the new contents, pasting whatever was there before.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self else { return }
+            self.simulatePaste()
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self, let previous else { return }
+                self.copy(previous)
+            }
+        }
+
+        AppLogger.general.debug("Pasted \(text.count) characters via pasteboard")
     }
 
     /// Simulate Cmd+C keystroke to copy selection
