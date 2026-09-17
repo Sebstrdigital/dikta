@@ -15,6 +15,14 @@ struct AppConfig: Codable {
     var muteNotifications: Bool
     var diagnosticLogging: Bool
     var enabledLanguages: [Language]
+    /// When true, a hotkey recording runs the post-meeting debrief pipeline
+    /// (no silence auto-stop, no 5-minute buffer cap, transcribe → summarize →
+    /// paste) instead of plain dictation.
+    var debriefModeEnabled: Bool
+    /// Which summarizer backs debrief mode. `.auto` chains the available ones.
+    var debriefEngine: DebriefEngineKind
+    /// Model name passed to the Ollama summarizer.
+    var ollamaModel: String
 
     struct HotkeyConfigs: Codable {
         var toggle: HotkeyConfig
@@ -63,9 +71,14 @@ struct AppConfig: Codable {
         case muteNotifications = "mute_notifications"
         case diagnosticLogging = "diagnostic_logging"
         case enabledLanguages = "enabled_languages"
+        case debriefModeEnabled = "debrief_mode_enabled"
+        case debriefEngine = "debrief_engine"
+        case ollamaModel = "ollama_model"
     }
 
     static let defaultCustomPrompt = "Clean up this dictation. Fix grammar, punctuation, and remove filler words. Output only the cleaned text."
+
+    static let defaultOllamaModel = "qwen3:4b"
 
     /// Default configuration
     static let `default` = AppConfig(
@@ -85,14 +98,17 @@ struct AppConfig: Codable {
         muteSounds: false,
         muteNotifications: false,
         diagnosticLogging: false,
-        enabledLanguages: [.english, .swedish, .indonesian]
+        enabledLanguages: [.english, .swedish, .indonesian],
+        debriefModeEnabled: false,
+        debriefEngine: .auto,
+        ollamaModel: defaultOllamaModel
     )
 
     /// Maximum history items to keep
     static let historyLimit = 5
 
     /// Memberwise initializer
-    init(version: Int, hotkeys: HotkeyConfigs, outputMode: OutputMode, history: [HistoryItem], whisperModel: String, llmModel: String, language: Language, customPrompt: String = defaultCustomPrompt, micSensitivity: MicSensitivity = .normal, muteSounds: Bool = false, muteNotifications: Bool = false, diagnosticLogging: Bool = false, enabledLanguages: [Language] = [.english, .swedish, .indonesian]) {
+    init(version: Int, hotkeys: HotkeyConfigs, outputMode: OutputMode, history: [HistoryItem], whisperModel: String, llmModel: String, language: Language, customPrompt: String = defaultCustomPrompt, micSensitivity: MicSensitivity = .normal, muteSounds: Bool = false, muteNotifications: Bool = false, diagnosticLogging: Bool = false, enabledLanguages: [Language] = [.english, .swedish, .indonesian], debriefModeEnabled: Bool = false, debriefEngine: DebriefEngineKind = .auto, ollamaModel: String = defaultOllamaModel) {
         self.version = version
         self.hotkeys = hotkeys
         self.outputMode = outputMode
@@ -106,6 +122,9 @@ struct AppConfig: Codable {
         self.muteNotifications = muteNotifications
         self.diagnosticLogging = diagnosticLogging
         self.enabledLanguages = enabledLanguages
+        self.debriefModeEnabled = debriefModeEnabled
+        self.debriefEngine = debriefEngine
+        self.ollamaModel = ollamaModel
     }
 
     /// Handle missing fields from old configs (v2 configs with active_mode are handled gracefully —
@@ -141,5 +160,8 @@ struct AppConfig: Codable {
         muteNotifications = try container.decodeIfPresent(Bool.self, forKey: .muteNotifications) ?? false
         diagnosticLogging = try container.decodeIfPresent(Bool.self, forKey: .diagnosticLogging) ?? false
         enabledLanguages = try container.decodeIfPresent([Language].self, forKey: .enabledLanguages) ?? [.english, .swedish, .indonesian]
+        debriefModeEnabled = try container.decodeIfPresent(Bool.self, forKey: .debriefModeEnabled) ?? false
+        debriefEngine = try container.decodeIfPresent(DebriefEngineKind.self, forKey: .debriefEngine) ?? .auto
+        ollamaModel = try container.decodeIfPresent(String.self, forKey: .ollamaModel) ?? Self.defaultOllamaModel
     }
 }

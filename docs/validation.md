@@ -26,6 +26,41 @@ cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta -only-t
 
 **Run command**: same as above (all in DiktaTests target)
 
+## Debrief mode (summarizers, audio I/O, pipeline, ViewModel wiring)
+
+**Files**: `dikta-macos/Dikta/Models/DebriefSummary.swift`, `dikta-macos/Dikta/Services/Debrief/*.swift`,
+`dikta-macos/Dikta/Services/ClipboardManager.swift` (`pasteMultiline`),
+`dikta-macos/Dikta/Services/AudioRecorder.swift` (`silenceAutoStopEnabled`, `maxBufferSamples`),
+`dikta-macos/Dikta/ViewModels/MenuBarViewModel.swift` (debrief branch), `dikta-macos/Dikta/Views/MenuBarView.swift` (`DebriefMenu`)
+
+**Test files**: `DebriefSummaryTests.swift`, `AudioFileLoaderTests.swift`, `DebriefStoreTests.swift`,
+`DebriefPipelineTests.swift`, `MenuBarViewModelDebriefTests.swift`, `DebriefRealTranscriptTests.swift`
+
+**Test classes**: `DebriefSummaryRenderPlainTextEnglishTests`, `DebriefSummaryRenderPlainTextSwedishTests`,
+`DebriefSummaryParserTests`, `DebriefSummaryCodableTests`, `HeuristicDebriefSummarizerTests`,
+`HeuristicDebriefSummarizerRamblingTranscriptTests`, `OllamaDebriefSummarizerTests`,
+`OllamaDebriefSummarizerModelMatchesTests`, `ChainedDebriefSummarizerTests`, `DebriefSummarizerFactoryTests`,
+`AudioFileLoaderTests`, `DebriefStoreTests`, `DebriefPipelineTests`, `AudioRecorderDebriefOverrideTests`,
+`AppConfigDebriefDecodingTests`, `MenuBarViewModelDebriefTests`, `TranscriptSanitizerTests`,
+`DebriefSummaryNormalizationTests`
+
+**Run command** — run the full target. `-only-testing:` takes a *class* name, not a file name, so
+`-only-testing:DiktaTests/DebriefSummaryTests` matches nothing and silently runs zero tests:
+```bash
+cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta -only-testing:DiktaTests -destination 'platform=macOS' CODE_SIGN_IDENTITY=- 2>&1 | grep -E 'Executed.*test|error:|Downloading model:'
+```
+
+To run a single class, use its class name, e.g.
+`-only-testing:DiktaTests/DebriefPipelineTests`.
+
+**Before every run**: quit any running `Dikta.app` (`pgrep -x Dikta` → `osascript -e 'quit app "Dikta"'`) and make
+sure no other `xcodebuild` is in flight — a live instance holds the audio device and can hang the ViewModel tests.
+
+**Real-input tests**: `DebriefRealTranscriptTests.swift`'s real-transcript tests read from a local, gitignored
+directory — `~/Documents/Dikta` by default, or the `DIKTA_REAL_SESSIONS_DIR` environment variable — and skip via
+`XCTSkip` when it's missing or has no sessions. No real recording, transcript, or summary is ever checked into this
+repo (see `.gitignore`); the known-defect regression tests in that file use synthetic, made-up transcripts instead.
+
 ---
 
 *Add new sections here as validation rules are established for other areas.*

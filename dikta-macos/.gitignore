@@ -24,3 +24,6 @@ bench/models/
 bench/convert/.venv/
 bench/convert/whisperkittools/
 bench/convert/src/
+
+# Real dictation data (recordings, transcripts, summaries, probe outputs) is never committed.
+bench/probes/debrief-corpus/

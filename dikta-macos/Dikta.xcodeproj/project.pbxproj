@@ -24,6 +24,7 @@
 		100000000000000000000014 /* Transcriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000014 /* Transcriber.swift */; };
 		100000000000000000000103 /* TranscriptionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000103 /* TranscriptionEngine.swift */; };
 		100000000000000000000016 /* ClipboardManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000016 /* ClipboardManager.swift */; };
+		100000000000000000000123 /* TranscriptSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000123 /* TranscriptSanitizer.swift */; };
 		100000000000000000000017 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* HotkeyManager.swift */; };
 		100000000000000000000018 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000018 /* Logger.swift */; };
 		100000000000000000000019 /* TextToSpeechService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000019 /* TextToSpeechService.swift */; };
@@ -45,6 +46,23 @@
 		100000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */; };
 		100000000000000000000107 /* MenuBarViewModelLanguageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000107 /* MenuBarViewModelLanguageTests.swift */; };
 		100000000000000000000108 /* TTSStaleServerPIDTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000108 /* TTSStaleServerPIDTests.swift */; };
+
+		/* Debrief */
+		100000000000000000000109 /* DebriefSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000109 /* DebriefSummary.swift */; };
+		100000000000000000000110 /* DebriefSummarizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000110 /* DebriefSummarizer.swift */; };
+		100000000000000000000111 /* HeuristicDebriefSummarizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000111 /* HeuristicDebriefSummarizer.swift */; };
+		100000000000000000000112 /* OllamaDebriefSummarizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000112 /* OllamaDebriefSummarizer.swift */; };
+		100000000000000000000113 /* FoundationModelsDebriefSummarizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000113 /* FoundationModelsDebriefSummarizer.swift */; };
+		100000000000000000000114 /* DebriefSummaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000114 /* DebriefSummaryTests.swift */; };
+		100000000000000000000115 /* AudioFileLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000115 /* AudioFileLoader.swift */; };
+		100000000000000000000116 /* DebriefStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000116 /* DebriefStore.swift */; };
+		100000000000000000000117 /* AudioFileLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000117 /* AudioFileLoaderTests.swift */; };
+		100000000000000000000118 /* DebriefStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000118 /* DebriefStoreTests.swift */; };
+		100000000000000000000119 /* DebriefPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000119 /* DebriefPipeline.swift */; };
+		100000000000000000000120 /* FakeDebriefSummarizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000120 /* FakeDebriefSummarizer.swift */; };
+		100000000000000000000121 /* DebriefPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000121 /* DebriefPipelineTests.swift */; };
+		100000000000000000000122 /* MenuBarViewModelDebriefTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000122 /* MenuBarViewModelDebriefTests.swift */; };
+		100000000000000000000124 /* DebriefRealTranscriptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000124 /* DebriefRealTranscriptTests.swift */; };
 
 		/* Formatter */
 		100000000000000000000081 /* FormatterEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000081 /* FormatterEngine.swift */; };
@@ -105,6 +123,7 @@
 		200000000000000000000014 /* Transcriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Transcriber.swift; sourceTree = "<group>"; };
 		200000000000000000000103 /* TranscriptionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionEngine.swift; sourceTree = "<group>"; };
 		200000000000000000000016 /* ClipboardManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManager.swift; sourceTree = "<group>"; };
+		200000000000000000000123 /* TranscriptSanitizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSanitizer.swift; sourceTree = "<group>"; };
 		200000000000000000000017 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
 		200000000000000000000018 /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
 		200000000000000000000019 /* TextToSpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextToSpeechService.swift; sourceTree = "<group>"; };
@@ -160,6 +179,21 @@
 		200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelSetWhisperModelTests.swift; sourceTree = "<group>"; };
 		200000000000000000000107 /* MenuBarViewModelLanguageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelLanguageTests.swift; sourceTree = "<group>"; };
 		200000000000000000000108 /* TTSStaleServerPIDTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSStaleServerPIDTests.swift; sourceTree = "<group>"; };
+		200000000000000000000109 /* DebriefSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefSummary.swift; sourceTree = "<group>"; };
+		200000000000000000000110 /* DebriefSummarizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefSummarizer.swift; sourceTree = "<group>"; };
+		200000000000000000000111 /* HeuristicDebriefSummarizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeuristicDebriefSummarizer.swift; sourceTree = "<group>"; };
+		200000000000000000000112 /* OllamaDebriefSummarizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OllamaDebriefSummarizer.swift; sourceTree = "<group>"; };
+		200000000000000000000113 /* FoundationModelsDebriefSummarizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationModelsDebriefSummarizer.swift; sourceTree = "<group>"; };
+		200000000000000000000114 /* DebriefSummaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefSummaryTests.swift; sourceTree = "<group>"; };
+		200000000000000000000115 /* AudioFileLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFileLoader.swift; sourceTree = "<group>"; };
+		200000000000000000000116 /* DebriefStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefStore.swift; sourceTree = "<group>"; };
+		200000000000000000000117 /* AudioFileLoaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFileLoaderTests.swift; sourceTree = "<group>"; };
+		200000000000000000000118 /* DebriefStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefStoreTests.swift; sourceTree = "<group>"; };
+		200000000000000000000119 /* DebriefPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefPipeline.swift; sourceTree = "<group>"; };
+		200000000000000000000120 /* FakeDebriefSummarizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeDebriefSummarizer.swift; sourceTree = "<group>"; };
+		200000000000000000000121 /* DebriefPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefPipelineTests.swift; sourceTree = "<group>"; };
+		200000000000000000000122 /* MenuBarViewModelDebriefTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelDebriefTests.swift; sourceTree = "<group>"; };
+		200000000000000000000124 /* DebriefRealTranscriptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefRealTranscriptTests.swift; sourceTree = "<group>"; };
 
 		/* Product */
 		400000000000000000000001 /* Dikta.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Dikta.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -251,6 +285,13 @@
 				200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */,
 				200000000000000000000107 /* MenuBarViewModelLanguageTests.swift */,
 				200000000000000000000108 /* TTSStaleServerPIDTests.swift */,
+				200000000000000000000114 /* DebriefSummaryTests.swift */,
+				200000000000000000000117 /* AudioFileLoaderTests.swift */,
+				200000000000000000000118 /* DebriefStoreTests.swift */,
+				200000000000000000000120 /* FakeDebriefSummarizer.swift */,
+				200000000000000000000121 /* DebriefPipelineTests.swift */,
+				200000000000000000000122 /* MenuBarViewModelDebriefTests.swift */,
+				200000000000000000000124 /* DebriefRealTranscriptTests.swift */,
 			);
 			path = DiktaTests;
 			sourceTree = "<group>";
@@ -266,6 +307,7 @@
 				200000000000000000000006 /* WhisperModel.swift */,
 				200000000000000000000007 /* AppPaths.swift */,
 				200000000000000000000008 /* MicSensitivity.swift */,
+				200000000000000000000109 /* DebriefSummary.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -279,6 +321,7 @@
 				200000000000000000000014 /* Transcriber.swift */,
 				200000000000000000000103 /* TranscriptionEngine.swift */,
 				200000000000000000000016 /* ClipboardManager.swift */,
+				200000000000000000000123 /* TranscriptSanitizer.swift */,
 				200000000000000000000017 /* HotkeyManager.swift */,
 				200000000000000000000018 /* Logger.swift */,
 				200000000000000000000019 /* TextToSpeechService.swift */,
@@ -287,8 +330,23 @@
 				200000000000000000000028 /* DiagnosticLogger.swift */,
 				200000000000000000000029 /* SparkleController.swift */,
 				200000000000000000000091 /* SentenceEmbeddingService.swift */,
+				600000000000000000000011 /* Debrief */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		};
+		600000000000000000000011 /* Debrief */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000110 /* DebriefSummarizer.swift */,
+				200000000000000000000111 /* HeuristicDebriefSummarizer.swift */,
+				200000000000000000000112 /* OllamaDebriefSummarizer.swift */,
+				200000000000000000000113 /* FoundationModelsDebriefSummarizer.swift */,
+				200000000000000000000115 /* AudioFileLoader.swift */,
+				200000000000000000000116 /* DebriefStore.swift */,
+				200000000000000000000119 /* DebriefPipeline.swift */,
+			);
+			path = Debrief;
 			sourceTree = "<group>";
 		};
 		600000000000000000000004 /* ViewModels */ = {
@@ -458,6 +516,13 @@
 				100000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift in Sources */,
 				100000000000000000000107 /* MenuBarViewModelLanguageTests.swift in Sources */,
 				100000000000000000000108 /* TTSStaleServerPIDTests.swift in Sources */,
+				100000000000000000000114 /* DebriefSummaryTests.swift in Sources */,
+				100000000000000000000117 /* AudioFileLoaderTests.swift in Sources */,
+				100000000000000000000118 /* DebriefStoreTests.swift in Sources */,
+				100000000000000000000120 /* FakeDebriefSummarizer.swift in Sources */,
+				100000000000000000000121 /* DebriefPipelineTests.swift in Sources */,
+				100000000000000000000122 /* MenuBarViewModelDebriefTests.swift in Sources */,
+				100000000000000000000124 /* DebriefRealTranscriptTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -476,6 +541,7 @@
 				100000000000000000000103 /* TranscriptionEngine.swift in Sources */,
 				100000000000000000000007 /* AppPaths.swift in Sources */,
 				100000000000000000000016 /* ClipboardManager.swift in Sources */,
+				100000000000000000000123 /* TranscriptSanitizer.swift in Sources */,
 				100000000000000000000017 /* HotkeyManager.swift in Sources */,
 				100000000000000000000021 /* MenuBarViewModel.swift in Sources */,
 				100000000000000000000031 /* MenuBarView.swift in Sources */,
@@ -507,6 +573,14 @@
 				100000000000000000000086 /* TextFormatter.swift in Sources */,
 				100000000000000000000091 /* SentenceEmbeddingService.swift in Sources */,
 				100000000000000000000094 /* EmbeddingParagraphSplitter.swift in Sources */,
+				100000000000000000000109 /* DebriefSummary.swift in Sources */,
+				100000000000000000000110 /* DebriefSummarizer.swift in Sources */,
+				100000000000000000000111 /* HeuristicDebriefSummarizer.swift in Sources */,
+				100000000000000000000112 /* OllamaDebriefSummarizer.swift in Sources */,
+				100000000000000000000113 /* FoundationModelsDebriefSummarizer.swift in Sources */,
+				100000000000000000000115 /* AudioFileLoader.swift in Sources */,
+				100000000000000000000116 /* DebriefStore.swift in Sources */,
+				100000000000000000000119 /* DebriefPipeline.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
