@@ -17,7 +17,7 @@ final class FoundationModelsDebriefSummarizer: DebriefSummarizer {
     /// parameter so tests/probes can opt back into sampling if ever needed.
     private let generationOptions: GenerationOptions
 
-    init(generationOptions: GenerationOptions = GenerationOptions(samplingMode: .greedy)) {
+    init(generationOptions: GenerationOptions = GenerationOptions(sampling: .greedy)) {
         self.generationOptions = generationOptions
     }
 
