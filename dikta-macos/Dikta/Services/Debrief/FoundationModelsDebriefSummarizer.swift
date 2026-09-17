@@ -15,10 +15,30 @@ final class FoundationModelsDebriefSummarizer: DebriefSummarizer {
     /// diverge between runs (see "Tuning round 2" in
     /// docs/review-2026-09/debrief-probe-2026-09-17.md). Exposed as an init
     /// parameter so tests/probes can opt back into sampling if ever needed.
-    private let generationOptions: GenerationOptions
+    ///
+    /// Stored as a plain enum rather than a `GenerationOptions` value on
+    /// purpose: a stored property of a FoundationModels type makes the class
+    /// layout depend on that framework's metadata at load time, which crashed
+    /// the SPM test bundle (signal 11) on a macOS 15 CI runner where the
+    /// framework does not exist. The options value is built per call instead.
+    enum SamplingStrategy {
+        case greedy
+        case random
+    }
 
-    init(generationOptions: GenerationOptions = GenerationOptions(sampling: .greedy)) {
-        self.generationOptions = generationOptions
+    private let sampling: SamplingStrategy
+
+    init(sampling: SamplingStrategy = .greedy) {
+        self.sampling = sampling
+    }
+
+    private var generationOptions: GenerationOptions {
+        switch sampling {
+        case .greedy:
+            return GenerationOptions(sampling: .greedy)
+        case .random:
+            return GenerationOptions()
+        }
     }
 
     func isAvailable() async -> Bool {
