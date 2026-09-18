@@ -30,8 +30,17 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     /// Segments returned by `transcribeSegments`. Empty by default.
     var segmentsToReturn: [TranscriptSegment] = []
 
+    /// Segments returned by successive `transcribeSegments` calls: the first
+    /// call gets element 0, the second element 1, and so on. Calls past the
+    /// end fall back to `segmentsToReturn`. Lets a two-track test give each
+    /// track its own distinguishable transcript.
+    var segmentsPerCall: [[TranscriptSegment]] = []
+
     /// `promptText` passed to each `transcribeSegments` call, in call order.
     private(set) var receivedPromptTexts: [String?] = []
+
+    /// Sample count passed to each `transcribeSegments` call, in call order.
+    private(set) var receivedSegmentSampleCounts: [Int] = []
 
     func load() async {
         isReady = true
@@ -64,7 +73,13 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
         micSensitivity: MicSensitivity,
         promptText: String?
     ) async throws -> [TranscriptSegment] {
+        let callIndex = receivedPromptTexts.count
         receivedPromptTexts.append(promptText)
-        return segmentsToReturn
+        receivedSegmentSampleCounts.append(samples.count)
+        if transcribeDelay > 0 {
+            try await Task.sleep(nanoseconds: UInt64(transcribeDelay * 1_000_000_000))
+        }
+        guard callIndex < segmentsPerCall.count else { return segmentsToReturn }
+        return segmentsPerCall[callIndex]
     }
 }
