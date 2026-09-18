@@ -789,6 +789,47 @@ final class AppConfigDebriefDecodingTests: XCTestCase {
         XCTAssertNotNil(json["debrief_engine"])
         XCTAssertNotNil(json["ollama_model"])
     }
+
+    // MARK: - Debrief source (Mic / Mic + system audio)
+
+    func test_decode_withoutDebriefSourceKey_defaultsToMicrophone() throws {
+        let config = try JSONDecoder().decode(AppConfig.self, from: Data(legacyJSON.utf8))
+
+        XCTAssertEqual(config.debriefSource, .microphone)
+    }
+
+    func test_decode_withoutCallRecordingNoticeShownKey_defaultsToFalse() throws {
+        let config = try JSONDecoder().decode(AppConfig.self, from: Data(legacyJSON.utf8))
+
+        XCTAssertFalse(config.callRecordingNoticeShown)
+    }
+
+    func test_roundTrip_preservesDebriefSourceMicrophone() throws {
+        var config = AppConfig.default
+        config.debriefSource = .microphone
+
+        let data = try JSONEncoder().encode(config)
+        let decoded = try JSONDecoder().decode(AppConfig.self, from: data)
+
+        XCTAssertEqual(decoded.debriefSource, .microphone)
+    }
+
+    func test_roundTrip_preservesDebriefSourceMicrophoneAndSystemAudio() throws {
+        var config = AppConfig.default
+        config.debriefSource = .microphoneAndSystemAudio
+        config.callRecordingNoticeShown = true
+
+        let data = try JSONEncoder().encode(config)
+        let decoded = try JSONDecoder().decode(AppConfig.self, from: data)
+
+        XCTAssertEqual(decoded.debriefSource, .microphoneAndSystemAudio)
+        XCTAssertTrue(decoded.callRecordingNoticeShown)
+    }
+
+    func test_debriefSource_displayNames() {
+        XCTAssertEqual(DebriefSource.microphone.displayName, "Microphone")
+        XCTAssertEqual(DebriefSource.microphoneAndSystemAudio.displayName, "Microphone + system audio")
+    }
 }
 
 // MARK: - DebriefPromptBuilder language-specific examples

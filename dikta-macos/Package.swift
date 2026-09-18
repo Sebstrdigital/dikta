@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "Dikta",
     platforms: [
-        .macOS(.v14)
+        .macOS("14.2")
     ],
     products: [
         .executable(name: "Dikta", targets: ["Dikta"]),
