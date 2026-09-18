@@ -63,6 +63,51 @@ directory — `~/Documents/Dikta` by default, or the `DIKTA_REAL_SESSIONS_DIR` e
 `XCTSkip` when it's missing or has no sessions. No real recording, transcript, or summary is ever checked into this
 repo (see `.gitignore`); the known-defect regression tests in that file use synthetic, made-up transcripts instead.
 
+## Call Debrief (system audio capture, streaming writer, chunked transcription, rolling summary)
+
+**Files**: `dikta-macos/Dikta/Services/SystemAudioTapRecorder.swift`,
+`dikta-macos/Dikta/Services/Debrief/StreamingWavWriter.swift`,
+`dikta-macos/Dikta/Services/Debrief/ChunkedTranscriptionSession.swift`,
+`dikta-macos/Dikta/Services/Debrief/TwoTrackMerger.swift`,
+`dikta-macos/Dikta/Services/Debrief/DebriefState.swift`,
+`dikta-macos/Dikta/Services/Debrief/DebriefDelta.swift`,
+`dikta-macos/Dikta/Services/Debrief/DebriefAccumulator.swift`,
+`dikta-macos/Dikta/Services/Debrief/EmbeddingSimilarity.swift`,
+`dikta-macos/Dikta/Services/Debrief/RollingDebriefSummarizer.swift`,
+`dikta-macos/Dikta/Services/Debrief/FoundationModelsDeltaSummarizer.swift`,
+`dikta-macos/Dikta/Services/Debrief/HeuristicDeltaSummarizer.swift`,
+`dikta-macos/Dikta/Services/Debrief/OllamaDeltaSummarizer.swift`,
+`dikta-macos/Dikta/Models/TranscriptSegment.swift`, `dikta-macos/Dikta/Models/LabeledSegment.swift`,
+`dikta-macos/Dikta/ViewModels/MenuBarViewModel.swift` (call debrief branch)
+
+**Test files**: `SystemAudioTapRecorderTests.swift`, `StreamingWavWriterTests.swift`,
+`ChunkedTranscriptionSessionTests.swift`, `TwoTrackMergerTests.swift`, `DebriefAccumulatorTests.swift`,
+`RollingDebriefSummarizerTests.swift`, `TranscriptSegmentTests.swift`
+
+**Test classes**: `SystemAudioTapRecorderTests`, `StreamingWavWriterTests`, `ChunkedTranscriptionSessionTests`,
+`TwoTrackMergerMergeTests`, `TwoTrackMergerRenderTests`, `TwoTrackMergerIsLabeledTranscriptTests`,
+`TwoTrackMergerStripLabelsTests`, `DebriefAccumulatorTests`, `RollingDebriefSummarizerTests`,
+`TranscriptSegmentTests`, `TranscriberSanitizeAndDropEmptyTests`, `TranscriberSortMonotonicTests`,
+`TranscriberCappedPromptTokensTests`
+
+**Run command**:
+```bash
+cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta -only-testing:DiktaTests -destination 'platform=macOS' CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" DEVELOPMENT_TEAM=UUM29335B4 2>&1 | grep -E 'Executed.*test|error:|failed'
+```
+
+To run a single class, use its class name, e.g. `-only-testing:DiktaTests/RollingDebriefSummarizerTests`.
+
+**Rules**:
+1. No test may open a real process tap or touch the microphone — use `FakeSystemAudioCapture` or another fake capture source, never a live `SystemAudioTapRecorder` device.
+2. Kill orphaned `Dikta -ApplePersistenceIgnoreState` test hosts before running ViewModel tests — a leftover instance holds the audio device and can hang the run:
+```bash
+for p in $(pgrep -x Dikta); do ps -o command= -p $p | grep -q ApplePersistenceIgnoreState && kill $p; done
+```
+3. Real call recordings live under `~/Documents/Dikta` (or the `DIKTA_REAL_SESSIONS_DIR` environment variable) and are never committed — see `.gitignore`.
+
+**Known pre-existing failure**: `testSlackMuterReturnsNilWhenSlackNotRunning` (`MicMutingTests.swift`) fails when
+Slack.app is open on the test machine — unrelated to Call Debrief, not a regression.
+
 ---
 
 *Add new sections here as validation rules are established for other areas.*
