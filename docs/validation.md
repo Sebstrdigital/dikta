@@ -10,7 +10,7 @@ This document defines mandatory validation steps for each area of the codebase. 
 
 **Run command**:
 ```bash
-cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta -only-testing:DiktaTests -destination 'platform=macOS' CODE_SIGN_IDENTITY=- 2>&1 | grep 'Executed.*test'
+cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta -only-testing:DiktaTests -destination 'platform=macOS' CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" DEVELOPMENT_TEAM=UUM29335B4 2>&1 | grep 'Executed.*test'
 ```
 
 **Rules**:
@@ -47,11 +47,13 @@ cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta -only-t
 **Run command** — run the full target. `-only-testing:` takes a *class* name, not a file name, so
 `-only-testing:DiktaTests/DebriefSummaryTests` matches nothing and silently runs zero tests:
 ```bash
-cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta -only-testing:DiktaTests -destination 'platform=macOS' CODE_SIGN_IDENTITY=- 2>&1 | grep -E 'Executed.*test|error:|Downloading model:'
+cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta -only-testing:DiktaTests -destination 'platform=macOS' CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" DEVELOPMENT_TEAM=UUM29335B4 2>&1 | grep -E 'Executed.*test|error:|Downloading model:'
 ```
 
 To run a single class, use its class name, e.g.
 `-only-testing:DiktaTests/DebriefPipelineTests`.
+
+**Signing**: test builds are signed with the same Developer ID identity as releases, never ad-hoc (`CODE_SIGN_IDENTITY=-`). macOS ties Microphone / System Audio grants to the code signature; an ad-hoc signature changes on every rebuild, so each rebuilt test host re-prompts. With the stable identity you grant once. Confirmed 2026-09-18.
 
 **Before every run**: quit any running `Dikta.app` (`pgrep -x Dikta` → `osascript -e 'quit app "Dikta"'`) and make
 sure no other `xcodebuild` is in flight — a live instance holds the audio device and can hang the ViewModel tests.
