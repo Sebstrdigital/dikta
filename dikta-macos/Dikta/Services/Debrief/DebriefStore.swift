@@ -144,6 +144,15 @@ final class DebriefStore {
         try StreamingWavWriter(url: paths.audioURL(for: track))
     }
 
+    /// Creates a `StreamingWavWriter` at `paths.audio` — the single-track
+    /// (`audio.wav`) counterpart of `makeStreamingWriter(for:in:)`. A mic-only
+    /// debrief streams to it as it records rather than holding the whole
+    /// recording in RAM for `writeAudio`, so a crash mid-debrief still leaves
+    /// a playable recording on disk.
+    func makeStreamingAudioWriter(in paths: DebriefSessionPaths) throws -> StreamingWavWriter {
+        try StreamingWavWriter(url: paths.audio)
+    }
+
     /// Whether `track` has actually been captured: the file exists AND its
     /// WAV data chunk is non-empty. `makeStreamingWriter` creates the file
     /// with a valid but zero-frame header immediately, so checking mere

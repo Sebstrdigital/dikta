@@ -39,6 +39,12 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     /// `promptText` passed to each `transcribeSegments` call, in call order.
     private(set) var receivedPromptTexts: [String?] = []
 
+    /// Awaited just before `transcribeSegments` returns, with that call's
+    /// 0-based index. Lets a test hold one chunk's transcription job open for
+    /// as long as it likes instead of racing a wall clock. Default `nil`: no
+    /// hook, no behaviour change.
+    var beforeSegmentsReturn: ((Int) async -> Void)?
+
     /// Sample count passed to each `transcribeSegments` call, in call order.
     private(set) var receivedSegmentSampleCounts: [Int] = []
 
@@ -79,6 +85,7 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
         if transcribeDelay > 0 {
             try await Task.sleep(nanoseconds: UInt64(transcribeDelay * 1_000_000_000))
         }
+        await beforeSegmentsReturn?(callIndex)
         guard callIndex < segmentsPerCall.count else { return segmentsToReturn }
         return segmentsPerCall[callIndex]
     }

@@ -17,6 +17,26 @@ struct DebriefResult {
     let renderedText: String
     let paths: DebriefSessionPaths
     let engineName: String
+    /// Non-fatal problems the run recorded and carried on through: a chunk
+    /// whose transcription failed, a rolling-ingest error, a transcription
+    /// timeout that left the last chunks out. Empty on a clean run.
+    let issues: [String]
+
+    init(
+        transcript: String,
+        summary: DebriefSummary,
+        renderedText: String,
+        paths: DebriefSessionPaths,
+        engineName: String,
+        issues: [String] = []
+    ) {
+        self.transcript = transcript
+        self.summary = summary
+        self.renderedText = renderedText
+        self.paths = paths
+        self.engineName = engineName
+        self.issues = issues
+    }
 }
 
 /// Runs the post-meeting debrief end to end: save audio, transcribe, summarize,
@@ -35,21 +55,82 @@ final class DebriefPipeline {
     /// 60 s used for normal dictation: a debrief can be many minutes of audio.
     private let transcriptionTimeout: TimeInterval
 
+    /// Builds the delta engine a live session's `RollingDebriefSummarizer`
+    /// runs on. A closure rather than a `DebriefEngineKind` so the ViewModel
+    /// can hand over the *current* config (and tests a fake) without this
+    /// type learning about `ConfigService`. The default mirrors
+    /// `DebriefSummarizerFactory`'s own defaults.
+    private let makeDeltaSummarizer: () -> DeltaSummarizing
+
+    /// Slicer tunables for live sessions, and — through
+    /// `targetChunkSeconds` — the threshold under which a recording is known
+    /// up front to be a single chunk (see `run`/`runTwoTrack`).
+    private let chunking: ChunkingConfig
+
     init(
         engine: any TranscriptionEngine,
         summarizer: DebriefSummarizer,
         store: DebriefStore,
-        transcriptionTimeout: TimeInterval = 1800
+        transcriptionTimeout: TimeInterval = 1800,
+        chunking: ChunkingConfig = ChunkingConfig(),
+        makeDeltaSummarizer: @escaping () -> DeltaSummarizing = {
+            DeltaSummarizerFactory.make(kind: .auto, ollamaModel: AppConfig.defaultOllamaModel)
+        }
     ) {
         self.engine = engine
         self.summarizer = summarizer
         self.store = store
         self.transcriptionTimeout = transcriptionTimeout
+        self.chunking = chunking
+        self.makeDeltaSummarizer = makeDeltaSummarizer
+    }
+
+    // MARK: - Live sessions
+
+    /// Opens a live session: audio appended to it is chunked and transcribed
+    /// while the recording is still running, and summarized incrementally.
+    /// See `DebriefLiveSession`.
+    ///
+    /// - Parameter paths: an existing session folder to write into. The call
+    ///   path creates it before capture starts (its WAVs stream into it from
+    ///   the first buffer), so it passes its own; everything else lets the
+    ///   store create one here.
+    func startLiveSession(
+        tracks: [DebriefTrack],
+        language: String?,
+        micSensitivity: MicSensitivity,
+        paths: DebriefSessionPaths? = nil,
+        chunking: ChunkingConfig? = nil,
+        finishTimeoutFloor: TimeInterval = DebriefLiveSession.minimumFinishTimeout
+    ) throws -> DebriefLiveSession {
+        DebriefLiveSession(
+            pipeline: self,
+            engine: engine,
+            deltaSummarizer: makeDeltaSummarizer(),
+            similarity: EmbeddingSimilarity(),
+            paths: try paths ?? store.createSession(),
+            tracks: tracks,
+            language: language,
+            micSensitivity: micSensitivity,
+            chunking: chunking ?? self.chunking,
+            transcriptionTimeout: transcriptionTimeout,
+            finishTimeoutFloor: finishTimeoutFloor
+        )
+    }
+
+    /// Longest recording, in samples, that is guaranteed to close as exactly
+    /// one chunk. `ChunkedTranscriptionSession` only cuts once a track holds
+    /// `targetChunkSeconds` of unconsumed audio, so anything at or under that
+    /// never cuts — which lets the in-RAM and on-disk entry points below
+    /// decide *before* transcribing whether this recording is short, and take
+    /// the pre-chunking path verbatim when it is.
+    var singleChunkSampleLimit: Int {
+        Int((chunking.targetChunkSeconds * AudioFileLoader.targetSampleRate).rounded())
     }
 
     /// The language the summary is written and rendered in. Only Swedish and
     /// English are supported for the PoC; anything else falls back to English.
-    static func renderLanguage(for code: String?) -> String {
+    nonisolated static func renderLanguage(for code: String?) -> String {
         guard let code, code == "sv" || code == "en" else { return "en" }
         return code
     }
@@ -76,35 +157,65 @@ final class DebriefPipeline {
 
         onStage(.transcribing)
 
-        let timeoutNanoseconds = UInt64(max(0, transcriptionTimeout) * 1_000_000_000)
-        let transcript = try await withThrowingTaskGroup(of: String.self) { group in
-            group.addTask {
-                try await self.engine.transcribe(samples, language: language, micSensitivity: micSensitivity)
+        // Anything this short cannot produce a second chunk, so run it exactly
+        // the way it ran before chunking existed: one `transcribe` call,
+        // raced against the configured timeout, then the shared tail.
+        guard samples.count > singleChunkSampleLimit else {
+            let timeoutNanoseconds = UInt64(max(0, transcriptionTimeout) * 1_000_000_000)
+            let transcript = try await withThrowingTaskGroup(of: String.self) { group in
+                group.addTask {
+                    try await self.engine.transcribe(samples, language: language, micSensitivity: micSensitivity)
+                }
+                group.addTask {
+                    try await Task.sleep(nanoseconds: timeoutNanoseconds)
+                    throw TranscriptionTimeoutError()
+                }
+                defer { group.cancelAll() }
+                return try await group.next()!
             }
-            group.addTask {
-                try await Task.sleep(nanoseconds: timeoutNanoseconds)
-                throw TranscriptionTimeoutError()
-            }
-            defer { group.cancelAll() }
-            return try await group.next()!
+
+            return try await finishTranscribedDebrief(
+                transcript: transcript,
+                paths: paths,
+                language: language,
+                onStage: onStage
+            )
         }
 
-        return try await finishTranscribedDebrief(
-            transcript: transcript,
-            paths: paths,
+        // Longer than one chunk: the same live machinery a call uses, fed in
+        // one go. This is what fixes the long-imported-file gap — a 90-minute
+        // recording is now sliced, transcribed chunk by chunk and rolled up,
+        // instead of being handed to the engine (and the summarizer's context
+        // window) whole.
+        let session = try startLiveSession(
+            tracks: [.me],
             language: language,
-            onStage: onStage
+            micSensitivity: micSensitivity,
+            paths: paths
         )
+        session.append(samples, track: .me)
+        return try await session.finish(onStage: onStage)
     }
 
     /// Everything after a transcript exists: save it, reject silence,
     /// summarize, render, save the summary. Shared verbatim by `run` (one
     /// mic track) and `runTwoTrack` (a merged Me/Them transcript) so there is
     /// exactly one summarize/save/report path.
-    private func finishTranscribedDebrief(
+    /// - Parameters:
+    ///   - issues: non-fatal problems the transcription step already
+    ///     recorded, carried through onto the result.
+    ///   - summarize: produces the summary and the name of the engine that
+    ///     produced it. `nil` — every path but a rolling live session — means
+    ///     the pipeline's own single-pass `DebriefSummarizer`. Whatever it
+    ///     returns goes through the same `normalized().validated()` gate, so
+    ///     the rolling path cannot smuggle placeholders or fabrications past
+    ///     the checks the single-pass path is held to.
+    func finishTranscribedDebrief(
         transcript: String,
         paths: DebriefSessionPaths,
         language: String?,
+        issues: [String] = [],
+        summarize: (@Sendable (_ transcript: String, _ renderLanguage: String) async throws -> (DebriefSummary, String, [String]))? = nil,
         onStage: @escaping @MainActor (DebriefStage) -> Void
     ) async throws -> DebriefResult {
         try store.writeTranscript(transcript, to: paths)
@@ -125,8 +236,18 @@ final class DebriefPipeline {
         // transcript itself, catching the clearest fabrications (a bare year
         // or ISO date, a name-shaped owner that was never said) that
         // normalized() has no way to know about.
-        let summary = try await summarizer
-            .summarize(transcript: transcript, language: renderLanguage)
+        let produced: DebriefSummary
+        var producedEngineName: String?
+        var allIssues = issues
+        if let summarize {
+            let (summary, engineName, extraIssues) = try await summarize(transcript, renderLanguage)
+            produced = summary
+            producedEngineName = engineName
+            allIssues.append(contentsOf: extraIssues)
+        } else {
+            produced = try await summarizer.summarize(transcript: transcript, language: renderLanguage)
+        }
+        let summary = produced
             .normalized()
             .validated(against: transcript)
         let renderedText = summary.renderPlainText(language: renderLanguage)
@@ -137,14 +258,21 @@ final class DebriefPipeline {
 
         // A chained summarizer knows which of its engines actually answered;
         // a single engine can only be itself.
-        let engineName = (summarizer as? ChainedDebriefSummarizer)?.lastUsedEngineName ?? summarizer.name
+        let engineName = producedEngineName
+            ?? (summarizer as? ChainedDebriefSummarizer)?.lastUsedEngineName
+            ?? summarizer.name
+
+        if !allIssues.isEmpty {
+            AppLogger.general.warning("DebriefPipeline: finished with \(allIssues.count) non-fatal issue(s): \(allIssues.joined(separator: " | "), privacy: .public)")
+        }
 
         return DebriefResult(
             transcript: transcript,
             summary: summary,
             renderedText: renderedText,
             paths: paths,
-            engineName: engineName
+            engineName: engineName,
+            issues: allIssues
         )
     }
 
@@ -167,18 +295,68 @@ final class DebriefPipeline {
     ) async throws -> DebriefResult {
         onStage(.transcribing)
 
-        let transcript = try await mergedTranscript(
-            paths: paths,
-            language: language,
-            micSensitivity: micSensitivity
-        )
+        // Same short-recording rule as `run`: a call that cannot produce a
+        // second chunk is transcribed whole, exactly as it was before
+        // chunking, one track at a time.
+        let longestTrackSeconds = max(trackSeconds(.me, in: paths), trackSeconds(.them, in: paths))
+        guard longestTrackSeconds > chunking.targetChunkSeconds else {
+            let transcript = try await mergedTranscript(
+                paths: paths,
+                language: language,
+                micSensitivity: micSensitivity
+            )
 
-        return try await finishTranscribedDebrief(
-            transcript: transcript,
-            paths: paths,
+            return try await finishTranscribedDebrief(
+                transcript: transcript,
+                paths: paths,
+                language: language,
+                onStage: onStage
+            )
+        }
+
+        let session = try startLiveSession(
+            tracks: [.me, .them],
             language: language,
-            onStage: onStage
+            micSensitivity: micSensitivity,
+            paths: paths
         )
+        feedTracksFromDisk(paths: paths, into: session)
+        return try await session.finish(onStage: onStage)
+    }
+
+    /// Replays two finished WAV tracks into a live session.
+    ///
+    /// The tracks are appended in interleaved slices, not one whole track
+    /// after the other: `ChunkedTranscriptionSession` treats a track more than
+    /// `staleTrackSeconds` behind the leader as dead and zero-pads it, so
+    /// appending all of `me.wav` first would pad the entire `them` track into
+    /// silence. Slices are a quarter of that stale window, so neither track
+    /// ever leads by enough to trip it.
+    ///
+    /// Unlike the live capture path this does hold both tracks in RAM at once
+    /// (`AudioFileLoader` has no ranged read), so re-running a very long
+    /// crashed call costs roughly 230 MB per hour per track. Acceptable for a
+    /// manual recovery path; see the TODO on `loadTrack`.
+    private func feedTracksFromDisk(paths: DebriefSessionPaths, into session: DebriefLiveSession) {
+        let me = loadTrack(.me, in: paths)
+        let them = loadTrack(.them, in: paths)
+        let sliceSamples = max(1, Int((chunking.staleTrackSeconds / 4) * AudioFileLoader.targetSampleRate))
+
+        var offset = 0
+        while offset < max(me.count, them.count) {
+            for (samples, track) in [(me, DebriefTrack.me), (them, DebriefTrack.them)] {
+                guard offset < samples.count else { continue }
+                let end = min(samples.count, offset + sliceSamples)
+                session.append(Array(samples[offset..<end]), track: track)
+            }
+            offset += sliceSamples
+        }
+    }
+
+    /// Duration of one track on disk, or 0 when it is absent or unreadable.
+    private func trackSeconds(_ track: DebriefTrack, in paths: DebriefSessionPaths) -> TimeInterval {
+        guard store.hasTrack(track, in: paths) else { return 0 }
+        return (try? audioLoader.duration(url: paths.audioURL(for: track))) ?? 0
     }
 
     /// Slice 1's transcription step for a call: read both whole tracks off
