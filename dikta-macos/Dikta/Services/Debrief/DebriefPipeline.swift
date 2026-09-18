@@ -28,6 +28,8 @@ final class DebriefPipeline {
     private let engine: any TranscriptionEngine
     private let summarizer: DebriefSummarizer
     private let store: DebriefStore
+    /// Reads the per-track WAVs a call session left on disk (`runTwoTrack`).
+    private let audioLoader = AudioFileLoader()
 
     /// Seconds to wait for transcription before giving up. Much longer than the
     /// 60 s used for normal dictation: a debrief can be many minutes of audio.
@@ -87,6 +89,24 @@ final class DebriefPipeline {
             return try await group.next()!
         }
 
+        return try await finishTranscribedDebrief(
+            transcript: transcript,
+            paths: paths,
+            language: language,
+            onStage: onStage
+        )
+    }
+
+    /// Everything after a transcript exists: save it, reject silence,
+    /// summarize, render, save the summary. Shared verbatim by `run` (one
+    /// mic track) and `runTwoTrack` (a merged Me/Them transcript) so there is
+    /// exactly one summarize/save/report path.
+    private func finishTranscribedDebrief(
+        transcript: String,
+        paths: DebriefSessionPaths,
+        language: String?,
+        onStage: @escaping @MainActor (DebriefStage) -> Void
+    ) async throws -> DebriefResult {
         try store.writeTranscript(transcript, to: paths)
 
         // Whisper answers silence with a marker like `[BLANK_AUDIO]`, not an
@@ -126,5 +146,122 @@ final class DebriefPipeline {
             paths: paths,
             engineName: engineName
         )
+    }
+
+    // MARK: - Call debrief (two tracks on disk)
+
+    /// Runs a debrief over a call session that was captured as two WAV files
+    /// on disk — `me.wav` (microphone) and `them.wav` (system audio) — rather
+    /// than a single in-RAM sample buffer. Both tracks are transcribed with
+    /// timestamps, merged into one speaker-labeled transcript, and then handed
+    /// to exactly the same summarize/save path as `run`.
+    ///
+    /// A missing or empty track is allowed (nobody spoke on it, or the user
+    /// never granted system audio permission): it simply contributes no
+    /// segments, and the merged transcript carries only the other speaker.
+    func runTwoTrack(
+        paths: DebriefSessionPaths,
+        language: String?,
+        micSensitivity: MicSensitivity,
+        onStage: @escaping @MainActor (DebriefStage) -> Void
+    ) async throws -> DebriefResult {
+        onStage(.transcribing)
+
+        let transcript = try await mergedTranscript(
+            paths: paths,
+            language: language,
+            micSensitivity: micSensitivity
+        )
+
+        return try await finishTranscribedDebrief(
+            transcript: transcript,
+            paths: paths,
+            language: language,
+            onStage: onStage
+        )
+    }
+
+    /// Slice 1's transcription step for a call: read both whole tracks off
+    /// disk, transcribe each one in full (sequentially — one Whisper model is
+    /// loaded at a time), merge, render.
+    ///
+    /// Deliberately the single seam between capture and summarization: the
+    /// live-chunking story replaces this method's body with the rolling
+    /// chunked transcriber without touching `runTwoTrack` or anything after
+    /// it.
+    private func mergedTranscript(
+        paths: DebriefSessionPaths,
+        language: String?,
+        micSensitivity: MicSensitivity
+    ) async throws -> String {
+        // One track in RAM at a time: each `loadTrack` result is consumed by
+        // the `transcribeTrack` call in the same expression and released
+        // before the next track is read, so peak memory is one track's
+        // samples (~460 MB for a two-hour track at 16 kHz Float32), not both.
+        let meSegments = try await transcribeTrack(
+            loadTrack(.me, in: paths), language: language, micSensitivity: micSensitivity
+        )
+        let themSegments = try await transcribeTrack(
+            loadTrack(.them, in: paths), language: language, micSensitivity: micSensitivity
+        )
+
+        return TwoTrackMerger.render(TwoTrackMerger.merge(me: meSegments, them: themSegments))
+    }
+
+    /// Loads one track's samples, or an empty array when the track is absent,
+    /// empty or unreadable — a call with one silent side is a normal outcome,
+    /// not a failure, so it is logged rather than thrown.
+    private func loadTrack(_ track: DebriefTrack, in paths: DebriefSessionPaths) -> [Float] {
+        guard store.hasTrack(track, in: paths) else {
+            AppLogger.audio.info("DebriefPipeline: track \(track.rawValue) is missing or empty — no segments for that speaker")
+            return []
+        }
+        do {
+            return try audioLoader.load(url: paths.audioURL(for: track))
+        } catch {
+            AppLogger.audio.error("DebriefPipeline: failed to load track \(track.rawValue): \(error.localizedDescription) — treating it as empty")
+            return []
+        }
+    }
+
+    /// Transcribes one whole track, racing it against a timeout scaled to how
+    /// much audio it actually is (see `trackTranscriptionTimeout`). Empty
+    /// input short-circuits: no engine call, no segments.
+    private func transcribeTrack(
+        _ samples: [Float],
+        language: String?,
+        micSensitivity: MicSensitivity
+    ) async throws -> [TranscriptSegment] {
+        guard !samples.isEmpty else { return [] }
+
+        let audioSeconds = Double(samples.count) / AudioFileLoader.targetSampleRate
+        let timeout = Self.trackTranscriptionTimeout(base: transcriptionTimeout, audioSeconds: audioSeconds)
+        let timeoutNanoseconds = UInt64(max(0, timeout) * 1_000_000_000)
+
+        return try await withThrowingTaskGroup(of: [TranscriptSegment].self) { group in
+            group.addTask {
+                try await self.engine.transcribeSegments(
+                    samples,
+                    language: language,
+                    micSensitivity: micSensitivity,
+                    promptText: nil
+                )
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: timeoutNanoseconds)
+                throw TranscriptionTimeoutError()
+            }
+            defer { group.cancelAll() }
+            return try await group.next()!
+        }
+    }
+
+    /// Per-track transcription budget: the pipeline's configured timeout, or
+    /// 1.5x the track's own duration when that is longer. A two-hour call is
+    /// far past the flat 30-minute default, and transcription time scales
+    /// with audio length, so the flat value alone would fail every long call.
+    /// Pure, so the scaling is unit-tested directly.
+    static func trackTranscriptionTimeout(base: TimeInterval, audioSeconds: TimeInterval) -> TimeInterval {
+        max(base, audioSeconds * 1.5)
     }
 }

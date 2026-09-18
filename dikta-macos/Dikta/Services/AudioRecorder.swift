@@ -26,6 +26,38 @@ final class AudioRecorder {
     /// Defaults to true, which is the normal dictation behaviour.
     var silenceAutoStopEnabled: Bool = true
 
+    /// Optional live tap: called with every converted 16 kHz mono chunk as it
+    /// arrives, from the same place (and on the same thread) that the RAM
+    /// buffer is appended to — the AVAudioEngine tap callback, which is
+    /// serialized by the engine, so a consumer never sees two chunks at once.
+    ///
+    /// Call recording uses this to stream the mic track to disk. The call is
+    /// made while `bufferLock` is held, and `stopRecording()` clears this
+    /// property under the same lock *after* removing the tap: together that
+    /// guarantees no invocation is in flight or can begin once
+    /// `stopRecording()` has returned, so the owner can safely tear down
+    /// whatever the tap was feeding. Nil (the default) leaves the hot path
+    /// untouched.
+    ///
+    /// **The closure must not block.** It runs on an audio callback thread
+    /// *and* holds `bufferLock`, so any disk I/O, `fsync`, network call or
+    /// lock wait inside it stalls capture and delays `stopRecording()`.
+    /// Copy the buffer and hand it to your own queue — that is what
+    /// `MenuBarViewModel.CallRecordingSession` does.
+    ///
+    /// Set it before `startRecording()`, from the owner's own thread — same
+    /// contract as `onSilenceAutoStop`.
+    var onLiveSamples: (([Float]) -> Void)?
+
+    /// When false, converted samples are *not* accumulated in the in-RAM
+    /// capture buffer (and the `maxBufferSamples` cap, which only guards that
+    /// buffer, never fires). `stopRecording()` then returns an empty array.
+    ///
+    /// Call recording sets this: a two-hour call streams to disk through
+    /// `onLiveSamples` and must not also be held in RAM. Every other path
+    /// leaves it true, which is the behaviour the recorder has always had.
+    var accumulateInMemory: Bool = true
+
     private var silenceStartDate: Date?
     private let silenceAutoStopThreshold: TimeInterval = 10.0
     /// RMS energy below this level is considered silence (set per-recording based on MicSensitivity)
@@ -202,6 +234,18 @@ final class AudioRecorder {
             let frameLength = Int(outputBuffer.frameLength)
             let samples = Array(UnsafeBufferPointer(start: channelData[0], count: frameLength))
 
+            // Live tap first, under the lock (see `onLiveSamples`), so a
+            // consumer writing to disk is ordered against `stopRecording()`.
+            bufferLock.lock()
+            onLiveSamples?(samples)
+            bufferLock.unlock()
+
+            // Call recording streams to disk instead of buffering in RAM;
+            // with no capture buffer there is also nothing for the
+            // `maxBufferSamples` cap (a RAM guard) to protect, and the
+            // silence bookkeeping below has no buffer to trim.
+            guard accumulateInMemory else { return }
+
             bufferLock.lock()
             audioBuffer.append(contentsOf: samples)
             let bufferFull = audioBuffer.count >= maxBufferSamples
@@ -300,6 +344,11 @@ final class AudioRecorder {
 
         bufferLock.lock()
         audioConverter = nil
+        // Cleared under the same lock the tap callback holds while invoking
+        // it, and only after the tap was removed above: once this unlock
+        // happens no further live-sample call can start, and any in-flight
+        // one has already finished — so the owner may close its writer.
+        onLiveSamples = nil
         let result = audioBuffer
         audioBuffer.removeAll()
         bufferLock.unlock()

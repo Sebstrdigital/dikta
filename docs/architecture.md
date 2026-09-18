@@ -100,6 +100,26 @@ submenu shows a disabled row explaining this. Switching away from Svenska reload
 to the preference automatically. KB-Whisper Small is never offered as a manual choice
 (`WhisperModel.isUserSelectable == false`).
 
+## Debrief
+
+Debrief mode replaces the dictation path with transcribe → summarize → paste, saving each
+run to its own folder under `~/Documents/Dikta` (`DebriefStore`). With **Source = Microphone
++ system audio** the recording becomes a *call recording*, which captures two tracks instead
+of one: `MenuBarViewModel.startCallRecording` opens a session folder plus a
+`StreamingWavWriter` per track, starts the system-audio capture first (its `start()` is the
+TCC permission gate and can block for seconds — starting the mic first would offset the two
+tracks by that wait), then the microphone. The mic's converted buffers reach `me.wav` through
+`AudioRecorder.onLiveSamples` and the tap's through the capture's delivery queue; both
+callbacks only hand the buffer to that track's own serial queue, so the disk write (and its
+`fsync`) never runs on an audio thread. Nothing is accumulated in RAM during capture
+(`accumulateInMemory == false`), so a call of any length streams to disk and survives a crash.
+Stop halts the capture first, then the mic, drains each track's queue and closes both writers,
+then hands the folder to `DebriefPipeline.runTwoTrack`, which transcribes each WAV with
+timestamps — one track loaded at a time, so processing peaks at one track's samples, not two —
+merges them into one `Me:`/`Them:` transcript (`TwoTrackMerger`) and runs the same summarize/
+save/paste/History tail as a single-track debrief. The record hotkey toggles a call
+recording; push-to-talk is ignored while one runs.
+
 ## macOS Permissions
 
 - **Microphone** — for recording (entitlement: `com.apple.security.device.audio-input`)

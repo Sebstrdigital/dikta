@@ -15,8 +15,22 @@ final class FakeSystemAudioCapture: SystemAudioCapturing {
     /// Set to make the next `start()` throw instead of succeeding.
     var errorToThrow: Error?
 
+    /// Called from inside `start()`, before it returns, so a test can observe
+    /// what has — and has not — been started at that point (the call path
+    /// must start system audio first, the microphone only afterwards).
+    var onStartCalled: (() -> Void)?
+
+    /// Awaited inside `start()`, before it succeeds or throws. Lets a test
+    /// hold `start()` open — as the real TCC permission prompt does for
+    /// seconds — and drive whatever the app does in that window.
+    var startGate: (() async -> Void)?
+
     func start() async throws {
         startCallCount += 1
+        onStartCalled?()
+        if let startGate {
+            await startGate()
+        }
         if let errorToThrow {
             throw errorToThrow
         }
