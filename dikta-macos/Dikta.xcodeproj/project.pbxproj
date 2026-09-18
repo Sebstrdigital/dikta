@@ -70,6 +70,8 @@
 		CA11DEB10000000200000003 /* StreamingWavWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000200000004 /* StreamingWavWriterTests.swift */; };
 		CA11DEB10000000100000004 /* FakeSystemAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000100000003 /* FakeSystemAudioCapture.swift */; };
 		CA11DEB10000000100000006 /* SystemAudioTapRecorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000100000005 /* SystemAudioTapRecorderTests.swift */; };
+		CA11DEB10000000700000002 /* ChunkedTranscriptionSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000700000001 /* ChunkedTranscriptionSession.swift */; };
+		CA11DEB10000000700000004 /* ChunkedTranscriptionSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000700000003 /* ChunkedTranscriptionSessionTests.swift */; };
 
 		/* Formatter */
 		100000000000000000000081 /* FormatterEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000081 /* FormatterEngine.swift */; };
@@ -208,6 +210,8 @@
 		200000000000000000000124 /* DebriefRealTranscriptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefRealTranscriptTests.swift; sourceTree = "<group>"; };
 		CA11DEB10000000200000002 /* StreamingWavWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingWavWriter.swift; sourceTree = "<group>"; };
 		CA11DEB10000000200000004 /* StreamingWavWriterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingWavWriterTests.swift; sourceTree = "<group>"; };
+		CA11DEB10000000700000001 /* ChunkedTranscriptionSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChunkedTranscriptionSession.swift; sourceTree = "<group>"; };
+		CA11DEB10000000700000003 /* ChunkedTranscriptionSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChunkedTranscriptionSessionTests.swift; sourceTree = "<group>"; };
 
 		/* Product */
 		400000000000000000000001 /* Dikta.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Dikta.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -310,6 +314,7 @@
 				CA11DEB10000000100000003 /* FakeSystemAudioCapture.swift */,
 				CA11DEB10000000100000005 /* SystemAudioTapRecorderTests.swift */,
 				CA11DEB10000000500000004 /* TranscriptSegmentTests.swift */,
+				CA11DEB10000000700000003 /* ChunkedTranscriptionSessionTests.swift */,
 			);
 			path = DiktaTests;
 			sourceTree = "<group>";
@@ -366,6 +371,7 @@
 				200000000000000000000116 /* DebriefStore.swift */,
 				200000000000000000000119 /* DebriefPipeline.swift */,
 				CA11DEB10000000200000002 /* StreamingWavWriter.swift */,
+				CA11DEB10000000700000001 /* ChunkedTranscriptionSession.swift */,
 			);
 			path = Debrief;
 			sourceTree = "<group>";
@@ -548,6 +554,7 @@
 				CA11DEB10000000100000004 /* FakeSystemAudioCapture.swift in Sources */,
 				CA11DEB10000000100000006 /* SystemAudioTapRecorderTests.swift in Sources */,
 				CA11DEB10000000500000003 /* TranscriptSegmentTests.swift in Sources */,
+				CA11DEB10000000700000004 /* ChunkedTranscriptionSessionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -609,6 +616,7 @@
 				CA11DEB10000000200000001 /* StreamingWavWriter.swift in Sources */,
 				CA11DEB10000000100000002 /* SystemAudioTapRecorder.swift in Sources */,
 				CA11DEB10000000500000001 /* TranscriptSegment.swift in Sources */,
+				CA11DEB10000000700000002 /* ChunkedTranscriptionSession.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
