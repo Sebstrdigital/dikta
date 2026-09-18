@@ -37,9 +37,27 @@ final class MenuBarViewModelSetWhisperModelTests: XCTestCase {
         }
     }
 
+    /// The single place this file builds a `MenuBarViewModel`.
+    ///
+    /// The audio seams are always faked. A real `AudioFeedback` builds an
+    /// `AVAudioEngine` in its initializer, and a suite that constructs a
+    /// ViewModel per test case intermittently wedged the whole test host when a
+    /// new engine's `mainMixerNode` contended with a previous instance's
+    /// `AudioFeedback.deinit` inside CoreAudio's `HALB_Mutex`. A real
+    /// `AudioRecorder` is likewise never built, so nothing here can reach the
+    /// microphone or an `AVCaptureDevice.requestAccess` prompt.
+    private func makeViewModel(engine: any TranscriptionEngine) -> MenuBarViewModel {
+        MenuBarViewModel(
+            engine: engine,
+            configService: configService,
+            audioRecorder: FakeAudioRecorder(),
+            audioFeedback: FakeAudioFeedback()
+        )
+    }
+
     func test_setWhisperModel_success() async {
         let fake = FakeTranscriptionEngine()
-        let viewModel = MenuBarViewModel(engine: fake, configService: configService)
+        let viewModel = makeViewModel(engine: fake)
         await waitUntil { viewModel.appState == .idle }
 
         guard let task = viewModel.setWhisperModel(.medium) else {
@@ -55,7 +73,7 @@ final class MenuBarViewModelSetWhisperModelTests: XCTestCase {
     func test_setWhisperModel_failureWithSuccessfulFallback() async {
         let fake = FakeTranscriptionEngine()
         fake.modelsThatFail = [WhisperModel.medium.rawValue]
-        let viewModel = MenuBarViewModel(engine: fake, configService: configService)
+        let viewModel = makeViewModel(engine: fake)
         await waitUntil { viewModel.appState == .idle }
 
         guard let task = viewModel.setWhisperModel(.medium) else {
@@ -72,7 +90,7 @@ final class MenuBarViewModelSetWhisperModelTests: XCTestCase {
     func test_setWhisperModel_failureWithFailedFallback() async {
         let fake = FakeTranscriptionEngine()
         fake.modelsThatFail = [WhisperModel.medium.rawValue, WhisperModel.small.rawValue]
-        let viewModel = MenuBarViewModel(engine: fake, configService: configService)
+        let viewModel = makeViewModel(engine: fake)
         await waitUntil { viewModel.appState == .idle }
 
         guard let task = viewModel.setWhisperModel(.medium) else {
@@ -93,7 +111,7 @@ final class MenuBarViewModelSetWhisperModelTests: XCTestCase {
         let fake = FakeTranscriptionEngine()
         fake.modelsThatFail = [WhisperModel.medium.rawValue, WhisperModel.turbo.rawValue, WhisperModel.small.rawValue]
         configService.whisperModel = WhisperModel.turbo.rawValue
-        let viewModel = MenuBarViewModel(engine: fake, configService: configService)
+        let viewModel = makeViewModel(engine: fake)
         await waitUntil { viewModel.appState == .idle }
         XCTAssertEqual(viewModel.loadedModel, .turbo)
 
@@ -113,7 +131,7 @@ final class MenuBarViewModelSetWhisperModelTests: XCTestCase {
         let fake = FakeTranscriptionEngine()
         fake.modelsThatFail = [WhisperModel.medium.rawValue, WhisperModel.turbo.rawValue]
         configService.whisperModel = WhisperModel.turbo.rawValue
-        let viewModel = MenuBarViewModel(engine: fake, configService: configService)
+        let viewModel = makeViewModel(engine: fake)
         await waitUntil { viewModel.appState == .idle }
 
         guard let task = viewModel.setWhisperModel(.medium) else {
@@ -133,7 +151,7 @@ final class MenuBarViewModelSetWhisperModelTests: XCTestCase {
     func test_setWhisperModel_whileSwedishActive_persistsWithoutReloading() async {
         let fake = FakeTranscriptionEngine()
         configService.language = .swedish
-        let viewModel = MenuBarViewModel(engine: fake, configService: configService)
+        let viewModel = makeViewModel(engine: fake)
         await waitUntil { viewModel.appState == .idle }
         XCTAssertEqual(viewModel.loadedModel, .kbWhisperSmall)
 

@@ -34,6 +34,8 @@
 		100000000000000000000028 /* DiagnosticLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000028 /* DiagnosticLogger.swift */; };
 		100000000000000000000029 /* SparkleController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000029 /* SparkleController.swift */; };
 		CA11DEB10000000100000002 /* SystemAudioTapRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000100000001 /* SystemAudioTapRecorder.swift */; };
+		CA11DEB10000000A00000004 /* AudioFeedbackPlaying.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000A00000003 /* AudioFeedbackPlaying.swift */; };
+		CA11DEB10000000A00000002 /* AudioRecording.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000A00000001 /* AudioRecording.swift */; };
 		100000000000000000000095 /* MicMuter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000095 /* MicMuter.swift */; };
 		100000000000000000000096 /* FocusStash.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000096 /* FocusStash.swift */; };
 		100000000000000000000097 /* MuterRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000097 /* MuterRegistry.swift */; };
@@ -74,6 +76,9 @@
 		CA11DEB10000000200000001 /* StreamingWavWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000200000002 /* StreamingWavWriter.swift */; };
 		CA11DEB10000000200000003 /* StreamingWavWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000200000004 /* StreamingWavWriterTests.swift */; };
 		CA11DEB10000000100000004 /* FakeSystemAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000100000003 /* FakeSystemAudioCapture.swift */; };
+		CA11DEB10000000A00000010 /* CallDebriefRealSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000A00000009 /* CallDebriefRealSessionTests.swift */; };
+		CA11DEB10000000A00000008 /* FakeAudioFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000A00000007 /* FakeAudioFeedback.swift */; };
+		CA11DEB10000000A00000006 /* FakeAudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000A00000005 /* FakeAudioRecorder.swift */; };
 		CA11DEB10000000100000006 /* SystemAudioTapRecorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000100000005 /* SystemAudioTapRecorderTests.swift */; };
 		CA11DEB10000000700000002 /* ChunkedTranscriptionSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000700000001 /* ChunkedTranscriptionSession.swift */; };
 		CA11DEB10000000700000004 /* ChunkedTranscriptionSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000700000003 /* ChunkedTranscriptionSessionTests.swift */; };
@@ -190,7 +195,12 @@
 		200000000000000000000055 /* setup.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; name = setup.sh; path = ../../setup.sh; sourceTree = "<group>"; };
 		200000000000000000000091 /* SentenceEmbeddingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentenceEmbeddingService.swift; sourceTree = "<group>"; };
 		CA11DEB10000000100000001 /* SystemAudioTapRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAudioTapRecorder.swift; sourceTree = "<group>"; };
+		CA11DEB10000000A00000003 /* AudioFeedbackPlaying.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFeedbackPlaying.swift; sourceTree = "<group>"; };
+		CA11DEB10000000A00000001 /* AudioRecording.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecording.swift; sourceTree = "<group>"; };
 		CA11DEB10000000100000003 /* FakeSystemAudioCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeSystemAudioCapture.swift; sourceTree = "<group>"; };
+		CA11DEB10000000A00000009 /* CallDebriefRealSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallDebriefRealSessionTests.swift; sourceTree = "<group>"; };
+		CA11DEB10000000A00000007 /* FakeAudioFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeAudioFeedback.swift; sourceTree = "<group>"; };
+		CA11DEB10000000A00000005 /* FakeAudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeAudioRecorder.swift; sourceTree = "<group>"; };
 		CA11DEB10000000100000005 /* SystemAudioTapRecorderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAudioTapRecorderTests.swift; sourceTree = "<group>"; };
 		200000000000000000000092 /* MiniLML12v2.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper.mlpackage; path = MiniLML12v2.mlpackage; sourceTree = "<group>"; };
 		200000000000000000000093 /* minilm-vocab.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "minilm-vocab.txt"; sourceTree = "<group>"; };
@@ -344,6 +354,9 @@
 				CA11DEB10000000600000006 /* TwoTrackMergerTests.swift */,
 				CA11DEB10000000200000004 /* StreamingWavWriterTests.swift */,
 				CA11DEB10000000100000003 /* FakeSystemAudioCapture.swift */,
+				CA11DEB10000000A00000009 /* CallDebriefRealSessionTests.swift */,
+				CA11DEB10000000A00000007 /* FakeAudioFeedback.swift */,
+				CA11DEB10000000A00000005 /* FakeAudioRecorder.swift */,
 				CA11DEB10000000100000005 /* SystemAudioTapRecorderTests.swift */,
 				CA11DEB10000000500000004 /* TranscriptSegmentTests.swift */,
 				CA11DEB10000000700000003 /* ChunkedTranscriptionSessionTests.swift */,
@@ -390,6 +403,8 @@
 				200000000000000000000029 /* SparkleController.swift */,
 				200000000000000000000091 /* SentenceEmbeddingService.swift */,
 				CA11DEB10000000100000001 /* SystemAudioTapRecorder.swift */,
+				CA11DEB10000000A00000003 /* AudioFeedbackPlaying.swift */,
+				CA11DEB10000000A00000001 /* AudioRecording.swift */,
 				600000000000000000000011 /* Debrief */,
 			);
 			path = Services;
@@ -599,6 +614,9 @@
 				CA11DEB10000000600000005 /* TwoTrackMergerTests.swift in Sources */,
 				CA11DEB10000000200000003 /* StreamingWavWriterTests.swift in Sources */,
 				CA11DEB10000000100000004 /* FakeSystemAudioCapture.swift in Sources */,
+				CA11DEB10000000A00000010 /* CallDebriefRealSessionTests.swift in Sources */,
+				CA11DEB10000000A00000008 /* FakeAudioFeedback.swift in Sources */,
+				CA11DEB10000000A00000006 /* FakeAudioRecorder.swift in Sources */,
 				CA11DEB10000000100000006 /* SystemAudioTapRecorderTests.swift in Sources */,
 				CA11DEB10000000500000003 /* TranscriptSegmentTests.swift in Sources */,
 				CA11DEB10000000700000004 /* ChunkedTranscriptionSessionTests.swift in Sources */,
@@ -667,6 +685,8 @@
 				CA11DEB10000000600000003 /* TwoTrackMerger.swift in Sources */,
 				CA11DEB10000000200000001 /* StreamingWavWriter.swift in Sources */,
 				CA11DEB10000000100000002 /* SystemAudioTapRecorder.swift in Sources */,
+				CA11DEB10000000A00000004 /* AudioFeedbackPlaying.swift in Sources */,
+				CA11DEB10000000A00000002 /* AudioRecording.swift in Sources */,
 				CA11DEB10000000500000001 /* TranscriptSegment.swift in Sources */,
 				CA11DEB10000000700000002 /* ChunkedTranscriptionSession.swift in Sources */,
 				CA11DEB10000000800000002 /* DebriefState.swift in Sources */,
