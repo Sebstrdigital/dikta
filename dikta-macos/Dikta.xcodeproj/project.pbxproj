@@ -16,6 +16,7 @@
 		100000000000000000000006 /* WhisperModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000006 /* WhisperModel.swift */; };
 		100000000000000000000007 /* AppPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000007 /* AppPaths.swift */; };
 		100000000000000000000008 /* MicSensitivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000008 /* MicSensitivity.swift */; };
+		CA11DEB10000000600000001 /* LabeledSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000600000002 /* LabeledSegment.swift */; };
 
 		/* Services */
 		100000000000000000000011 /* ConfigService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000011 /* ConfigService.swift */; };
@@ -63,6 +64,8 @@
 		100000000000000000000121 /* DebriefPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000121 /* DebriefPipelineTests.swift */; };
 		100000000000000000000122 /* MenuBarViewModelDebriefTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000122 /* MenuBarViewModelDebriefTests.swift */; };
 		100000000000000000000124 /* DebriefRealTranscriptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000124 /* DebriefRealTranscriptTests.swift */; };
+		CA11DEB10000000600000003 /* TwoTrackMerger.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000600000004 /* TwoTrackMerger.swift */; };
+		CA11DEB10000000600000005 /* TwoTrackMergerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000600000006 /* TwoTrackMergerTests.swift */; };
 
 		/* Formatter */
 		100000000000000000000081 /* FormatterEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000081 /* FormatterEngine.swift */; };
@@ -180,6 +183,7 @@
 		200000000000000000000107 /* MenuBarViewModelLanguageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelLanguageTests.swift; sourceTree = "<group>"; };
 		200000000000000000000108 /* TTSStaleServerPIDTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSStaleServerPIDTests.swift; sourceTree = "<group>"; };
 		200000000000000000000109 /* DebriefSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefSummary.swift; sourceTree = "<group>"; };
+		CA11DEB10000000600000002 /* LabeledSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabeledSegment.swift; sourceTree = "<group>"; };
 		200000000000000000000110 /* DebriefSummarizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefSummarizer.swift; sourceTree = "<group>"; };
 		200000000000000000000111 /* HeuristicDebriefSummarizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeuristicDebriefSummarizer.swift; sourceTree = "<group>"; };
 		200000000000000000000112 /* OllamaDebriefSummarizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OllamaDebriefSummarizer.swift; sourceTree = "<group>"; };
@@ -190,10 +194,12 @@
 		200000000000000000000117 /* AudioFileLoaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFileLoaderTests.swift; sourceTree = "<group>"; };
 		200000000000000000000118 /* DebriefStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefStoreTests.swift; sourceTree = "<group>"; };
 		200000000000000000000119 /* DebriefPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefPipeline.swift; sourceTree = "<group>"; };
+		CA11DEB10000000600000004 /* TwoTrackMerger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwoTrackMerger.swift; sourceTree = "<group>"; };
 		200000000000000000000120 /* FakeDebriefSummarizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeDebriefSummarizer.swift; sourceTree = "<group>"; };
 		200000000000000000000121 /* DebriefPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefPipelineTests.swift; sourceTree = "<group>"; };
 		200000000000000000000122 /* MenuBarViewModelDebriefTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelDebriefTests.swift; sourceTree = "<group>"; };
 		200000000000000000000124 /* DebriefRealTranscriptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefRealTranscriptTests.swift; sourceTree = "<group>"; };
+		CA11DEB10000000600000006 /* TwoTrackMergerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwoTrackMergerTests.swift; sourceTree = "<group>"; };
 
 		/* Product */
 		400000000000000000000001 /* Dikta.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Dikta.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -292,6 +298,7 @@
 				200000000000000000000121 /* DebriefPipelineTests.swift */,
 				200000000000000000000122 /* MenuBarViewModelDebriefTests.swift */,
 				200000000000000000000124 /* DebriefRealTranscriptTests.swift */,
+				CA11DEB10000000600000006 /* TwoTrackMergerTests.swift */,
 			);
 			path = DiktaTests;
 			sourceTree = "<group>";
@@ -308,6 +315,7 @@
 				200000000000000000000007 /* AppPaths.swift */,
 				200000000000000000000008 /* MicSensitivity.swift */,
 				200000000000000000000109 /* DebriefSummary.swift */,
+				CA11DEB10000000600000002 /* LabeledSegment.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -345,6 +353,7 @@
 				200000000000000000000115 /* AudioFileLoader.swift */,
 				200000000000000000000116 /* DebriefStore.swift */,
 				200000000000000000000119 /* DebriefPipeline.swift */,
+				CA11DEB10000000600000004 /* TwoTrackMerger.swift */,
 			);
 			path = Debrief;
 			sourceTree = "<group>";
@@ -523,6 +532,7 @@
 				100000000000000000000121 /* DebriefPipelineTests.swift in Sources */,
 				100000000000000000000122 /* MenuBarViewModelDebriefTests.swift in Sources */,
 				100000000000000000000124 /* DebriefRealTranscriptTests.swift in Sources */,
+				CA11DEB10000000600000005 /* TwoTrackMergerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -581,6 +591,8 @@
 				100000000000000000000115 /* AudioFileLoader.swift in Sources */,
 				100000000000000000000116 /* DebriefStore.swift in Sources */,
 				100000000000000000000119 /* DebriefPipeline.swift in Sources */,
+				CA11DEB10000000600000001 /* LabeledSegment.swift in Sources */,
+				CA11DEB10000000600000003 /* TwoTrackMerger.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
