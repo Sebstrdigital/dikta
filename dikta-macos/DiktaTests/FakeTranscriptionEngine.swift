@@ -27,6 +27,12 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     /// Number of `transcribe` calls, for tests that assert the engine ran.
     private(set) var transcribeCallCount = 0
 
+    /// Segments returned by `transcribeSegments`. Empty by default.
+    var segmentsToReturn: [TranscriptSegment] = []
+
+    /// `promptText` passed to each `transcribeSegments` call, in call order.
+    private(set) var receivedPromptTexts: [String?] = []
+
     func load() async {
         isReady = true
     }
@@ -50,5 +56,15 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
             try await Task.sleep(nanoseconds: UInt64(transcribeDelay * 1_000_000_000))
         }
         return transcriptToReturn
+    }
+
+    func transcribeSegments(
+        _ samples: [Float],
+        language: String?,
+        micSensitivity: MicSensitivity,
+        promptText: String?
+    ) async throws -> [TranscriptSegment] {
+        receivedPromptTexts.append(promptText)
+        return segmentsToReturn
     }
 }

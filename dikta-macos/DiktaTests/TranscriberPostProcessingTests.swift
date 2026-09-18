@@ -14,18 +14,18 @@ import XCTest
 final class TranscriberPostProcessingTests: XCTestCase {
     func test_cleanSegments_stripsControlTokens() {
         let segments = [
-            TranscriptSegment(text: "<|startoftranscript|><|en|>Hello there<|endoftext|>")
+            RawTranscriptSegment(text: "<|startoftranscript|><|en|>Hello there<|endoftext|>")
         ]
         XCTAssertEqual(Transcriber.cleanSegments(segments), "Hello there")
     }
 
     func test_cleanSegments_stripsBracketNoiseTokens() {
         let segments = [
-            TranscriptSegment(text: "[BLANK_AUDIO]"),
-            TranscriptSegment(text: "[ Silence ]"),
-            TranscriptSegment(text: "[silence]"),
-            TranscriptSegment(text: "[no speech]"),
-            TranscriptSegment(text: "Actual words")
+            RawTranscriptSegment(text: "[BLANK_AUDIO]"),
+            RawTranscriptSegment(text: "[ Silence ]"),
+            RawTranscriptSegment(text: "[silence]"),
+            RawTranscriptSegment(text: "[no speech]"),
+            RawTranscriptSegment(text: "Actual words")
         ]
         XCTAssertEqual(Transcriber.cleanSegments(segments), "Actual words")
     }
@@ -34,19 +34,19 @@ final class TranscriberPostProcessingTests: XCTestCase {
         // Note: production trims with .whitespaces (spaces/tabs), not
         // .whitespacesAndNewlines, so only space/tab-only segments are covered here.
         let segments = [
-            TranscriptSegment(text: ""),
-            TranscriptSegment(text: "   "),
-            TranscriptSegment(text: "\t\t"),
-            TranscriptSegment(text: "Real text")
+            RawTranscriptSegment(text: ""),
+            RawTranscriptSegment(text: "   "),
+            RawTranscriptSegment(text: "\t\t"),
+            RawTranscriptSegment(text: "Real text")
         ]
         XCTAssertEqual(Transcriber.cleanSegments(segments), "Real text")
     }
 
     func test_cleanSegments_joinsNormalTextWithSpaces() {
         let segments = [
-            TranscriptSegment(text: "First segment."),
-            TranscriptSegment(text: "Second segment."),
-            TranscriptSegment(text: "Third segment.")
+            RawTranscriptSegment(text: "First segment."),
+            RawTranscriptSegment(text: "Second segment."),
+            RawTranscriptSegment(text: "Third segment.")
         ]
         XCTAssertEqual(
             Transcriber.cleanSegments(segments),
@@ -60,8 +60,8 @@ final class TranscriberPostProcessingTests: XCTestCase {
 
     func test_cleanSegments_allSegmentsFilteredProducesEmptyString() {
         let segments = [
-            TranscriptSegment(text: "[BLANK_AUDIO]"),
-            TranscriptSegment(text: "   ")
+            RawTranscriptSegment(text: "[BLANK_AUDIO]"),
+            RawTranscriptSegment(text: "   ")
         ]
         XCTAssertEqual(Transcriber.cleanSegments(segments), "")
     }
