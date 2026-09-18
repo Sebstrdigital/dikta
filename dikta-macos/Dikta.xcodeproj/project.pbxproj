@@ -63,6 +63,8 @@
 		100000000000000000000121 /* DebriefPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000121 /* DebriefPipelineTests.swift */; };
 		100000000000000000000122 /* MenuBarViewModelDebriefTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000122 /* MenuBarViewModelDebriefTests.swift */; };
 		100000000000000000000124 /* DebriefRealTranscriptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000124 /* DebriefRealTranscriptTests.swift */; };
+		CA11DEB10000000200000001 /* StreamingWavWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000200000002 /* StreamingWavWriter.swift */; };
+		CA11DEB10000000200000003 /* StreamingWavWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000200000004 /* StreamingWavWriterTests.swift */; };
 
 		/* Formatter */
 		100000000000000000000081 /* FormatterEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000081 /* FormatterEngine.swift */; };
@@ -194,6 +196,8 @@
 		200000000000000000000121 /* DebriefPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefPipelineTests.swift; sourceTree = "<group>"; };
 		200000000000000000000122 /* MenuBarViewModelDebriefTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelDebriefTests.swift; sourceTree = "<group>"; };
 		200000000000000000000124 /* DebriefRealTranscriptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefRealTranscriptTests.swift; sourceTree = "<group>"; };
+		CA11DEB10000000200000002 /* StreamingWavWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingWavWriter.swift; sourceTree = "<group>"; };
+		CA11DEB10000000200000004 /* StreamingWavWriterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingWavWriterTests.swift; sourceTree = "<group>"; };
 
 		/* Product */
 		400000000000000000000001 /* Dikta.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Dikta.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -292,6 +296,7 @@
 				200000000000000000000121 /* DebriefPipelineTests.swift */,
 				200000000000000000000122 /* MenuBarViewModelDebriefTests.swift */,
 				200000000000000000000124 /* DebriefRealTranscriptTests.swift */,
+				CA11DEB10000000200000004 /* StreamingWavWriterTests.swift */,
 			);
 			path = DiktaTests;
 			sourceTree = "<group>";
@@ -345,6 +350,7 @@
 				200000000000000000000115 /* AudioFileLoader.swift */,
 				200000000000000000000116 /* DebriefStore.swift */,
 				200000000000000000000119 /* DebriefPipeline.swift */,
+				CA11DEB10000000200000002 /* StreamingWavWriter.swift */,
 			);
 			path = Debrief;
 			sourceTree = "<group>";
@@ -523,6 +529,7 @@
 				100000000000000000000121 /* DebriefPipelineTests.swift in Sources */,
 				100000000000000000000122 /* MenuBarViewModelDebriefTests.swift in Sources */,
 				100000000000000000000124 /* DebriefRealTranscriptTests.swift in Sources */,
+				CA11DEB10000000200000003 /* StreamingWavWriterTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -581,6 +588,7 @@
 				100000000000000000000115 /* AudioFileLoader.swift in Sources */,
 				100000000000000000000116 /* DebriefStore.swift in Sources */,
 				100000000000000000000119 /* DebriefPipeline.swift in Sources */,
+				CA11DEB10000000200000001 /* StreamingWavWriter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
