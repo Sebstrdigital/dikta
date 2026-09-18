@@ -47,12 +47,13 @@ final class MenuBarViewModel: ObservableObject {
     private let transcriber: any TranscriptionEngine
     /// Internal rather than private so tests can drive the recorder's live
     /// sample tap (`onLiveSamples`) directly, which is the only way to feed
-    /// the call-recording Me track without a real microphone.
-    let audioRecorder: AudioRecorder
+    /// the call-recording Me track without a real microphone. Held as the
+    /// protocol so tests can substitute `FakeAudioRecorder`.
+    let audioRecorder: any AudioRecording
     /// Builds the system-audio capture used by a call recording. Injected so
     /// tests substitute `FakeSystemAudioCapture` for the real CoreAudio tap.
     private let systemAudioCaptureFactory: () -> any SystemAudioCapturing
-    private let audioFeedback: AudioFeedback
+    private let audioFeedback: any AudioFeedbackPlaying
     private let clipboardManager: ClipboardManager
     private let hotkeyManager: HotkeyManager
     private let ttsService: TextToSpeechService
@@ -128,6 +129,14 @@ final class MenuBarViewModel: ObservableObject {
     ///     process tap); tests inject `FakeSystemAudioCapture` so no tap is ever
     ///     opened and no permission prompt can appear. Called once per call
     ///     recording, so each session gets a fresh capture.
+    ///   - audioRecorder: Microphone capture. Defaults to a real
+    ///     `AudioRecorder`; tests inject `FakeAudioRecorder` so no
+    ///     `AVAudioEngine` is built and no `AVCaptureDevice.requestAccess`
+    ///     prompt can appear, and so the live sample tap can be driven
+    ///     directly.
+    ///   - audioFeedback: Start/stop chimes. Defaults to a real `AudioFeedback`
+    ///     outside XCTest and to `SilentAudioFeedback` under it (see
+    ///     `makeDefaultAudioFeedback`); tests inject `FakeAudioFeedback`.
     init(
         engine: (any TranscriptionEngine)? = nil,
         engineFactory: ((WhisperModel) -> any TranscriptionEngine)? = nil,
@@ -137,7 +146,9 @@ final class MenuBarViewModel: ObservableObject {
         clipboardManager: ClipboardManager? = nil,
         audioFileLoader: (@Sendable (URL) throws -> [Float])? = nil,
         muterRegistry: (any MuterRegistering)? = nil,
-        systemAudioCaptureFactory: (() -> any SystemAudioCapturing)? = nil
+        systemAudioCaptureFactory: (() -> any SystemAudioCapturing)? = nil,
+        audioRecorder: (any AudioRecording)? = nil,
+        audioFeedback: (any AudioFeedbackPlaying)? = nil
     ) {
         let configService = configService ?? .shared
         self.configService = configService
@@ -161,9 +172,9 @@ final class MenuBarViewModel: ObservableObject {
             )
             return Transcriber(model: startupModel)
         }()
-        self.audioRecorder = AudioRecorder()
+        self.audioRecorder = audioRecorder ?? AudioRecorder()
         self.systemAudioCaptureFactory = systemAudioCaptureFactory ?? { SystemAudioTapRecorder() }
-        self.audioFeedback = AudioFeedback()
+        self.audioFeedback = audioFeedback ?? Self.makeDefaultAudioFeedback()
         let resolvedClipboardManager = clipboardManager ?? ClipboardManager()
         self.clipboardManager = resolvedClipboardManager
         self.hotkeyManager = HotkeyManager()
@@ -171,8 +182,9 @@ final class MenuBarViewModel: ObservableObject {
         self.textSelectionService = TextSelectionService(clipboardManager: resolvedClipboardManager)
         self.muterRegistry = muterRegistry ?? MuterRegistry()
 
-        // Sync mute state from config
-        audioFeedback.isMuted = configService.muteSounds
+        // Sync mute state from config. `self.` is required: the initializer
+        // parameter of the same name shadows the property here.
+        self.audioFeedback.isMuted = configService.muteSounds
 
         // Set up hotkey delegate
         hotkeyManager.delegate = self
@@ -203,6 +215,23 @@ final class MenuBarViewModel: ObservableObject {
             await self.requestNotificationPermissions()
             await self.initialize()
         }
+    }
+
+    /// The audio feedback a `MenuBarViewModel` uses when none was injected.
+    ///
+    /// Under XCTest this is a `SilentAudioFeedback`, which builds nothing.
+    /// A real `AudioFeedback` constructs an `AVAudioEngine` eagerly, and a test
+    /// process that builds many ViewModels ends up with a new engine's
+    /// `mainMixerNode` contending on CoreAudio's `HALB_Mutex` against a
+    /// previous instance's `AudioFeedback.deinit` — which intermittently wedges
+    /// the whole test host. Tests are expected to inject `FakeAudioFeedback`
+    /// through their `makeViewModel` helper; this is the safety net for the
+    /// ViewModel nobody injects into, notably the one `DiktaApp` builds when
+    /// `Dikta.app` is hosting the test bundle.
+    ///
+    /// Outside XCTest this is a real `AudioFeedback`, unchanged.
+    private static func makeDefaultAudioFeedback() -> any AudioFeedbackPlaying {
+        isRunningUnderXCTestHost ? SilentAudioFeedback() : AudioFeedback()
     }
 
     /// Runs `work` (a `load()`/`reload(model:)` call on `transcriber`) while

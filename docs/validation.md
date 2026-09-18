@@ -104,6 +104,7 @@ To run a single class, use its class name, e.g. `-only-testing:DiktaTests/Rollin
 for p in $(pgrep -x Dikta); do ps -o command= -p $p | grep -q ApplePersistenceIgnoreState && kill $p; done
 ```
 3. Real call recordings live under `~/Documents/Dikta` (or the `DIKTA_REAL_SESSIONS_DIR` environment variable) and are never committed — see `.gitignore`.
+4. Every test that constructs a `MenuBarViewModel` must inject `FakeAudioRecorder` and `FakeAudioFeedback` (via its file's `makeViewModel` helper). A real `AudioFeedback` builds an `AVAudioEngine` in its initializer and can wedge the test host against a previous instance's `deinit` inside CoreAudio's `HALB_Mutex`; a real `AudioRecorder` reaches the microphone and `AVCaptureDevice.requestAccess`. `MenuBarViewModel.makeDefaultAudioFeedback()` falls back to `SilentAudioFeedback` under XCTest as a safety net, but tests inject explicitly.
 
 **Known pre-existing failure**: `testSlackMuterReturnsNilWhenSlackNotRunning` (`MicMutingTests.swift`) fails when
 Slack.app is open on the test machine — unrelated to Call Debrief, not a regression.

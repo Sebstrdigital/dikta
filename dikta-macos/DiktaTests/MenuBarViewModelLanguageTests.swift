@@ -26,9 +26,41 @@ final class MenuBarViewModelLanguageTests: XCTestCase {
         super.tearDown()
     }
 
+    /// The single place this file builds a `MenuBarViewModel`.
+    ///
+    /// The audio seams are always faked. A real `AudioFeedback` builds an
+    /// `AVAudioEngine` in its initializer, and a suite that constructs a
+    /// ViewModel per test case intermittently wedged the whole test host when a
+    /// new engine's `mainMixerNode` contended with a previous instance's
+    /// `AudioFeedback.deinit` inside CoreAudio's `HALB_Mutex`. A real
+    /// `AudioRecorder` is likewise never built, so nothing here can reach the
+    /// microphone or an `AVCaptureDevice.requestAccess` prompt.
+    private func makeViewModel(engine: any TranscriptionEngine) -> MenuBarViewModel {
+        MenuBarViewModel(
+            engine: engine,
+            configService: configService,
+            audioRecorder: FakeAudioRecorder(),
+            audioFeedback: FakeAudioFeedback()
+        )
+    }
+
+    /// `engineFactory:` variant: same faked audio seams, but the engine is
+    /// built by the ViewModel so the test can observe which model `init`
+    /// resolved for the active language.
+    private func makeViewModel(
+        engineFactory: @escaping (WhisperModel) -> any TranscriptionEngine
+    ) -> MenuBarViewModel {
+        MenuBarViewModel(
+            engineFactory: engineFactory,
+            configService: configService,
+            audioRecorder: FakeAudioRecorder(),
+            audioFeedback: FakeAudioFeedback()
+        )
+    }
+
     func test_toggleLanguage_disablingActiveLanguage_cyclesToNextEnabled() {
         let engine = FakeTranscriptionEngine()
-        let viewModel = MenuBarViewModel(engine: engine, configService: configService)
+        let viewModel = makeViewModel(engine: engine)
         let activeLanguage = configService.language
         XCTAssertGreaterThan(configService.enabledLanguages.count, 1, "test needs >1 enabled language to toggle one off")
 
@@ -40,7 +72,7 @@ final class MenuBarViewModelLanguageTests: XCTestCase {
 
     func test_toggleLanguage_disablingInactiveLanguage_leavesActiveLanguageUnchanged() {
         let engine = FakeTranscriptionEngine()
-        let viewModel = MenuBarViewModel(engine: engine, configService: configService)
+        let viewModel = makeViewModel(engine: engine)
         let activeLanguage = configService.language
         let inactiveEnabled = configService.enabledLanguages.first { $0 != activeLanguage }!
 
@@ -73,12 +105,11 @@ final class MenuBarViewModelLanguageTests: XCTestCase {
         let fake = FakeTranscriptionEngine()
         configService.language = .swedish
         var constructedWithModel: WhisperModel?
-        let viewModel = MenuBarViewModel(
+        let viewModel = makeViewModel(
             engineFactory: { model in
                 constructedWithModel = model
                 return fake
-            },
-            configService: configService
+            }
         )
 
         await waitUntil { viewModel.appState == .idle }
@@ -95,12 +126,11 @@ final class MenuBarViewModelLanguageTests: XCTestCase {
         configService.whisperModel = WhisperModel.turbo.rawValue
         configService.language = .english
         var constructedWithModel: WhisperModel?
-        let viewModel = MenuBarViewModel(
+        let viewModel = makeViewModel(
             engineFactory: { model in
                 constructedWithModel = model
                 return fake
-            },
-            configService: configService
+            }
         )
 
         await waitUntil { viewModel.appState == .idle }
@@ -114,7 +144,7 @@ final class MenuBarViewModelLanguageTests: XCTestCase {
 
     func test_setLanguage_englishToSwedish_reloadsToKbWhisperSmall() async {
         let fake = FakeTranscriptionEngine()
-        let viewModel = MenuBarViewModel(engine: fake, configService: configService)
+        let viewModel = makeViewModel(engine: fake)
         await waitUntil { viewModel.appState == .idle }
         XCTAssertEqual(viewModel.loadedModel, .small, "default preference is small")
 
@@ -131,7 +161,7 @@ final class MenuBarViewModelLanguageTests: XCTestCase {
         let fake = FakeTranscriptionEngine()
         configService.whisperModel = WhisperModel.turbo.rawValue
         configService.language = .swedish
-        let viewModel = MenuBarViewModel(engine: fake, configService: configService)
+        let viewModel = makeViewModel(engine: fake)
         await waitUntil { viewModel.appState == .idle }
         XCTAssertEqual(viewModel.loadedModel, .kbWhisperSmall)
 
@@ -146,7 +176,7 @@ final class MenuBarViewModelLanguageTests: XCTestCase {
     func test_setLanguage_swedishReselected_doesNotReload() async {
         let fake = FakeTranscriptionEngine()
         configService.language = .swedish
-        let viewModel = MenuBarViewModel(engine: fake, configService: configService)
+        let viewModel = makeViewModel(engine: fake)
         await waitUntil { viewModel.appState == .idle }
         XCTAssertEqual(viewModel.loadedModel, .kbWhisperSmall)
 
@@ -164,7 +194,7 @@ final class MenuBarViewModelLanguageTests: XCTestCase {
     func test_setLanguage_englishToSwedish_kbWhisperSmallFailure_fallsBackToPreviousModel() async {
         let fake = FakeTranscriptionEngine()
         fake.modelsThatFail = [WhisperModel.kbWhisperSmall.rawValue]
-        let viewModel = MenuBarViewModel(engine: fake, configService: configService)
+        let viewModel = makeViewModel(engine: fake)
         await waitUntil { viewModel.appState == .idle }
         XCTAssertEqual(viewModel.loadedModel, .small)
 
@@ -190,7 +220,7 @@ final class MenuBarViewModelLanguageTests: XCTestCase {
     /// returns to `.idle` on its own (e.g. when recording finishes).
     func test_setLanguage_duringRecording_defersReloadUntilIdle() async {
         let fake = FakeTranscriptionEngine()
-        let viewModel = MenuBarViewModel(engine: fake, configService: configService)
+        let viewModel = makeViewModel(engine: fake)
         await waitUntil { viewModel.appState == .idle }
 
         viewModel.appState = .recording
@@ -212,7 +242,7 @@ final class MenuBarViewModelLanguageTests: XCTestCase {
     /// recording session passes through before returning to `.idle`.
     func test_setLanguage_duringProcessing_defersReloadUntilIdle() async {
         let fake = FakeTranscriptionEngine()
-        let viewModel = MenuBarViewModel(engine: fake, configService: configService)
+        let viewModel = makeViewModel(engine: fake)
         await waitUntil { viewModel.appState == .idle }
 
         viewModel.appState = .processing
@@ -235,7 +265,7 @@ final class MenuBarViewModelLanguageTests: XCTestCase {
     /// happen at all.
     func test_setLanguage_switchedBackBeforeIdle_noReloadOnIdle() async {
         let fake = FakeTranscriptionEngine()
-        let viewModel = MenuBarViewModel(engine: fake, configService: configService)
+        let viewModel = makeViewModel(engine: fake)
         await waitUntil { viewModel.appState == .idle }
 
         viewModel.appState = .recording
@@ -258,7 +288,7 @@ final class MenuBarViewModelLanguageTests: XCTestCase {
     /// by `setLanguage` must run.
     func test_toggleLanguage_disablingActiveLanguage_cyclingToSwedish_reloadsToKbWhisperSmall() async {
         let fake = FakeTranscriptionEngine()
-        let viewModel = MenuBarViewModel(engine: fake, configService: configService)
+        let viewModel = makeViewModel(engine: fake)
         await waitUntil { viewModel.appState == .idle }
         // Default enabled languages: [english, swedish, indonesian]; default active: english.
         XCTAssertEqual(configService.language, .english)
@@ -277,7 +307,7 @@ final class MenuBarViewModelLanguageTests: XCTestCase {
         let fake = FakeTranscriptionEngine()
         configService.whisperModel = WhisperModel.turbo.rawValue
         configService.language = .swedish
-        let viewModel = MenuBarViewModel(engine: fake, configService: configService)
+        let viewModel = makeViewModel(engine: fake)
         await waitUntil { viewModel.appState == .idle }
         XCTAssertEqual(viewModel.loadedModel, .kbWhisperSmall)
 
@@ -294,7 +324,7 @@ final class MenuBarViewModelLanguageTests: XCTestCase {
     /// `setLanguage` calls.
     func test_cycleLanguage_englishToSwedish_reloadsToKbWhisperSmall() async {
         let fake = FakeTranscriptionEngine()
-        let viewModel = MenuBarViewModel(engine: fake, configService: configService)
+        let viewModel = makeViewModel(engine: fake)
         await waitUntil { viewModel.appState == .idle }
         XCTAssertEqual(configService.language, .english)
 
