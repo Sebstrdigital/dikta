@@ -30,4 +30,11 @@ protocol TranscriptionEngine: AnyObject {
 
     /// Transcribe audio samples using the currently loaded model.
     func transcribe(_ audioSamples: [Float], language: String?, micSensitivity: MicSensitivity) async throws -> String
+
+    /// Transcribe audio samples using the currently loaded model, returning
+    /// timestamped segments instead of one joined string. `promptText`, when
+    /// non-nil and non-empty, conditions the decoder on the previous chunk's
+    /// tail for continuity across chunk boundaries. Does not affect
+    /// `transcribe(_:language:micSensitivity:)`.
+    func transcribeSegments(_ samples: [Float], language: String?, micSensitivity: MicSensitivity, promptText: String?) async throws -> [TranscriptSegment]
 }
