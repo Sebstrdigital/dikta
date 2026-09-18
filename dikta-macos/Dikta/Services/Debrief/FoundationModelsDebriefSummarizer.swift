@@ -51,7 +51,12 @@ final class FoundationModelsDebriefSummarizer: DebriefSummarizer {
             throw DebriefSummarizerError.emptyTranscript
         }
 
-        let session = LanguageModelSession(instructions: DebriefPromptBuilder.systemPrompt(language: language))
+        let session = LanguageModelSession(
+            instructions: DebriefPromptBuilder.systemPrompt(
+                language: language,
+                isLabeledTranscript: TwoTrackMerger.isLabeledTranscript(trimmedTranscript)
+            )
+        )
         let userPrompt = DebriefPromptBuilder.userPrompt(transcript: trimmedTranscript, language: language)
 
         do {

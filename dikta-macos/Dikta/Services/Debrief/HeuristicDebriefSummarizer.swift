@@ -61,9 +61,17 @@ final class HeuristicDebriefSummarizer: DebriefSummarizer {
     }
 
     func summarize(transcript: String, language: String) async throws -> DebriefSummary {
-        let trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTranscript.isEmpty else {
             throw DebriefSummarizerError.emptyTranscript
+        }
+
+        // This engine has no notion of speakers, so a Me/Them-labeled call
+        // debrief (see TwoTrackMerger) must have its labels stripped first —
+        // otherwise the literal "Me: "/"Them: " prefixes end up bucketed
+        // straight into the summary/decisions/actions/questions below.
+        if TwoTrackMerger.isLabeledTranscript(trimmedTranscript) {
+            trimmedTranscript = TwoTrackMerger.stripLabels(trimmedTranscript)
         }
 
         let discourseMarkers = language == "sv" ? Self.discourseMarkersSv : Self.discourseMarkersEn
