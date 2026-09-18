@@ -51,7 +51,7 @@ final class MenuBarViewModel: ObservableObject {
     private let hotkeyManager: HotkeyManager
     private let ttsService: TextToSpeechService
     private let textSelectionService: TextSelectionService
-    private let muterRegistry: MuterRegistry
+    private let muterRegistry: any MuterRegistering
 
     // Debrief services. Injected ones win; otherwise they are built lazily —
     // the summarizer is rebuilt whenever the configured engine kind or Ollama
@@ -114,6 +114,9 @@ final class MenuBarViewModel: ObservableObject {
     ///     inject one rooted in a temp directory.
     ///   - clipboardManager: Paste path. Defaults to the real one; tests inject a
     ///     subclass so a test run never posts Cmd+V or clobbers the clipboard.
+    ///   - muterRegistry: Other-apps mic muter. Defaults to the real
+    ///     `MuterRegistry`; tests inject a fake conforming to `MuterRegistering`
+    ///     to assert whether `muteAll()` ran without touching real mic-muting apps.
     init(
         engine: (any TranscriptionEngine)? = nil,
         engineFactory: ((WhisperModel) -> any TranscriptionEngine)? = nil,
@@ -121,7 +124,8 @@ final class MenuBarViewModel: ObservableObject {
         debriefSummarizer: DebriefSummarizer? = nil,
         debriefStore: DebriefStore? = nil,
         clipboardManager: ClipboardManager? = nil,
-        audioFileLoader: (@Sendable (URL) throws -> [Float])? = nil
+        audioFileLoader: (@Sendable (URL) throws -> [Float])? = nil,
+        muterRegistry: (any MuterRegistering)? = nil
     ) {
         let configService = configService ?? .shared
         self.configService = configService
@@ -152,7 +156,7 @@ final class MenuBarViewModel: ObservableObject {
         self.hotkeyManager = HotkeyManager()
         self.ttsService = TextToSpeechService()
         self.textSelectionService = TextSelectionService(clipboardManager: resolvedClipboardManager)
-        self.muterRegistry = MuterRegistry()
+        self.muterRegistry = muterRegistry ?? MuterRegistry()
 
         // Sync mute state from config
         audioFeedback.isMuted = configService.muteSounds
@@ -285,7 +289,12 @@ final class MenuBarViewModel: ObservableObject {
         }
 
         Task {
-            let muteTokens = muterRegistry.muteAll()
+            // Muting other apps' mics protects dictation from bleeding into a
+            // call app's own input, but debrief mode capturing system audio is
+            // recording that call itself — muting here would silence the user
+            // in their own meeting. Skip it only in that case.
+            let capturingCallAudio = configService.debriefModeEnabled && configService.debriefSource == .microphoneAndSystemAudio
+            let muteTokens = capturingCallAudio ? [] : muterRegistry.muteAll()
             activeMuteTokens = muteTokens
 
             do {
@@ -471,6 +480,33 @@ final class MenuBarViewModel: ObservableObject {
 
     func setDebriefEngine(_ kind: DebriefEngineKind) {
         configService.debriefEngine = kind
+    }
+
+    /// Current debrief audio source, forwarded from config. Readable here (in
+    /// addition to `configService.debriefSource`) so callers — and tests —
+    /// don't need to reach through to the config store just to check it.
+    var debriefSource: DebriefSource {
+        configService.debriefSource
+    }
+
+    func setDebriefSource(_ source: DebriefSource) {
+        configService.debriefSource = source
+    }
+
+    /// Selects `source` (persisting it, same as `setDebriefSource`) and owns
+    /// the one-time "Recording call audio" consent decision: returns true
+    /// exactly once, the first time `.microphoneAndSystemAudio` is chosen
+    /// while `callRecordingNoticeShown` is still false, and flips that flag
+    /// before returning. The caller (the Source menu) is only responsible for
+    /// presenting the alert when this returns true — it owns no state itself.
+    @discardableResult
+    func selectDebriefSource(_ source: DebriefSource) -> Bool {
+        let shouldShowNotice = source == .microphoneAndSystemAudio && !configService.callRecordingNoticeShown
+        if shouldShowNotice {
+            configService.callRecordingNoticeShown = true
+        }
+        setDebriefSource(source)
+        return shouldShowNotice
     }
 
     /// The recorder settings the next recording runs with. Pure so it can be

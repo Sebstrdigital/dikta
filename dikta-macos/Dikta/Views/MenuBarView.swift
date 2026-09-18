@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// Main menu bar view
 struct MenuBarView: View {
@@ -192,6 +193,20 @@ struct DebriefMenu: View {
                 }
             }
 
+            Menu("Source") {
+                ForEach(DebriefSource.allCases, id: \.self) { source in
+                    Button(action: { handleSourceSelection(source) }) {
+                        HStack {
+                            Text(source.displayName)
+                            if viewModel.debriefSource == source {
+                                Spacer()
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+
             Button("Load audio file…") {
                 viewModel.loadAudioFileFromPanel()
             }
@@ -220,6 +235,31 @@ struct DebriefMenu: View {
                 viewModel.openDebriefFolder()
             }
         }
+    }
+
+    /// Selects a debrief source. The ViewModel owns the show-once decision for
+    /// the recording-consent notice (`MenuBarViewModel.selectDebriefSource(_:)`);
+    /// this only presents the alert when told to.
+    private func handleSourceSelection(_ source: DebriefSource) {
+        if viewModel.selectDebriefSource(source) {
+            showRecordingConsentAlert()
+        }
+    }
+
+    /// macOS shows no recording indicator for the system-audio tap, so this
+    /// notice — plus the existing icon/sounds — is the only consent signal the
+    /// user gets.
+    private func showRecordingConsentAlert() {
+        // Dikta is an LSUIElement accessory app (no Dock icon), so without an
+        // explicit activate the alert can open behind whatever app is
+        // frontmost instead of in front of the user.
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Recording call audio"
+        alert.informativeText = "Dikta will record what you hear from other apps together with your microphone, on this Mac only. macOS shows no recording indicator for this, so it is your responsibility to tell participants that the call is being recorded."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 }
 

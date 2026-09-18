@@ -1,6 +1,15 @@
 import Foundation
 import AVFoundation
 
+/// The two audio tracks a debrief session captures: the local mic (the
+/// user) and the call's system/remote audio (everyone else). See decision
+/// 4 in `tasks/decisions-call-debrief.md` — multi-party on the Them track
+/// is a single mixed stream until diarization lands.
+enum DebriefTrack: String {
+    case me
+    case them
+}
+
 /// Paths to the files that make up a single debrief session, all living
 /// under one per-session folder.
 struct DebriefSessionPaths {
@@ -9,6 +18,13 @@ struct DebriefSessionPaths {
     var audio: URL { folder.appendingPathComponent("audio.wav") }
     var transcript: URL { folder.appendingPathComponent("transcript.txt") }
     var summary: URL { folder.appendingPathComponent("summary.txt") }
+
+    /// Per-track streaming WAV file (`me.wav` / `them.wav`) written
+    /// continuously to disk during capture — see decision 7 (continuous
+    /// stream to disk, crash-safe, constant RAM).
+    func audioURL(for track: DebriefTrack) -> URL {
+        folder.appendingPathComponent("\(track.rawValue).wav")
+    }
 }
 
 enum DebriefStoreError: Error, LocalizedError {
@@ -31,6 +47,7 @@ final class DebriefStore {
     private let rootDirectory: URL
     private let fileManager: FileManager
     private let clock: () -> Date
+    private let audioFileLoader = AudioFileLoader()
 
     /// Default root folder for debrief sessions: `~/Documents/Dikta`.
     static var defaultRoot: URL {
@@ -117,6 +134,26 @@ final class DebriefStore {
         }
 
         try file.write(from: buffer)
+    }
+
+    /// Creates a `StreamingWavWriter` at `paths.audioURL(for: track)`,
+    /// ready for the caller to `append` live samples to as they're
+    /// captured, rather than accumulating them in RAM for `writeAudio` to
+    /// write out in one shot at the end of the session.
+    func makeStreamingWriter(for track: DebriefTrack, in paths: DebriefSessionPaths) throws -> StreamingWavWriter {
+        try StreamingWavWriter(url: paths.audioURL(for: track))
+    }
+
+    /// Whether `track` has actually been captured: the file exists AND its
+    /// WAV data chunk is non-empty. `makeStreamingWriter` creates the file
+    /// with a valid but zero-frame header immediately, so checking mere
+    /// existence would report a track as present before any audio has
+    /// been flushed to it.
+    func hasTrack(_ track: DebriefTrack, in paths: DebriefSessionPaths) -> Bool {
+        let url = paths.audioURL(for: track)
+        guard fileManager.fileExists(atPath: url.path) else { return false }
+        guard let duration = try? audioFileLoader.duration(url: url) else { return false }
+        return duration > 0
     }
 
     /// Copies the originally imported audio file next to `audio.wav`, as

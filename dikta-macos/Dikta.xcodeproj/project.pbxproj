@@ -33,6 +33,7 @@
 		100000000000000000000027 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000027 /* UpdateChecker.swift */; };
 		100000000000000000000028 /* DiagnosticLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000028 /* DiagnosticLogger.swift */; };
 		100000000000000000000029 /* SparkleController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000029 /* SparkleController.swift */; };
+		CA11DEB10000000100000002 /* SystemAudioTapRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000100000001 /* SystemAudioTapRecorder.swift */; };
 		100000000000000000000095 /* MicMuter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000095 /* MicMuter.swift */; };
 		100000000000000000000096 /* FocusStash.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000096 /* FocusStash.swift */; };
 		100000000000000000000097 /* MuterRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000097 /* MuterRegistry.swift */; };
@@ -50,6 +51,8 @@
 
 		/* Debrief */
 		100000000000000000000109 /* DebriefSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000109 /* DebriefSummary.swift */; };
+		CA11DEB10000000500000001 /* TranscriptSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000500000002 /* TranscriptSegment.swift */; };
+		CA11DEB10000000500000003 /* TranscriptSegmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000500000004 /* TranscriptSegmentTests.swift */; };
 		100000000000000000000110 /* DebriefSummarizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000110 /* DebriefSummarizer.swift */; };
 		100000000000000000000111 /* HeuristicDebriefSummarizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000111 /* HeuristicDebriefSummarizer.swift */; };
 		100000000000000000000112 /* OllamaDebriefSummarizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000112 /* OllamaDebriefSummarizer.swift */; };
@@ -66,6 +69,10 @@
 		100000000000000000000124 /* DebriefRealTranscriptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000124 /* DebriefRealTranscriptTests.swift */; };
 		CA11DEB10000000600000003 /* TwoTrackMerger.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000600000004 /* TwoTrackMerger.swift */; };
 		CA11DEB10000000600000005 /* TwoTrackMergerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000600000006 /* TwoTrackMergerTests.swift */; };
+		CA11DEB10000000200000001 /* StreamingWavWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000200000002 /* StreamingWavWriter.swift */; };
+		CA11DEB10000000200000003 /* StreamingWavWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000200000004 /* StreamingWavWriterTests.swift */; };
+		CA11DEB10000000100000004 /* FakeSystemAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000100000003 /* FakeSystemAudioCapture.swift */; };
+		CA11DEB10000000100000006 /* SystemAudioTapRecorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000100000005 /* SystemAudioTapRecorderTests.swift */; };
 
 		/* Formatter */
 		100000000000000000000081 /* FormatterEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000081 /* FormatterEngine.swift */; };
@@ -168,6 +175,9 @@
 		200000000000000000000054 /* kokoro_server.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = kokoro_server.py; path = ../../kokoro_server.py; sourceTree = "<group>"; };
 		200000000000000000000055 /* setup.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; name = setup.sh; path = ../../setup.sh; sourceTree = "<group>"; };
 		200000000000000000000091 /* SentenceEmbeddingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentenceEmbeddingService.swift; sourceTree = "<group>"; };
+		CA11DEB10000000100000001 /* SystemAudioTapRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAudioTapRecorder.swift; sourceTree = "<group>"; };
+		CA11DEB10000000100000003 /* FakeSystemAudioCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeSystemAudioCapture.swift; sourceTree = "<group>"; };
+		CA11DEB10000000100000005 /* SystemAudioTapRecorderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAudioTapRecorderTests.swift; sourceTree = "<group>"; };
 		200000000000000000000092 /* MiniLML12v2.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper.mlpackage; path = MiniLML12v2.mlpackage; sourceTree = "<group>"; };
 		200000000000000000000093 /* minilm-vocab.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "minilm-vocab.txt"; sourceTree = "<group>"; };
 		200000000000000000000094 /* EmbeddingParagraphSplitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmbeddingParagraphSplitter.swift; sourceTree = "<group>"; };
@@ -184,6 +194,8 @@
 		200000000000000000000108 /* TTSStaleServerPIDTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSStaleServerPIDTests.swift; sourceTree = "<group>"; };
 		200000000000000000000109 /* DebriefSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefSummary.swift; sourceTree = "<group>"; };
 		CA11DEB10000000600000002 /* LabeledSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabeledSegment.swift; sourceTree = "<group>"; };
+		CA11DEB10000000500000002 /* TranscriptSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSegment.swift; sourceTree = "<group>"; };
+		CA11DEB10000000500000004 /* TranscriptSegmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSegmentTests.swift; sourceTree = "<group>"; };
 		200000000000000000000110 /* DebriefSummarizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefSummarizer.swift; sourceTree = "<group>"; };
 		200000000000000000000111 /* HeuristicDebriefSummarizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeuristicDebriefSummarizer.swift; sourceTree = "<group>"; };
 		200000000000000000000112 /* OllamaDebriefSummarizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OllamaDebriefSummarizer.swift; sourceTree = "<group>"; };
@@ -200,6 +212,8 @@
 		200000000000000000000122 /* MenuBarViewModelDebriefTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelDebriefTests.swift; sourceTree = "<group>"; };
 		200000000000000000000124 /* DebriefRealTranscriptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefRealTranscriptTests.swift; sourceTree = "<group>"; };
 		CA11DEB10000000600000006 /* TwoTrackMergerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwoTrackMergerTests.swift; sourceTree = "<group>"; };
+		CA11DEB10000000200000002 /* StreamingWavWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingWavWriter.swift; sourceTree = "<group>"; };
+		CA11DEB10000000200000004 /* StreamingWavWriterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingWavWriterTests.swift; sourceTree = "<group>"; };
 
 		/* Product */
 		400000000000000000000001 /* Dikta.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Dikta.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -299,6 +313,10 @@
 				200000000000000000000122 /* MenuBarViewModelDebriefTests.swift */,
 				200000000000000000000124 /* DebriefRealTranscriptTests.swift */,
 				CA11DEB10000000600000006 /* TwoTrackMergerTests.swift */,
+				CA11DEB10000000200000004 /* StreamingWavWriterTests.swift */,
+				CA11DEB10000000100000003 /* FakeSystemAudioCapture.swift */,
+				CA11DEB10000000100000005 /* SystemAudioTapRecorderTests.swift */,
+				CA11DEB10000000500000004 /* TranscriptSegmentTests.swift */,
 			);
 			path = DiktaTests;
 			sourceTree = "<group>";
@@ -316,6 +334,7 @@
 				200000000000000000000008 /* MicSensitivity.swift */,
 				200000000000000000000109 /* DebriefSummary.swift */,
 				CA11DEB10000000600000002 /* LabeledSegment.swift */,
+				CA11DEB10000000500000002 /* TranscriptSegment.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -338,6 +357,7 @@
 				200000000000000000000028 /* DiagnosticLogger.swift */,
 				200000000000000000000029 /* SparkleController.swift */,
 				200000000000000000000091 /* SentenceEmbeddingService.swift */,
+				CA11DEB10000000100000001 /* SystemAudioTapRecorder.swift */,
 				600000000000000000000011 /* Debrief */,
 			);
 			path = Services;
@@ -354,6 +374,7 @@
 				200000000000000000000116 /* DebriefStore.swift */,
 				200000000000000000000119 /* DebriefPipeline.swift */,
 				CA11DEB10000000600000004 /* TwoTrackMerger.swift */,
+				CA11DEB10000000200000002 /* StreamingWavWriter.swift */,
 			);
 			path = Debrief;
 			sourceTree = "<group>";
@@ -533,6 +554,10 @@
 				100000000000000000000122 /* MenuBarViewModelDebriefTests.swift in Sources */,
 				100000000000000000000124 /* DebriefRealTranscriptTests.swift in Sources */,
 				CA11DEB10000000600000005 /* TwoTrackMergerTests.swift in Sources */,
+				CA11DEB10000000200000003 /* StreamingWavWriterTests.swift in Sources */,
+				CA11DEB10000000100000004 /* FakeSystemAudioCapture.swift in Sources */,
+				CA11DEB10000000100000006 /* SystemAudioTapRecorderTests.swift in Sources */,
+				CA11DEB10000000500000003 /* TranscriptSegmentTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -593,6 +618,9 @@
 				100000000000000000000119 /* DebriefPipeline.swift in Sources */,
 				CA11DEB10000000600000001 /* LabeledSegment.swift in Sources */,
 				CA11DEB10000000600000003 /* TwoTrackMerger.swift in Sources */,
+				CA11DEB10000000200000001 /* StreamingWavWriter.swift in Sources */,
+				CA11DEB10000000100000002 /* SystemAudioTapRecorder.swift in Sources */,
+				CA11DEB10000000500000001 /* TranscriptSegment.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -652,7 +680,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.2;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -709,7 +737,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.2;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
@@ -732,6 +760,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Dikta/Resources/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSAudioCaptureUsageDescription = "Dikta records the call audio you hear so it can write a debrief. Nothing leaves your Mac.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Sebastian Strandberg. All rights reserved.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dikta needs microphone access to record your voice for dictation.";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -761,6 +790,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Dikta/Resources/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSAudioCaptureUsageDescription = "Dikta records the call audio you hear so it can write a debrief. Nothing leaves your Mac.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Sebastian Strandberg. All rights reserved.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Dikta needs microphone access to record your voice for dictation.";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -781,7 +811,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app.DiktaTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -796,7 +826,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app.DiktaTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;

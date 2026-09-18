@@ -1,5 +1,20 @@
 import Foundation
 
+/// Where debrief mode records audio from. `.microphoneAndSystemAudio` also
+/// captures what plays out of other apps (the call partner's side), so it
+/// carries a one-time consent notice — see `AppConfig.callRecordingNoticeShown`.
+enum DebriefSource: String, Codable, CaseIterable {
+    case microphone
+    case microphoneAndSystemAudio
+
+    var displayName: String {
+        switch self {
+        case .microphone: return "Microphone"
+        case .microphoneAndSystemAudio: return "Microphone + system audio"
+        }
+    }
+}
+
 /// Full application configuration (matches Python config format)
 struct AppConfig: Codable {
     var version: Int
@@ -23,6 +38,11 @@ struct AppConfig: Codable {
     var debriefEngine: DebriefEngineKind
     /// Model name passed to the Ollama summarizer.
     var ollamaModel: String
+    /// Which audio debrief mode records: mic only, or mic + system audio.
+    var debriefSource: DebriefSource
+    /// Whether the one-time "Recording call audio" consent notice has been
+    /// shown. Set the first time `.microphoneAndSystemAudio` is selected.
+    var callRecordingNoticeShown: Bool
 
     struct HotkeyConfigs: Codable {
         var toggle: HotkeyConfig
@@ -74,6 +94,8 @@ struct AppConfig: Codable {
         case debriefModeEnabled = "debrief_mode_enabled"
         case debriefEngine = "debrief_engine"
         case ollamaModel = "ollama_model"
+        case debriefSource = "debrief_source"
+        case callRecordingNoticeShown = "call_recording_notice_shown"
     }
 
     static let defaultCustomPrompt = "Clean up this dictation. Fix grammar, punctuation, and remove filler words. Output only the cleaned text."
@@ -101,14 +123,16 @@ struct AppConfig: Codable {
         enabledLanguages: [.english, .swedish, .indonesian],
         debriefModeEnabled: false,
         debriefEngine: .auto,
-        ollamaModel: defaultOllamaModel
+        ollamaModel: defaultOllamaModel,
+        debriefSource: .microphone,
+        callRecordingNoticeShown: false
     )
 
     /// Maximum history items to keep
     static let historyLimit = 5
 
     /// Memberwise initializer
-    init(version: Int, hotkeys: HotkeyConfigs, outputMode: OutputMode, history: [HistoryItem], whisperModel: String, llmModel: String, language: Language, customPrompt: String = defaultCustomPrompt, micSensitivity: MicSensitivity = .normal, muteSounds: Bool = false, muteNotifications: Bool = false, diagnosticLogging: Bool = false, enabledLanguages: [Language] = [.english, .swedish, .indonesian], debriefModeEnabled: Bool = false, debriefEngine: DebriefEngineKind = .auto, ollamaModel: String = defaultOllamaModel) {
+    init(version: Int, hotkeys: HotkeyConfigs, outputMode: OutputMode, history: [HistoryItem], whisperModel: String, llmModel: String, language: Language, customPrompt: String = defaultCustomPrompt, micSensitivity: MicSensitivity = .normal, muteSounds: Bool = false, muteNotifications: Bool = false, diagnosticLogging: Bool = false, enabledLanguages: [Language] = [.english, .swedish, .indonesian], debriefModeEnabled: Bool = false, debriefEngine: DebriefEngineKind = .auto, ollamaModel: String = defaultOllamaModel, debriefSource: DebriefSource = .microphone, callRecordingNoticeShown: Bool = false) {
         self.version = version
         self.hotkeys = hotkeys
         self.outputMode = outputMode
@@ -125,6 +149,8 @@ struct AppConfig: Codable {
         self.debriefModeEnabled = debriefModeEnabled
         self.debriefEngine = debriefEngine
         self.ollamaModel = ollamaModel
+        self.debriefSource = debriefSource
+        self.callRecordingNoticeShown = callRecordingNoticeShown
     }
 
     /// Handle missing fields from old configs (v2 configs with active_mode are handled gracefully —
@@ -163,5 +189,7 @@ struct AppConfig: Codable {
         debriefModeEnabled = try container.decodeIfPresent(Bool.self, forKey: .debriefModeEnabled) ?? false
         debriefEngine = try container.decodeIfPresent(DebriefEngineKind.self, forKey: .debriefEngine) ?? .auto
         ollamaModel = try container.decodeIfPresent(String.self, forKey: .ollamaModel) ?? Self.defaultOllamaModel
+        debriefSource = try container.decodeIfPresent(DebriefSource.self, forKey: .debriefSource) ?? .microphone
+        callRecordingNoticeShown = try container.decodeIfPresent(Bool.self, forKey: .callRecordingNoticeShown) ?? false
     }
 }

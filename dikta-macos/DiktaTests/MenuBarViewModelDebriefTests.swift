@@ -17,6 +17,23 @@ final class FakeClipboardManager: ClipboardManager {
     }
 }
 
+/// Records `muteAll()`/`unmuteAll()` calls instead of touching real mic-muting
+/// apps (Meet, Teams, Slack, ...), so tests can assert whether the debrief
+/// "Microphone + system audio" gating skipped muting.
+final class FakeMuterRegistry: MuterRegistering {
+    private(set) var muteAllCallCount = 0
+    private(set) var unmuteAllCallCount = 0
+
+    func muteAll() -> [MuteToken] {
+        muteAllCallCount += 1
+        return []
+    }
+
+    func unmuteAll(_ tokens: [MuteToken]) {
+        unmuteAllCallCount += 1
+    }
+}
+
 /// Blocks a fake audio loader on its background thread until the test releases
 /// it, so the test can inspect ViewModel state mid-decode.
 final class LoaderGate: @unchecked Sendable {
@@ -74,7 +91,8 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
 
     private func makeViewModel(
         summarizer: DebriefSummarizer,
-        transcript: String = "This is the debrief of the sprint review."
+        transcript: String = "This is the debrief of the sprint review.",
+        muterRegistry: (any MuterRegistering)? = nil
     ) -> (MenuBarViewModel, FakeTranscriptionEngine) {
         let engine = FakeTranscriptionEngine()
         engine.transcriptToReturn = transcript
@@ -83,7 +101,8 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
             configService: configService,
             debriefSummarizer: summarizer,
             debriefStore: store,
-            clipboardManager: clipboard
+            clipboardManager: clipboard,
+            muterRegistry: muterRegistry
         )
         return (viewModel, engine)
     }
@@ -400,5 +419,107 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
         XCTAssertTrue(configService.debriefModeEnabled)
         viewModel.toggleDebriefMode()
         XCTAssertFalse(configService.debriefModeEnabled)
+    }
+
+    // MARK: - Debrief source
+
+    func test_setDebriefSource_persistsToConfigAndIsReadableFromViewModel() {
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeViewModel(summarizer: summarizer)
+
+        XCTAssertEqual(viewModel.debriefSource, .microphone)
+
+        viewModel.setDebriefSource(.microphoneAndSystemAudio)
+
+        XCTAssertEqual(configService.debriefSource, .microphoneAndSystemAudio)
+        XCTAssertEqual(viewModel.debriefSource, .microphoneAndSystemAudio)
+    }
+
+    /// `selectDebriefSource` owns the one-time consent-notice decision: the
+    /// menu (View) only presents the alert when this returns true, so the
+    /// show-once behavior has to be correct here, not in the UI layer.
+    func test_selectDebriefSource_showsConsentNoticeExactlyOnceForSystemAudio() {
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeViewModel(summarizer: summarizer)
+
+        XCTAssertFalse(configService.callRecordingNoticeShown)
+
+        let firstResult = viewModel.selectDebriefSource(.microphoneAndSystemAudio)
+        XCTAssertTrue(firstResult, "the first selection of mic + system audio must ask the caller to show the notice")
+        XCTAssertTrue(configService.callRecordingNoticeShown)
+        XCTAssertEqual(configService.debriefSource, .microphoneAndSystemAudio)
+
+        let secondResult = viewModel.selectDebriefSource(.microphoneAndSystemAudio)
+        XCTAssertFalse(secondResult, "a later selection must not ask the caller to show the notice again")
+    }
+
+    func test_selectDebriefSource_microphoneNeverShowsConsentNotice() {
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeViewModel(summarizer: summarizer)
+
+        let result = viewModel.selectDebriefSource(.microphone)
+
+        XCTAssertFalse(result)
+        XCTAssertFalse(configService.callRecordingNoticeShown)
+        XCTAssertEqual(configService.debriefSource, .microphone)
+    }
+
+    // MARK: - Muter gating (source = mic + system audio must not mute other apps)
+
+    /// Lets the fire-and-forget `Task` inside `startRecording()` run its
+    /// synchronous prefix (the mute decision, before the first `await`) even
+    /// though `audioRecorder.startRecording()` itself is real and will likely
+    /// fail for lack of mic permission in CI — that failure happens strictly
+    /// after the mute decision, so it doesn't affect what's being asserted.
+    private func yieldForStartRecordingTask() async {
+        for _ in 0..<50 {
+            await Task.yield()
+        }
+    }
+
+    func test_startRecording_debriefModeWithSystemAudioSource_skipsMuting() async {
+        configService.debriefModeEnabled = true
+        configService.debriefSource = .microphoneAndSystemAudio
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let muter = FakeMuterRegistry()
+        let (viewModel, _) = makeViewModel(summarizer: summarizer, muterRegistry: muter)
+
+        // startRecording() guards on appState == .idle, which only lands after
+        // the ViewModel's own init-time Task finishes loading the (fake)
+        // transcriber. Without this wait, startRecording() is a same-tick no-op
+        // and the assertion below passes for the wrong reason.
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await yieldForStartRecordingTask()
+
+        XCTAssertEqual(muter.muteAllCallCount, 0, "debrief mode capturing system audio must not mute the user's own mic-muting apps")
+    }
+
+    func test_startRecording_debriefModeWithMicOnlySource_mutesAsNormal() async {
+        configService.debriefModeEnabled = true
+        configService.debriefSource = .microphone
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let muter = FakeMuterRegistry()
+        let (viewModel, _) = makeViewModel(summarizer: summarizer, muterRegistry: muter)
+
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await waitUntil { muter.muteAllCallCount > 0 }
+
+        XCTAssertEqual(muter.muteAllCallCount, 1)
+    }
+
+    func test_startRecording_debriefModeDisabled_mutesAsNormalRegardlessOfSource() async {
+        configService.debriefModeEnabled = false
+        configService.debriefSource = .microphoneAndSystemAudio
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let muter = FakeMuterRegistry()
+        let (viewModel, _) = makeViewModel(summarizer: summarizer, muterRegistry: muter)
+
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await waitUntil { muter.muteAllCallCount > 0 }
+
+        XCTAssertEqual(muter.muteAllCallCount, 1, "the gate only applies while debrief mode is on")
     }
 }
