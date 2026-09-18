@@ -68,6 +68,18 @@ Dikta
 │   ├── English
 │   ├── Svenska
 │   └── Bahasa Indonesia
+├── Debrief >
+│   ├── Debrief mode
+│   ├── Source >
+│   │   ├── Microphone
+│   │   └── Microphone + system audio (one-time consent notice on first selection)
+│   ├── Load audio file…
+│   ├── Engine >
+│   │   ├── Auto
+│   │   ├── Apple Intelligence (macOS 26)
+│   │   ├── Ollama (local)
+│   │   └── Heuristic
+│   └── Open Dikta folder
 ├── Advanced >
 │   ├── Whisper Model: Small / Medium (KB-Whisper Small hidden — auto-selected for Svenska, see below)
 │   └── Voice: (Kokoro voices)
@@ -88,10 +100,65 @@ submenu shows a disabled row explaining this. Switching away from Svenska reload
 to the preference automatically. KB-Whisper Small is never offered as a manual choice
 (`WhisperModel.isUserSelectable == false`).
 
+## Debrief
+
+Debrief mode replaces the dictation path with transcribe → summarize → paste, saving each
+run to its own folder under `~/Documents/Dikta` (`DebriefStore`). With **Source = Microphone
++ system audio** the recording becomes a *call recording*, which captures two tracks instead
+of one: `MenuBarViewModel.startCallRecording` opens a session folder plus a
+`StreamingWavWriter` per track, starts the system-audio capture first (its `start()` is the
+TCC permission gate and can block for seconds — starting the mic first would offset the two
+tracks by that wait), then the microphone. The mic's converted buffers reach `me.wav` through
+`AudioRecorder.onLiveSamples` and the tap's through the capture's delivery queue; both
+callbacks only hand the buffer to that track's own serial queue, so the disk write (and its
+`fsync`) never runs on an audio thread. Nothing is accumulated in RAM during capture
+(`accumulateInMemory == false`), so a call of any length streams to disk and survives a crash.
+Stop halts the capture first, then the mic, drains each track's queue and closes both writers.
+The record hotkey toggles a call recording; push-to-talk is ignored while one runs.
+
+### Live chunking and the rolling summary
+
+Every debrief — call, mic-only and imported file — runs through one API:
+`DebriefPipeline.startLiveSession(tracks:language:micSensitivity:)` returns a
+`DebriefLiveSession` that owns a `ChunkedTranscriptionSession` and a `RollingDebriefSummarizer`.
+Audio is `append`ed as it is captured, from the same per-track serial queue that writes the WAV,
+so the chunker sees each track's buffers in capture order. Roughly every five minutes the chunker
+cuts (at silence where it can find it, otherwise a hard cut with overlap ears), transcribes that
+chunk in the background *while the recording continues*, and calls back with its per-track
+segments; the session merges them (`TwoTrackMerger` for two tracks, plain concatenation for one —
+a mic debrief has one speaker and is never labeled) and feeds the text to the rolling summarizer,
+which folds each chunk in as a delta over a numbered state that Swift, not the model, owns.
+
+`finish()` closes the final chunk and waits at most `max(pipeline timeout, 120 s)` for the
+transcription still in flight — everything earlier was already transcribed during the recording,
+which is why a one-hour call's summary is ready about a minute after stop rather than after a
+full re-transcription. On timeout the chunks that did complete are summarized anyway and the
+reason is recorded on `DebriefResult.issues`. A mic-only debrief uses the same machinery with a
+single track, streaming to `audio.wav` as it records (`accumulateInMemory == false`), so a long
+mic debrief is crash-safe too.
+
+**Single-chunk bypass.** Anything short enough to be one chunk behaves exactly as it did before
+chunking existed. The in-RAM and on-disk entry points (`run(samples:)`, `runTwoTrack(paths:)`)
+know the length up front, so a recording at or under `targetChunkSeconds` takes the old
+whole-recording path verbatim — one `transcribe` call raced against the configured timeout. A
+live session that turns out to have produced one chunk holds that chunk back from the rolling
+summarizer entirely and summarizes the full transcript with the single-pass
+`DebriefSummarizer`, so a short debrief never spends an extra LLM call. Both paths end in the
+same `finishTranscribedDebrief` tail: write transcript, reject silence, normalize and validate
+the summary, write it, report it.
+
+`runTwoTrack(paths:)` remains the recovery path for a call whose WAVs are already on disk (a
+session the app crashed during, replayed through "Load audio file").
+
+One `DEBRIEF_LIVE` diagnostic line is logged per chunk (index, audio seconds, per-track wall
+time, silence-vs-hard cut, padding, errors) and one at finish (chunk count, single-pass vs
+rolling, and seconds from stop to summary — the feature's headline metric).
+
 ## macOS Permissions
 
 - **Microphone** — for recording (entitlement: `com.apple.security.device.audio-input`)
 - **Accessibility** — for global hotkeys and auto-paste
+- **System Audio Recording Only** — for the debrief "Microphone + system audio" source (CoreAudio process tap, deployment target 14.2+). This is an audio-only TCC prompt; it lands under Privacy & Security → "System Audio Recording Only", separate from Screen Recording. macOS shows **no** recording indicator while a tap runs — Dikta's icon/sounds and the one-time in-app consent notice are the only signal the user gets, so the user is responsible for telling call participants. The app is not sandboxed (hardened runtime only), so this requires no entitlement changes.
 
 ## Text-to-Speech
 

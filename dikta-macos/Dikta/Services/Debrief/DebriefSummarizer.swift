@@ -110,9 +110,58 @@ enum DebriefPromptBuilder {
         }
     }
 
-    static func systemPrompt(language: String) -> String {
+    /// Appended to `systemPrompt` when `isLabeledTranscript` is true — the
+    /// transcript came from `TwoTrackMerger.render`, i.e. a call debrief with
+    /// separate mic ("Me") and system-audio ("Them") tracks (decision 4 in
+    /// `tasks/decisions-call-debrief.md`). Exists to fix the owner-misattribution
+    /// defect documented in docs/review-2026-09/debrief-probe-2026-09-17.md
+    /// ("Tuning round 2", defect 4): without knowing who is speaking, the model
+    /// has previously assigned the speaker's own "I need to..." task to another
+    /// attendee. The labels themselves ("Me:"/"Them:") are never translated —
+    /// only the rule text explaining them is language-specific.
+    private static let labeledTranscriptRuleEnglish = """
+
+        This transcript is labeled: each line starts with "Me:" (spoken by \
+        you, the user) or "Them:" (spoken by the other meeting participants). \
+        Keep writing in first person ("I"/"we") for what was said on "Me:" \
+        lines — you are still the user this summary is written for. A \
+        commitment made on a "Me:" line belongs to you; never attribute it to \
+        another attendee. A commitment made on a "Them:" line belongs to \
+        whichever participant is named on or near that line, following the \
+        same owner rule as above; if nobody is named there, owner is null — \
+        never "them" and never a generic group.
+        """
+
+    private static let labeledTranscriptRuleSwedish = """
+
+        Denna transkription är märkt: varje rad börjar med "Me:" (sagt av \
+        dig, användaren) eller "Them:" (sagt av övriga mötesdeltagare). \
+        Fortsätt skriva i jag-form ("jag"/"vi") för det som sägs på \
+        "Me:"-rader — det är fortfarande du sammanfattningen skrivs för. Ett \
+        åtagande på en "Me:"-rad tillhör dig; tillskriv det aldrig en annan \
+        deltagare. Ett åtagande på en "Them:"-rad tillhör den deltagare som \
+        namnges i eller nära den raden, enligt samma ägarregel som ovan; om \
+        ingen namnges där ska ägaren vara null — aldrig en generisk grupp.
+        """
+
+    /// - Parameter isLabeledTranscript: true when `transcript` was produced
+    ///   by `TwoTrackMerger.render` (Me/Them lines) rather than plain
+    ///   dictation. Defaults to false so every existing call site (and this
+    ///   file's own prompt tests) keeps the unlabeled prompt byte-identical.
+    static func systemPrompt(language: String, isLabeledTranscript: Bool = false) -> String {
         let ex = PromptExamples.forLanguage(language)
-        return """
+        let basePrompt = Self.basePrompt(ex: ex)
+        guard isLabeledTranscript else { return basePrompt }
+        let labeledRule = language == "sv" ? labeledTranscriptRuleSwedish : labeledTranscriptRuleEnglish
+        return basePrompt + labeledRule
+    }
+
+    /// The unlabeled prompt body — unchanged by `isLabeledTranscript`, kept
+    /// byte-identical to before that parameter existed (see its call site in
+    /// `systemPrompt`, and the `DebriefPromptBuilderLanguageTests` that guard
+    /// it).
+    private static func basePrompt(ex: PromptExamples) -> String {
+        """
         You are an assistant that summarizes spoken post-meeting debriefs. The \
         transcript is the USER's own first-person account of a meeting they just \
         left — not a description of someone else. The transcript may be Swedish or \

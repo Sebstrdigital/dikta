@@ -17,6 +17,54 @@ final class FakeClipboardManager: ClipboardManager {
     }
 }
 
+/// Records `muteAll()`/`unmuteAll()` calls instead of touching real mic-muting
+/// apps (Meet, Teams, Slack, ...), so tests can assert whether the debrief
+/// "Microphone + system audio" gating skipped muting.
+final class FakeMuterRegistry: MuterRegistering {
+    private(set) var muteAllCallCount = 0
+    private(set) var unmuteAllCallCount = 0
+
+    func muteAll() -> [MuteToken] {
+        muteAllCallCount += 1
+        return []
+    }
+
+    func unmuteAll(_ tokens: [MuteToken]) {
+        unmuteAllCallCount += 1
+    }
+}
+
+/// Suspends an `async` caller (never blocks a thread) until the test opens
+/// the gate — used to hold `SystemAudioCapturing.start()` open the way a TCC
+/// permission prompt does, so the test can act during that window.
+final class AsyncGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            lock.lock()
+            if isOpen {
+                lock.unlock()
+                continuation.resume()
+                return
+            }
+            waiters.append(continuation)
+            lock.unlock()
+        }
+    }
+
+    func open() {
+        lock.lock()
+        isOpen = true
+        let pending = waiters
+        waiters.removeAll()
+        lock.unlock()
+        for continuation in pending { continuation.resume() }
+    }
+}
+
 /// Blocks a fake audio loader on its background thread until the test releases
 /// it, so the test can inspect ViewModel state mid-decode.
 final class LoaderGate: @unchecked Sendable {
@@ -43,6 +91,15 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
     private var store: DebriefStore!
     private var clipboard: FakeClipboardManager!
 
+    /// Every ViewModel a test built that may have been left mid-recording.
+    ///
+    /// Every one of them is built with a `FakeAudioRecorder` and a
+    /// `FakeAudioFeedback`, so no `AVAudioEngine` exists to leak and no
+    /// microphone is ever opened. `tearDown` still walks them so a ViewModel a
+    /// test abandoned in `.recording` releases its session and live-tap
+    /// closures rather than holding them until the process exits.
+    private var recordingViewModels: [MenuBarViewModel] = []
+
     override func setUp() {
         super.setUp()
         tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -54,13 +111,24 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
         clipboard = FakeClipboardManager()
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
+        // Release anything a test left mid-recording before the temp directory
+        // goes away — see `recordingViewModels`.
+        await MainActor.run {
+            for viewModel in recordingViewModels {
+                viewModel.stopRecording()
+                _ = viewModel.audioRecorder.stopRecording()
+                viewModel.audioRecorder.onLiveSamples = nil
+            }
+            recordingViewModels.removeAll()
+        }
+
         try? FileManager.default.removeItem(at: tempDir)
         clipboard = nil
         store = nil
         configService = nil
         tempDir = nil
-        super.tearDown()
+        try await super.tearDown()
     }
 
     private func summary() -> DebriefSummary {
@@ -72,9 +140,17 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
         )
     }
 
+    /// The single place these tests build a `MenuBarViewModel`'s audio seams.
+    /// Both are always faked: no `AVAudioEngine`, no microphone, no
+    /// `AVCaptureDevice.requestAccess` prompt anywhere in this suite.
     private func makeViewModel(
         summarizer: DebriefSummarizer,
-        transcript: String = "This is the debrief of the sprint review."
+        transcript: String = "This is the debrief of the sprint review.",
+        muterRegistry: (any MuterRegistering)? = nil,
+        recorder: FakeAudioRecorder? = nil,
+        audioFileLoader: (@Sendable (URL) throws -> [Float])? = nil,
+        systemAudioCaptureFactory: (() -> any SystemAudioCapturing)? = nil,
+        debriefStore: DebriefStore? = nil
     ) -> (MenuBarViewModel, FakeTranscriptionEngine) {
         let engine = FakeTranscriptionEngine()
         engine.transcriptToReturn = transcript
@@ -82,9 +158,15 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
             engine: engine,
             configService: configService,
             debriefSummarizer: summarizer,
-            debriefStore: store,
-            clipboardManager: clipboard
+            debriefStore: debriefStore ?? store,
+            clipboardManager: clipboard,
+            audioFileLoader: audioFileLoader,
+            muterRegistry: muterRegistry,
+            systemAudioCaptureFactory: systemAudioCaptureFactory,
+            audioRecorder: recorder ?? FakeAudioRecorder(),
+            audioFeedback: FakeAudioFeedback()
         )
+        recordingViewModels.append(viewModel)
         return (viewModel, engine)
     }
 
@@ -279,18 +361,13 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
     func test_importAudioFile_claimsStateBeforeDecoding_soRecordingCannotStart() async throws {
         let sourceURL = try makeSourceWAV(named: "claim")
         let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
-        let engine = FakeTranscriptionEngine()
-        engine.transcriptToReturn = "Imported debrief."
 
         // Blocks the loader until the test releases it, standing in for a long
         // file decode.
         let gate = LoaderGate()
-        let viewModel = MenuBarViewModel(
-            engine: engine,
-            configService: configService,
-            debriefSummarizer: summarizer,
-            debriefStore: store,
-            clipboardManager: clipboard,
+        let (viewModel, _) = makeViewModel(
+            summarizer: summarizer,
+            transcript: "Imported debrief.",
             audioFileLoader: { _ in
                 gate.waitUntilReleased()
                 return [Float](repeating: 0, count: 16_000)
@@ -321,16 +398,11 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
         let firstURL = try makeSourceWAV(named: "first")
         let secondURL = try makeSourceWAV(named: "second")
         let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
-        let engine = FakeTranscriptionEngine()
-        engine.transcriptToReturn = "Imported debrief."
 
         let gate = LoaderGate()
-        let viewModel = MenuBarViewModel(
-            engine: engine,
-            configService: configService,
-            debriefSummarizer: summarizer,
-            debriefStore: store,
-            clipboardManager: clipboard,
+        let (viewModel, _) = makeViewModel(
+            summarizer: summarizer,
+            transcript: "Imported debrief.",
             audioFileLoader: { _ in
                 gate.waitUntilReleased()
                 return [Float](repeating: 0, count: 16_000)
@@ -354,13 +426,8 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
 
     func test_importAudioFile_loadFailure_releasesState() async {
         let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
-        let engine = FakeTranscriptionEngine()
-        let viewModel = MenuBarViewModel(
-            engine: engine,
-            configService: configService,
-            debriefSummarizer: summarizer,
-            debriefStore: store,
-            clipboardManager: clipboard,
+        let (viewModel, _) = makeViewModel(
+            summarizer: summarizer,
             audioFileLoader: { url in throw AudioFileLoaderError.unsupportedFormat(url) }
         )
 
@@ -400,5 +467,586 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
         XCTAssertTrue(configService.debriefModeEnabled)
         viewModel.toggleDebriefMode()
         XCTAssertFalse(configService.debriefModeEnabled)
+    }
+
+    // MARK: - Debrief source
+
+    func test_setDebriefSource_persistsToConfigAndIsReadableFromViewModel() {
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeViewModel(summarizer: summarizer)
+
+        XCTAssertEqual(viewModel.debriefSource, .microphone)
+
+        viewModel.setDebriefSource(.microphoneAndSystemAudio)
+
+        XCTAssertEqual(configService.debriefSource, .microphoneAndSystemAudio)
+        XCTAssertEqual(viewModel.debriefSource, .microphoneAndSystemAudio)
+    }
+
+    /// `selectDebriefSource` owns the one-time consent-notice decision: the
+    /// menu (View) only presents the alert when this returns true, so the
+    /// show-once behavior has to be correct here, not in the UI layer.
+    func test_selectDebriefSource_showsConsentNoticeExactlyOnceForSystemAudio() {
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeViewModel(summarizer: summarizer)
+
+        XCTAssertFalse(configService.callRecordingNoticeShown)
+
+        let firstResult = viewModel.selectDebriefSource(.microphoneAndSystemAudio)
+        XCTAssertTrue(firstResult, "the first selection of mic + system audio must ask the caller to show the notice")
+        XCTAssertTrue(configService.callRecordingNoticeShown)
+        XCTAssertEqual(configService.debriefSource, .microphoneAndSystemAudio)
+
+        let secondResult = viewModel.selectDebriefSource(.microphoneAndSystemAudio)
+        XCTAssertFalse(secondResult, "a later selection must not ask the caller to show the notice again")
+    }
+
+    func test_selectDebriefSource_microphoneNeverShowsConsentNotice() {
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeViewModel(summarizer: summarizer)
+
+        let result = viewModel.selectDebriefSource(.microphone)
+
+        XCTAssertFalse(result)
+        XCTAssertFalse(configService.callRecordingNoticeShown)
+        XCTAssertEqual(configService.debriefSource, .microphone)
+    }
+
+    // MARK: - Muter gating (source = mic + system audio must not mute other apps)
+
+    /// Lets the fire-and-forget `Task` inside `startRecording()` run to
+    /// completion — in particular its synchronous prefix, the mute decision
+    /// taken before the first `await`.
+    private func yieldForStartRecordingTask() async {
+        for _ in 0..<50 {
+            await Task.yield()
+        }
+    }
+
+    func test_startRecording_debriefModeWithSystemAudioSource_skipsMuting() async {
+        configService.debriefModeEnabled = true
+        configService.debriefSource = .microphoneAndSystemAudio
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let muter = FakeMuterRegistry()
+        let (viewModel, _) = makeViewModel(summarizer: summarizer, muterRegistry: muter)
+
+        // startRecording() guards on appState == .idle, which only lands after
+        // the ViewModel's own init-time Task finishes loading the (fake)
+        // transcriber. Without this wait, startRecording() is a same-tick no-op
+        // and the assertion below passes for the wrong reason.
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await yieldForStartRecordingTask()
+
+        XCTAssertEqual(muter.muteAllCallCount, 0, "debrief mode capturing system audio must not mute the user's own mic-muting apps")
+    }
+
+    func test_startRecording_debriefModeWithMicOnlySource_mutesAsNormal() async {
+        configService.debriefModeEnabled = true
+        configService.debriefSource = .microphone
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let muter = FakeMuterRegistry()
+        let (viewModel, _) = makeViewModel(summarizer: summarizer, muterRegistry: muter)
+
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await waitUntil { muter.muteAllCallCount > 0 }
+
+        XCTAssertEqual(muter.muteAllCallCount, 1)
+    }
+
+    func test_startRecording_debriefModeDisabled_mutesAsNormalRegardlessOfSource() async {
+        configService.debriefModeEnabled = false
+        configService.debriefSource = .microphoneAndSystemAudio
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let muter = FakeMuterRegistry()
+        let (viewModel, _) = makeViewModel(summarizer: summarizer, muterRegistry: muter)
+
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await waitUntil { muter.muteAllCallCount > 0 }
+
+        XCTAssertEqual(muter.muteAllCallCount, 1, "the gate only applies while debrief mode is on")
+    }
+
+    // MARK: - Call recording (source = mic + system audio, two tracks to disk)
+
+    private func makeCallViewModel(
+        capture: FakeSystemAudioCapture,
+        summarizer: DebriefSummarizer,
+        muterRegistry: (any MuterRegistering)? = nil,
+        recorder: FakeAudioRecorder? = nil
+    ) -> (MenuBarViewModel, FakeTranscriptionEngine) {
+        configService.debriefModeEnabled = true
+        configService.debriefSource = .microphoneAndSystemAudio
+        return makeViewModel(
+            summarizer: summarizer,
+            transcript: "",
+            muterRegistry: muterRegistry,
+            recorder: recorder,
+            systemAudioCaptureFactory: { capture }
+        )
+    }
+
+    private var sessionFolders: [URL] {
+        let root = tempDir.appendingPathComponent("sessions")
+        return (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+    }
+
+    /// Starts a call recording and waits for `.recording`.
+    ///
+    /// This used to skip when the machine had no usable microphone: the real
+    /// `AudioRecorder` was used, so on a CI box or behind an unanswered TCC
+    /// prompt the call path simply could not start. With `FakeAudioRecorder`
+    /// there is no microphone in the picture at all, so reaching `.recording`
+    /// is now an assertion rather than a precondition.
+    private func startCallRecording(_ viewModel: MenuBarViewModel) async {
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await waitUntil(timeout: 5) { viewModel.appState == .recording }
+        XCTAssertEqual(viewModel.appState, .recording, "call recording failed to start with a fake recorder")
+    }
+
+    /// Builds a call-mode ViewModel whose store can never create a session,
+    /// so the very first step of `startCallRecording` fails.
+    private func makeCallViewModelWithUnwritableStore(
+        capture: FakeSystemAudioCapture,
+        summarizer: DebriefSummarizer
+    ) -> MenuBarViewModel {
+        configService.debriefModeEnabled = true
+        configService.debriefSource = .microphoneAndSystemAudio
+        // `/dev/null` is a character device, so creating a directory under it
+        // always fails — no permissions games, no machine dependence.
+        let brokenStore = DebriefStore(rootDirectory: URL(fileURLWithPath: "/dev/null/dikta-sessions"))
+        let (viewModel, _) = makeViewModel(
+            summarizer: summarizer,
+            transcript: "",
+            systemAudioCaptureFactory: { capture },
+            debriefStore: brokenStore
+        )
+        return viewModel
+    }
+
+    func test_startCallRecording_sessionCreationFailure_startsNothingAndStaysIdle() async throws {
+        let capture = FakeSystemAudioCapture()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let viewModel = makeCallViewModelWithUnwritableStore(capture: capture, summarizer: summarizer)
+
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await yieldForStartRecordingTask()
+
+        XCTAssertEqual(viewModel.appState, .idle)
+        XCTAssertEqual(capture.startCallCount, 0, "the tap must not open when there is nowhere to write")
+        XCTAssertFalse(viewModel.audioRecorder.recording)
+        XCTAssertNil(viewModel.audioRecorder.onLiveSamples)
+        XCTAssertTrue(sessionFolders.isEmpty)
+    }
+
+    func test_startCallRecording_secondStartWhileCaptureStartIsPending_isIgnored() async throws {
+        let capture = FakeSystemAudioCapture()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeCallViewModel(capture: capture, summarizer: summarizer)
+
+        // Hold capture.start() open, exactly as the TCC prompt does. The app
+        // is still `.idle` the whole time, so nothing but the re-entrancy
+        // guard stops a second hotkey press from opening a second session.
+        let gate = AsyncGate()
+        capture.startGate = { await gate.wait() }
+
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await waitUntil(timeout: 5) { capture.startCallCount > 0 }
+
+        XCTAssertEqual(viewModel.appState, .idle, "still inside the permission gate")
+        viewModel.startRecording()
+        viewModel.hotkeyPressed(mode: .toggle)
+        await yieldForStartRecordingTask()
+
+        XCTAssertEqual(capture.startCallCount, 1, "a start already in flight must not be started again")
+        XCTAssertEqual(sessionFolders.count, 1, "a second start would have created a second session folder")
+
+        gate.open()
+        await waitUntil(timeout: 5) { viewModel.appState == .recording }
+        XCTAssertEqual(viewModel.appState, .recording)
+        XCTAssertEqual(sessionFolders.count, 1)
+
+        viewModel.stopRecording()
+        await waitUntil(timeout: 5) { viewModel.appState == .idle }
+    }
+
+    func test_runCallDebrief_whileAnotherDebriefHoldsTheClaim_endsIdleAndKeepsTheOtherRun() async throws {
+        let sourceURL = try makeSourceWAV(named: "busy")
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+
+        let loaderGate = LoaderGate()
+        let (viewModel, _) = makeViewModel(
+            summarizer: summarizer,
+            transcript: "Imported debrief.",
+            audioFileLoader: { _ in
+                loaderGate.waitUntilReleased()
+                return [Float](repeating: 0, count: 16_000)
+            }
+        )
+
+        let importTask = Task { await viewModel.importAudioFile(url: sourceURL) }
+        await waitUntil { viewModel.isSummarizing }
+
+        // A call finishing while that import still holds the claim: refused,
+        // and it must not strand the app in .processing either way.
+        let paths = try store.createSession()
+        viewModel.appState = .processing
+        await viewModel.runCallDebrief(paths: paths)
+
+        XCTAssertTrue(viewModel.isSummarizing, "the refused run must not release the import's claim")
+        XCTAssertEqual(summarizer.summarizeCallCount, 0, "nothing should have been summarized yet")
+
+        loaderGate.release()
+        await importTask.value
+
+        XCTAssertEqual(viewModel.appState, .idle, "the app must never be left stuck in .processing")
+        XCTAssertFalse(viewModel.isSummarizing)
+        XCTAssertEqual(summarizer.summarizeCallCount, 1, "only the import ran")
+    }
+
+    func test_runCallDebrief_withNothingHoldingTheClaim_neverLeavesProcessingStuck() async throws {
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, engine) = makeCallViewModel(capture: FakeSystemAudioCapture(), summarizer: summarizer)
+        engine.segmentsPerCall = [[TranscriptSegment(start: 0, end: 1, text: "Both sides spoke.")]]
+
+        await waitUntil { viewModel.appState == .idle }
+        let paths = try store.createSession()
+        let writer = try store.makeStreamingWriter(for: .me, in: paths)
+        try writer.append([Float](repeating: 0.1, count: 16_000))
+        try writer.close()
+
+        viewModel.appState = .processing
+        await viewModel.runCallDebrief(paths: paths)
+
+        XCTAssertEqual(viewModel.appState, .idle)
+        XCTAssertFalse(viewModel.isSummarizing)
+        XCTAssertEqual(summarizer.summarizeCallCount, 1)
+    }
+
+    func test_startCallRecording_startsSystemCaptureBeforeMicAndOpensBothWriters() async throws {
+        let capture = FakeSystemAudioCapture()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let muter = FakeMuterRegistry()
+        let (viewModel, _) = makeCallViewModel(capture: capture, summarizer: summarizer, muterRegistry: muter)
+
+        // Ordering probe: the mic must not be running yet when the system
+        // capture's start() is called — it is the permission gate and can
+        // block for seconds, which would offset the two tracks.
+        var micWasRecordingAtCaptureStart: Bool?
+        capture.onStartCalled = { [weak viewModel] in
+            micWasRecordingAtCaptureStart = viewModel?.audioRecorder.recording
+        }
+
+        await startCallRecording(viewModel)
+
+        XCTAssertEqual(capture.startCallCount, 1)
+        XCTAssertEqual(micWasRecordingAtCaptureStart, false, "system audio capture must start before the microphone")
+        XCTAssertTrue(viewModel.audioRecorder.recording)
+        XCTAssertEqual(muter.muteAllCallCount, 0, "recording a call must not mute the user's own call app")
+
+        // One session folder with both tracks already on disk (valid,
+        // zero-frame WAVs) — a crash from here on still leaves them.
+        let folders = sessionFolders
+        XCTAssertEqual(folders.count, 1)
+        let paths = DebriefSessionPaths(folder: try XCTUnwrap(folders.first))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: paths.audioURL(for: .me).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: paths.audioURL(for: .them).path))
+
+        viewModel.stopRecording()
+        await waitUntil(timeout: 5) { viewModel.appState == .idle }
+    }
+
+    func test_callRecording_liveSamplesLandInMeAndThemWavsAndAreTranscribedSeparately() async throws {
+        let capture = FakeSystemAudioCapture()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, engine) = makeCallViewModel(capture: capture, summarizer: summarizer)
+        engine.segmentsPerCall = [
+            [TranscriptSegment(start: 0, end: 1, text: "My side of the call.")],
+            [TranscriptSegment(start: 2, end: 3, text: "Their side of the call.")]
+        ]
+
+        await startCallRecording(viewModel)
+
+        // Mic track: drive the recorder's live tap directly, the same closure
+        // the AVAudioEngine tap callback invokes.
+        let meTap = try XCTUnwrap(viewModel.audioRecorder.onLiveSamples)
+        meTap([Float](repeating: 0.25, count: 16_000))
+        // System audio track: through the fake capture, as the real tap does.
+        capture.feed([Float](repeating: -0.25, count: 32_000))
+
+        viewModel.stopRecording()
+        await waitUntil(timeout: 5) { viewModel.appState == .idle }
+
+        XCTAssertEqual(capture.stopCallCount, 1)
+        XCTAssertFalse(viewModel.audioRecorder.recording)
+
+        let paths = DebriefSessionPaths(folder: try XCTUnwrap(sessionFolders.first))
+        let loader = AudioFileLoader()
+        let me = try loader.load(url: paths.audioURL(for: .me))
+        let them = try loader.load(url: paths.audioURL(for: .them))
+        XCTAssertEqual(Double(me.count), 16_000, accuracy: 100)
+        XCTAssertEqual(Double(them.count), 32_000, accuracy: 100)
+        XCTAssertEqual(Double(me[100]), 0.25, accuracy: 0.001)
+        XCTAssertEqual(Double(them[100]), -0.25, accuracy: 0.001)
+
+        // Both tracks were transcribed and merged into one labeled transcript,
+        // then pasted and recorded in History like any other debrief.
+        XCTAssertEqual(engine.receivedPromptTexts.count, 2)
+        let transcript = try String(contentsOf: paths.transcript, encoding: .utf8)
+        XCTAssertEqual(transcript, "Me: My side of the call.\n\nThem: Their side of the call.")
+        XCTAssertEqual(summarizer.summarizeCallCount, 1)
+        XCTAssertEqual(clipboard.pastedMultiline.count, 1)
+        XCTAssertTrue(clipboard.pastedText.isEmpty)
+        XCTAssertEqual(configService.history.first?.text, clipboard.pastedMultiline.first)
+        XCTAssertEqual(viewModel.lastDebriefEngineName, "Fake")
+        XCTAssertFalse(viewModel.isSummarizing)
+        XCTAssertNil(viewModel.debriefStatus)
+    }
+
+    func test_startCallRecording_permissionDenied_revertsToIdleWithWritersClosedAndNoMuting() async throws {
+        let capture = FakeSystemAudioCapture()
+        capture.errorToThrow = SystemAudioCaptureError.permissionDenied
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let muter = FakeMuterRegistry()
+        let (viewModel, _) = makeCallViewModel(capture: capture, summarizer: summarizer, muterRegistry: muter)
+
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await waitUntil(timeout: 5) { capture.startCallCount > 0 }
+        await yieldForStartRecordingTask()
+
+        XCTAssertEqual(viewModel.appState, .idle, "a denied tap must leave the app idle, not stuck in .recording")
+        XCTAssertFalse(viewModel.audioRecorder.recording, "the microphone must never start once the tap failed")
+        XCTAssertNil(viewModel.audioRecorder.onLiveSamples, "the live tap must be detached again")
+        XCTAssertEqual(muter.muteAllCallCount, 0)
+        XCTAssertTrue(clipboard.pastedMultiline.isEmpty)
+
+        // The session folder is left behind, but both writers are closed: the
+        // files are complete, zero-frame WAVs rather than half-open handles.
+        let paths = DebriefSessionPaths(folder: try XCTUnwrap(sessionFolders.first))
+        let loader = AudioFileLoader()
+        XCTAssertEqual(try loader.duration(url: paths.audioURL(for: .me)), 0)
+        XCTAssertEqual(try loader.duration(url: paths.audioURL(for: .them)), 0)
+
+        // A second attempt is still possible — nothing is latched.
+        XCTAssertNil(viewModel.audioRecorder.onLiveSamples)
+    }
+
+    func test_systemAudioFailureMessage_permissionDeniedNamesThePrivacyPane() {
+        let denied = MenuBarViewModel.systemAudioFailureMessage(for: SystemAudioCaptureError.permissionDenied)
+        XCTAssertTrue(denied.body.contains("Privacy & Security"), denied.body)
+        XCTAssertTrue(denied.body.contains("System Audio Recording"), denied.body)
+
+        let unavailable = MenuBarViewModel.systemAudioFailureMessage(
+            for: SystemAudioCaptureError.unavailable(osStatus: -66748, stage: "AudioDeviceStart")
+        )
+        XCTAssertTrue(unavailable.body.contains("AudioDeviceStart"), "the failing stage must be named: \(unavailable.body)")
+        XCTAssertFalse(unavailable.body.contains("Privacy & Security"), "a non-permission failure must not blame permissions")
+    }
+
+    func test_pushToTalk_isIgnoredWhileCallRecordingIsArmedAndRunning() async throws {
+        let capture = FakeSystemAudioCapture()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeCallViewModel(capture: capture, summarizer: summarizer)
+
+        await waitUntil { viewModel.appState == .idle }
+
+        // PTT must not start a call recording at all (decision 10).
+        viewModel.hotkeyPressed(mode: .pushToTalk)
+        await yieldForStartRecordingTask()
+        XCTAssertEqual(viewModel.appState, .idle)
+        XCTAssertEqual(capture.startCallCount, 0)
+
+        // Started by the record hotkey instead...
+        viewModel.hotkeyPressed(mode: .toggle)
+        await waitUntil(timeout: 5) { viewModel.appState == .recording }
+        XCTAssertEqual(viewModel.appState, .recording)
+
+        // ...a PTT press and release while it runs change nothing.
+        viewModel.hotkeyPressed(mode: .pushToTalk)
+        viewModel.hotkeyReleased(mode: .pushToTalk)
+        await yieldForStartRecordingTask()
+        XCTAssertEqual(viewModel.appState, .recording, "push-to-talk must not stop a call recording")
+        XCTAssertEqual(capture.stopCallCount, 0)
+
+        // The record hotkey does stop it.
+        viewModel.hotkeyPressed(mode: .toggle)
+        await waitUntil(timeout: 5) { viewModel.appState == .idle }
+        XCTAssertEqual(capture.stopCallCount, 1)
+    }
+
+    func test_recorderOverrides_callRecording_disablesInMemoryAccumulation() {
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeViewModel(summarizer: summarizer)
+
+        let call = viewModel.recorderOverrides(debriefEnabled: true, callRecording: true)
+        XCTAssertFalse(call.accumulateInMemory, "a two-hour call must not be held in RAM")
+        XCTAssertFalse(call.silenceAutoStop)
+
+        // Every other path is unchanged.
+        XCTAssertTrue(viewModel.recorderOverrides(debriefEnabled: true).accumulateInMemory)
+        XCTAssertTrue(viewModel.recorderOverrides(debriefEnabled: false).accumulateInMemory)
+        XCTAssertTrue(AudioRecorder().accumulateInMemory)
+    }
+
+    /// The recorder is shared across recordings, so a call recording's
+    /// "don't buffer in RAM" setting must not survive into the next normal
+    /// one — which would otherwise capture, and transcribe, nothing.
+    func test_startRecording_afterACallRecording_restoresInMemoryAccumulation() async throws {
+        let capture = FakeSystemAudioCapture()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeCallViewModel(capture: capture, summarizer: summarizer)
+
+        await startCallRecording(viewModel)
+        XCTAssertFalse(viewModel.audioRecorder.accumulateInMemory)
+        viewModel.stopRecording()
+        await waitUntil(timeout: 5) { viewModel.appState == .idle }
+
+        // Back to plain dictation on the same ViewModel and recorder.
+        configService.debriefModeEnabled = false
+        configService.debriefSource = .microphone
+        viewModel.startRecording()
+        await waitUntil(timeout: 5) { viewModel.appState == .recording }
+        XCTAssertEqual(viewModel.appState, .recording)
+
+        XCTAssertTrue(viewModel.audioRecorder.accumulateInMemory)
+        XCTAssertTrue(viewModel.audioRecorder.silenceAutoStopEnabled)
+        XCTAssertEqual(viewModel.audioRecorder.maxBufferSamples, AudioRecorder.defaultMaxBufferSamples)
+
+        viewModel.stopRecording()
+        await waitUntil(timeout: 5) { viewModel.appState == .idle }
+    }
+
+    // MARK: - Call recording: microphone fails after the system capture started
+
+    /// The one call-start failure that leaves something already running.
+    ///
+    /// The session-creation and system-audio branches fail with nothing else
+    /// started, but by the time the microphone is opened the tap is live and
+    /// both writers are open — so this branch has to unwind them. Until the
+    /// recorder sat behind `AudioRecording` this was untestable: making a real
+    /// `AudioRecorder.startRecording()` fail on demand is not something a test
+    /// can arrange.
+    func test_startCallRecording_micStartFailureAfterCaptureStarted_unwindsEverythingAndStaysIdle() async throws {
+        struct MicUnavailable: Error {}
+
+        let capture = FakeSystemAudioCapture()
+        let recorder = FakeAudioRecorder()
+        recorder.errorToThrow = MicUnavailable()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeCallViewModel(capture: capture, summarizer: summarizer, recorder: recorder)
+
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await waitUntil(timeout: 5) { recorder.startCallCount > 0 }
+        await yieldForStartRecordingTask()
+
+        // The system capture had started (it goes first, it is the permission
+        // gate) and was stopped again, with its callback detached.
+        XCTAssertEqual(capture.startCallCount, 1)
+        XCTAssertEqual(capture.stopCallCount, 1, "the system capture must be stopped once the mic fails")
+        XCTAssertNil(capture.onSamples, "the capture's sample callback must be detached")
+
+        // The microphone never came up, and its live tap is gone.
+        XCTAssertEqual(recorder.startCallCount, 1)
+        XCTAssertFalse(viewModel.audioRecorder.recording)
+        XCTAssertNil(viewModel.audioRecorder.onLiveSamples, "the live tap must be detached again")
+
+        // Both writers were closed: the session folder holds two complete,
+        // zero-frame WAVs rather than half-open handles. The folder itself is
+        // deliberately left behind — nothing deletes a session.
+        let folders = sessionFolders
+        XCTAssertEqual(folders.count, 1)
+        let paths = DebriefSessionPaths(folder: try XCTUnwrap(folders.first))
+        let loader = AudioFileLoader()
+        XCTAssertEqual(try loader.duration(url: paths.audioURL(for: .me)), 0)
+        XCTAssertEqual(try loader.duration(url: paths.audioURL(for: .them)), 0)
+
+        // Back to idle with nothing summarized or pasted. The error itself goes
+        // through `sendNotification`, which is a no-op in the test host (no
+        // notification center), so what is asserted here is the state the user
+        // is left in.
+        XCTAssertEqual(viewModel.appState, .idle, "a failed mic start must not strand the app in .recording")
+        XCTAssertFalse(viewModel.isSummarizing)
+        XCTAssertEqual(summarizer.summarizeCallCount, 0)
+        XCTAssertTrue(clipboard.pastedMultiline.isEmpty)
+
+        // Nothing is latched: the next attempt starts normally. This is what
+        // catches a regression in the `defer { isStartingCallRecording = false }`
+        // that guards re-entrancy.
+        recorder.errorToThrow = nil
+        viewModel.startRecording()
+        await waitUntil(timeout: 5) { viewModel.appState == .recording }
+        XCTAssertEqual(viewModel.appState, .recording, "a failed mic start must not latch the call path shut")
+        XCTAssertEqual(sessionFolders.count, 2, "the retry opens its own session folder")
+
+        viewModel.stopRecording()
+        await waitUntil(timeout: 5) { viewModel.appState == .idle }
+    }
+
+    // MARK: - AUDIO diagnostic line
+
+    /// The `AUDIO | ...` line is built by string interpolation at its call site
+    /// and handed to a process-wide `DiagnosticLogger` that appends to the real
+    /// `~/Library/Logs/Dikta/dikta-diagnostic.log`. A test must not depend on
+    /// that file, so what is asserted is that the path gathered the three
+    /// recorder counters the line reports — see
+    /// `FakeAudioRecorder.diagnosticCounterReads`.
+    func test_processAudio_audioDiagnosticLineReadsAllThreeRecorderCounters() async {
+        configService.debriefModeEnabled = false
+        let recorder = FakeAudioRecorder()
+        recorder.routeChangeCountToReturn = 3
+        recorder.converterErrorCountToReturn = 2
+        recorder.emptyBufferCountToReturn = 1
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeViewModel(summarizer: summarizer, recorder: recorder)
+
+        await viewModel.processAudio(silence())
+
+        XCTAssertEqual(
+            recorder.diagnosticCounterReads, 3,
+            "the AUDIO line must read routeChanges, converterErrors and emptyBuffers exactly once each"
+        )
+    }
+
+    /// The mic-debrief stop path emits its own `AUDIO` line (with `samples=n/a`,
+    /// because nothing was accumulated in RAM) instead of going through
+    /// `processAudio`. Same three counters, same grep. This path could not be
+    /// reached at all in a test before the recorder sat behind `AudioRecording`:
+    /// it needs a recording that actually started.
+    func test_stopRecording_micDebrief_emitsItsOwnAudioLineFromTheSameCounters() async {
+        configService.debriefModeEnabled = true
+        configService.debriefSource = .microphone
+        let recorder = FakeAudioRecorder()
+        recorder.routeChangeCountToReturn = 7
+        recorder.converterErrorCountToReturn = 5
+        recorder.emptyBufferCountToReturn = 4
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, engine) = makeViewModel(summarizer: summarizer, recorder: recorder)
+        engine.segmentsToReturn = [TranscriptSegment(start: 0, end: 1, text: "The debrief itself.")]
+
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await waitUntil(timeout: 5) { viewModel.appState == .recording }
+        XCTAssertEqual(viewModel.appState, .recording)
+
+        // A live mic debrief streams to disk rather than accumulating in RAM,
+        // which is exactly why its stop path needs its own AUDIO line.
+        XCTAssertFalse(viewModel.audioRecorder.accumulateInMemory)
+        recorder.feedLiveSamples([Float](repeating: 0.2, count: 16_000))
+
+        viewModel.stopRecording()
+        await waitUntil(timeout: 5) { viewModel.appState == .idle }
+
+        XCTAssertEqual(
+            recorder.diagnosticCounterReads, 3,
+            "the mic-debrief AUDIO line must read all three counters, and processAudio must not also run"
+        )
+        XCTAssertEqual(summarizer.summarizeCallCount, 1, "the live debrief must still have finished")
     }
 }

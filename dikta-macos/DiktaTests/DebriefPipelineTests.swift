@@ -237,6 +237,152 @@ final class DebriefPipelineTests: XCTestCase {
 
         XCTAssertEqual(result.engineName, "Second")
     }
+
+    // MARK: - runTwoTrack (call debrief)
+
+    /// Writes `samples` to a session's `me.wav`/`them.wav` exactly the way a
+    /// live call recording does — through the streaming writer.
+    private func writeTrack(_ track: DebriefTrack, samples: [Float], to paths: DebriefSessionPaths) throws {
+        let writer = try store.makeStreamingWriter(for: track, in: paths)
+        try writer.append(samples)
+        try writer.close()
+    }
+
+    private func segment(_ text: String, start: TimeInterval, end: TimeInterval) -> TranscriptSegment {
+        TranscriptSegment(start: start, end: end, text: text)
+    }
+
+    func test_runTwoTrack_mergesBothTracksIntoLabeledTranscriptAndSummarizes() async throws {
+        let paths = try store.createSession()
+        try writeTrack(.me, samples: silence(), to: paths)
+        try writeTrack(.them, samples: silence(seconds: 2), to: paths)
+
+        let engine = FakeTranscriptionEngine()
+        engine.segmentsPerCall = [
+            [segment("Shall we cut scope?", start: 0, end: 2)],
+            [segment("Yes, drop the importer.", start: 3, end: 5)]
+        ]
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(sampleSummary()))
+        let pipeline = DebriefPipeline(engine: engine, summarizer: summarizer, store: store)
+
+        var stages: [DebriefStage] = []
+        let result = try await pipeline.runTwoTrack(
+            paths: paths,
+            language: "en",
+            micSensitivity: .normal
+        ) { stages.append($0) }
+
+        XCTAssertEqual(stages, [.transcribing, .summarizing, .saving])
+
+        // Me first (earlier start), Them second, each on its own labeled line.
+        XCTAssertEqual(result.transcript, "Me: Shall we cut scope?\n\nThem: Yes, drop the importer.")
+        let savedTranscript = try String(contentsOf: paths.transcript, encoding: .utf8)
+        XCTAssertEqual(savedTranscript, result.transcript)
+
+        // Both tracks were transcribed, in order, with no prompt conditioning.
+        XCTAssertEqual(engine.receivedPromptTexts, [nil, nil])
+        // Each track was read off disk separately: Me ~1 s, Them ~2 s.
+        XCTAssertEqual(engine.receivedSegmentSampleCounts.count, 2)
+        XCTAssertEqual(Double(engine.receivedSegmentSampleCounts[0]), 16_000, accuracy: 100)
+        XCTAssertEqual(Double(engine.receivedSegmentSampleCounts[1]), 32_000, accuracy: 100)
+
+        // Same tail as a single-track debrief: summary written next to the audio.
+        XCTAssertEqual(summarizer.summarizeCallCount, 1)
+        XCTAssertEqual(summarizer.summarizeCalls.first?.transcript, result.transcript)
+        XCTAssertEqual(result.paths.folder, paths.folder)
+        let savedSummary = try String(contentsOf: paths.summary, encoding: .utf8)
+        XCTAssertEqual(savedSummary, result.renderedText)
+        XCTAssertEqual(result.engineName, "Fake")
+    }
+
+    func test_runTwoTrack_missingThemTrack_transcribesMeOnly() async throws {
+        let paths = try store.createSession()
+        try writeTrack(.me, samples: silence(), to: paths)
+        // them.wav is never created — e.g. the whole call was one-sided.
+
+        let engine = FakeTranscriptionEngine()
+        engine.segmentsPerCall = [[segment("Only my side was captured.", start: 0, end: 2)]]
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(sampleSummary()))
+        let pipeline = DebriefPipeline(engine: engine, summarizer: summarizer, store: store)
+
+        let result = try await pipeline.runTwoTrack(paths: paths, language: "en", micSensitivity: .normal) { _ in }
+
+        XCTAssertEqual(result.transcript, "Me: Only my side was captured.")
+        XCTAssertEqual(engine.receivedPromptTexts.count, 1, "an absent track must not reach the engine at all")
+    }
+
+    func test_runTwoTrack_emptyMeTrack_transcribesThemOnly() async throws {
+        let paths = try store.createSession()
+        // A writer that was opened but never fed: a valid, zero-frame WAV.
+        try writeTrack(.me, samples: [], to: paths)
+        try writeTrack(.them, samples: silence(), to: paths)
+
+        let engine = FakeTranscriptionEngine()
+        engine.segmentsPerCall = [[segment("Everyone else did the talking.", start: 0, end: 2)]]
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(sampleSummary()))
+        let pipeline = DebriefPipeline(engine: engine, summarizer: summarizer, store: store)
+
+        let result = try await pipeline.runTwoTrack(paths: paths, language: "en", micSensitivity: .normal) { _ in }
+
+        XCTAssertEqual(result.transcript, "Them: Everyone else did the talking.")
+        XCTAssertEqual(engine.receivedSegmentSampleCounts.count, 1, "a zero-frame track must not reach the engine")
+    }
+
+    func test_runTwoTrack_bothTracksEmpty_throwsEmptyTranscriptAndWritesNoSummary() async throws {
+        let paths = try store.createSession()
+        try writeTrack(.me, samples: [], to: paths)
+        try writeTrack(.them, samples: [], to: paths)
+
+        let engine = FakeTranscriptionEngine()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(sampleSummary()))
+        let pipeline = DebriefPipeline(engine: engine, summarizer: summarizer, store: store)
+
+        await XCTAssertThrowsErrorAsync(
+            try await pipeline.runTwoTrack(paths: paths, language: "en", micSensitivity: .normal) { _ in }
+        ) { error in
+            guard case DebriefSummarizerError.emptyTranscript = error else {
+                return XCTFail("expected .emptyTranscript, got \(error)")
+            }
+        }
+
+        XCTAssertEqual(summarizer.summarizeCallCount, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.summary.path))
+    }
+
+    func test_runTwoTrack_perTrackTimeout_throwsTranscriptionTimeoutError() async throws {
+        let paths = try store.createSession()
+        try writeTrack(.me, samples: silence(), to: paths)
+
+        let engine = FakeTranscriptionEngine()
+        engine.segmentsPerCall = [[segment("too slow", start: 0, end: 1)]]
+        engine.transcribeDelay = 2.0
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(sampleSummary()))
+        let pipeline = DebriefPipeline(engine: engine, summarizer: summarizer, store: store, transcriptionTimeout: 0.1)
+
+        await XCTAssertThrowsErrorAsync(
+            try await pipeline.runTwoTrack(paths: paths, language: "en", micSensitivity: .normal) { _ in }
+        ) { error in
+            XCTAssertTrue(error is TranscriptionTimeoutError, "got \(error)")
+        }
+
+        XCTAssertEqual(summarizer.summarizeCallCount, 0)
+    }
+
+    // MARK: - Timeout scaling (pure)
+
+    func test_trackTranscriptionTimeout_shortAudioKeepsTheBaseTimeout() {
+        // 60 s of audio needs 90 s at 1.5x, which is still under the 1800 s base.
+        XCTAssertEqual(DebriefPipeline.trackTranscriptionTimeout(base: 1800, audioSeconds: 60), 1800)
+        XCTAssertEqual(DebriefPipeline.trackTranscriptionTimeout(base: 1800, audioSeconds: 0), 1800)
+    }
+
+    func test_trackTranscriptionTimeout_longAudioScalesToOnePointFiveTimesItsDuration() {
+        // A two-hour call: 7200 s of audio → 10 800 s, far past the flat base.
+        XCTAssertEqual(DebriefPipeline.trackTranscriptionTimeout(base: 1800, audioSeconds: 7200), 10_800)
+        // Exactly at the crossover (1200 s * 1.5 == 1800 s) the base still wins.
+        XCTAssertEqual(DebriefPipeline.trackTranscriptionTimeout(base: 1800, audioSeconds: 1200), 1800)
+        XCTAssertEqual(DebriefPipeline.trackTranscriptionTimeout(base: 1800, audioSeconds: 1201), 1801.5)
+    }
 }
 
 /// Guards the debrief-mode overrides on `AudioRecorder`: the defaults must stay
@@ -788,6 +934,47 @@ final class AppConfigDebriefDecodingTests: XCTestCase {
         XCTAssertNotNil(json["debrief_mode_enabled"])
         XCTAssertNotNil(json["debrief_engine"])
         XCTAssertNotNil(json["ollama_model"])
+    }
+
+    // MARK: - Debrief source (Mic / Mic + system audio)
+
+    func test_decode_withoutDebriefSourceKey_defaultsToMicrophone() throws {
+        let config = try JSONDecoder().decode(AppConfig.self, from: Data(legacyJSON.utf8))
+
+        XCTAssertEqual(config.debriefSource, .microphone)
+    }
+
+    func test_decode_withoutCallRecordingNoticeShownKey_defaultsToFalse() throws {
+        let config = try JSONDecoder().decode(AppConfig.self, from: Data(legacyJSON.utf8))
+
+        XCTAssertFalse(config.callRecordingNoticeShown)
+    }
+
+    func test_roundTrip_preservesDebriefSourceMicrophone() throws {
+        var config = AppConfig.default
+        config.debriefSource = .microphone
+
+        let data = try JSONEncoder().encode(config)
+        let decoded = try JSONDecoder().decode(AppConfig.self, from: data)
+
+        XCTAssertEqual(decoded.debriefSource, .microphone)
+    }
+
+    func test_roundTrip_preservesDebriefSourceMicrophoneAndSystemAudio() throws {
+        var config = AppConfig.default
+        config.debriefSource = .microphoneAndSystemAudio
+        config.callRecordingNoticeShown = true
+
+        let data = try JSONEncoder().encode(config)
+        let decoded = try JSONDecoder().decode(AppConfig.self, from: data)
+
+        XCTAssertEqual(decoded.debriefSource, .microphoneAndSystemAudio)
+        XCTAssertTrue(decoded.callRecordingNoticeShown)
+    }
+
+    func test_debriefSource_displayNames() {
+        XCTAssertEqual(DebriefSource.microphone.displayName, "Microphone")
+        XCTAssertEqual(DebriefSource.microphoneAndSystemAudio.displayName, "Microphone + system audio")
     }
 }
 

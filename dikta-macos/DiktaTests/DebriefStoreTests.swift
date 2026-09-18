@@ -67,6 +67,60 @@ final class DebriefStoreTests: XCTestCase {
         }
     }
 
+    // MARK: - DebriefTrack / streaming writer
+
+    func testAudioURLForTrackUsesMeAndThemFilenames() throws {
+        let paths = try store.createSession(date: Date())
+
+        XCTAssertEqual(paths.audioURL(for: .me), paths.folder.appendingPathComponent("me.wav"))
+        XCTAssertEqual(paths.audioURL(for: .them), paths.folder.appendingPathComponent("them.wav"))
+    }
+
+    func testHasTrackIsFalseBeforeTheTrackFileExists() throws {
+        let paths = try store.createSession(date: Date())
+
+        XCTAssertFalse(store.hasTrack(.me, in: paths))
+        XCTAssertFalse(store.hasTrack(.them, in: paths))
+    }
+
+    func testMakeStreamingWriterCreatesFileImmediatelyButHasTrackStaysFalseUntilFramesAreFlushed() throws {
+        let paths = try store.createSession(date: Date())
+
+        let writer = try store.makeStreamingWriter(for: .me, in: paths)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: paths.audioURL(for: .me).path))
+        XCTAssertFalse(store.hasTrack(.me, in: paths), "hasTrack should be false for a file that exists but has no flushed frames yet")
+
+        try writer.append(makeSineSamples(count: 4000, amplitude: 0.5))
+        try writer.flush()
+        XCTAssertTrue(store.hasTrack(.me, in: paths), "hasTrack should be true once frames have been flushed")
+
+        try writer.close()
+        XCTAssertFalse(store.hasTrack(.them, in: paths))
+    }
+
+    func testMakeStreamingWriterForBothTracksRoundTripsIndependently() throws {
+        let paths = try store.createSession(date: Date())
+
+        let meWriter = try store.makeStreamingWriter(for: .me, in: paths)
+        let themWriter = try store.makeStreamingWriter(for: .them, in: paths)
+
+        let meSamples = makeSineSamples(count: 8000, amplitude: 0.5)
+        let themSamples = makeSineSamples(count: 5000, amplitude: 0.2)
+
+        try meWriter.append(meSamples)
+        try themWriter.append(themSamples)
+        try meWriter.close()
+        try themWriter.close()
+
+        let loadedMe = try loader.load(url: paths.audioURL(for: .me))
+        let loadedThem = try loader.load(url: paths.audioURL(for: .them))
+
+        XCTAssertEqual(loadedMe.count, meSamples.count)
+        XCTAssertEqual(loadedThem.count, themSamples.count)
+        XCTAssertTrue(store.hasTrack(.me, in: paths))
+        XCTAssertTrue(store.hasTrack(.them, in: paths))
+    }
+
     // MARK: - copyOriginalAudio
 
     func testCopyOriginalAudioPreservesExtension() throws {

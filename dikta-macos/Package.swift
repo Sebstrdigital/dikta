@@ -4,11 +4,12 @@ import PackageDescription
 let package = Package(
     name: "Dikta",
     platforms: [
-        .macOS(.v14)
+        .macOS("14.2")
     ],
     products: [
         .executable(name: "Dikta", targets: ["Dikta"]),
-        .executable(name: "DiktaBench", targets: ["DiktaBench"])
+        .executable(name: "DiktaBench", targets: ["DiktaBench"]),
+        .executable(name: "TimestampProbe", targets: ["TimestampProbe"])
     ],
     dependencies: [
         .package(url: "https://github.com/argmaxinc/argmax-oss-swift", from: "1.1.0"),
@@ -38,6 +39,13 @@ let package = Package(
                 .product(name: "WhisperKit", package: "argmax-oss-swift"),
             ],
             path: "bench/DiktaBench"
+        ),
+        .executableTarget(
+            name: "TimestampProbe",
+            dependencies: [
+                .product(name: "WhisperKit", package: "argmax-oss-swift"),
+            ],
+            path: "bench/TimestampProbe"
         )
     ]
 )

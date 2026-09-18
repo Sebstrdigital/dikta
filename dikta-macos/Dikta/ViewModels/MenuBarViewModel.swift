@@ -45,13 +45,20 @@ final class MenuBarViewModel: ObservableObject {
     let configService: ConfigService
     private var cancellables = Set<AnyCancellable>()
     private let transcriber: any TranscriptionEngine
-    private let audioRecorder: AudioRecorder
-    private let audioFeedback: AudioFeedback
+    /// Internal rather than private so tests can drive the recorder's live
+    /// sample tap (`onLiveSamples`) directly, which is the only way to feed
+    /// the call-recording Me track without a real microphone. Held as the
+    /// protocol so tests can substitute `FakeAudioRecorder`.
+    let audioRecorder: any AudioRecording
+    /// Builds the system-audio capture used by a call recording. Injected so
+    /// tests substitute `FakeSystemAudioCapture` for the real CoreAudio tap.
+    private let systemAudioCaptureFactory: () -> any SystemAudioCapturing
+    private let audioFeedback: any AudioFeedbackPlaying
     private let clipboardManager: ClipboardManager
     private let hotkeyManager: HotkeyManager
     private let ttsService: TextToSpeechService
     private let textSelectionService: TextSelectionService
-    private let muterRegistry: MuterRegistry
+    private let muterRegistry: any MuterRegistering
 
     // Debrief services. Injected ones win; otherwise they are built lazily —
     // the summarizer is rebuilt whenever the configured engine kind or Ollama
@@ -114,6 +121,22 @@ final class MenuBarViewModel: ObservableObject {
     ///     inject one rooted in a temp directory.
     ///   - clipboardManager: Paste path. Defaults to the real one; tests inject a
     ///     subclass so a test run never posts Cmd+V or clobbers the clipboard.
+    ///   - muterRegistry: Other-apps mic muter. Defaults to the real
+    ///     `MuterRegistry`; tests inject a fake conforming to `MuterRegistering`
+    ///     to assert whether `muteAll()` ran without touching real mic-muting apps.
+    ///   - systemAudioCaptureFactory: Builds the system-audio capture for a call
+    ///     recording. Defaults to the real `SystemAudioTapRecorder` (a CoreAudio
+    ///     process tap); tests inject `FakeSystemAudioCapture` so no tap is ever
+    ///     opened and no permission prompt can appear. Called once per call
+    ///     recording, so each session gets a fresh capture.
+    ///   - audioRecorder: Microphone capture. Defaults to a real
+    ///     `AudioRecorder`; tests inject `FakeAudioRecorder` so no
+    ///     `AVAudioEngine` is built and no `AVCaptureDevice.requestAccess`
+    ///     prompt can appear, and so the live sample tap can be driven
+    ///     directly.
+    ///   - audioFeedback: Start/stop chimes. Defaults to a real `AudioFeedback`
+    ///     outside XCTest and to `SilentAudioFeedback` under it (see
+    ///     `makeDefaultAudioFeedback`); tests inject `FakeAudioFeedback`.
     init(
         engine: (any TranscriptionEngine)? = nil,
         engineFactory: ((WhisperModel) -> any TranscriptionEngine)? = nil,
@@ -121,7 +144,11 @@ final class MenuBarViewModel: ObservableObject {
         debriefSummarizer: DebriefSummarizer? = nil,
         debriefStore: DebriefStore? = nil,
         clipboardManager: ClipboardManager? = nil,
-        audioFileLoader: (@Sendable (URL) throws -> [Float])? = nil
+        audioFileLoader: (@Sendable (URL) throws -> [Float])? = nil,
+        muterRegistry: (any MuterRegistering)? = nil,
+        systemAudioCaptureFactory: (() -> any SystemAudioCapturing)? = nil,
+        audioRecorder: (any AudioRecording)? = nil,
+        audioFeedback: (any AudioFeedbackPlaying)? = nil
     ) {
         let configService = configService ?? .shared
         self.configService = configService
@@ -145,17 +172,19 @@ final class MenuBarViewModel: ObservableObject {
             )
             return Transcriber(model: startupModel)
         }()
-        self.audioRecorder = AudioRecorder()
-        self.audioFeedback = AudioFeedback()
+        self.audioRecorder = audioRecorder ?? AudioRecorder()
+        self.systemAudioCaptureFactory = systemAudioCaptureFactory ?? { SystemAudioTapRecorder() }
+        self.audioFeedback = audioFeedback ?? Self.makeDefaultAudioFeedback()
         let resolvedClipboardManager = clipboardManager ?? ClipboardManager()
         self.clipboardManager = resolvedClipboardManager
         self.hotkeyManager = HotkeyManager()
         self.ttsService = TextToSpeechService()
         self.textSelectionService = TextSelectionService(clipboardManager: resolvedClipboardManager)
-        self.muterRegistry = MuterRegistry()
+        self.muterRegistry = muterRegistry ?? MuterRegistry()
 
-        // Sync mute state from config
-        audioFeedback.isMuted = configService.muteSounds
+        // Sync mute state from config. `self.` is required: the initializer
+        // parameter of the same name shadows the property here.
+        self.audioFeedback.isMuted = configService.muteSounds
 
         // Set up hotkey delegate
         hotkeyManager.delegate = self
@@ -186,6 +215,23 @@ final class MenuBarViewModel: ObservableObject {
             await self.requestNotificationPermissions()
             await self.initialize()
         }
+    }
+
+    /// The audio feedback a `MenuBarViewModel` uses when none was injected.
+    ///
+    /// Under XCTest this is a `SilentAudioFeedback`, which builds nothing.
+    /// A real `AudioFeedback` constructs an `AVAudioEngine` eagerly, and a test
+    /// process that builds many ViewModels ends up with a new engine's
+    /// `mainMixerNode` contending on CoreAudio's `HALB_Mutex` against a
+    /// previous instance's `AudioFeedback.deinit` — which intermittently wedges
+    /// the whole test host. Tests are expected to inject `FakeAudioFeedback`
+    /// through their `makeViewModel` helper; this is the safety net for the
+    /// ViewModel nobody injects into, notably the one `DiktaApp` builds when
+    /// `Dikta.app` is hosting the test bundle.
+    ///
+    /// Outside XCTest this is a real `AudioFeedback`, unchanged.
+    private static func makeDefaultAudioFeedback() -> any AudioFeedbackPlaying {
+        isRunningUnderXCTestHost ? SilentAudioFeedback() : AudioFeedback()
     }
 
     /// Runs `work` (a `load()`/`reload(model:)` call on `transcriber`) while
@@ -264,11 +310,54 @@ final class MenuBarViewModel: ObservableObject {
     func startRecording() {
         guard appState == .idle else { return }
 
+        // A call debrief captures two tracks straight to disk and has its own
+        // start sequence; everything below is the single-track mic path.
+        if isCallRecordingMode {
+            startCallRecording()
+            return
+        }
+
         // Debrief mode records until the user stops it: no silence auto-stop,
         // and a 2-hour cap instead of the 5-minute dictation cap.
         let overrides = recorderOverrides(debriefEnabled: configService.debriefModeEnabled)
         audioRecorder.silenceAutoStopEnabled = overrides.silenceAutoStop
         audioRecorder.maxBufferSamples = overrides.maxBufferSamples
+        // Always reapplied, not just when false: a previous call recording
+        // turned this off on the same recorder, and a mic recording that
+        // doesn't turn it back on would capture nothing at all.
+        audioRecorder.accumulateInMemory = overrides.accumulateInMemory
+
+        // A mic-only debrief now runs on the same live machinery a call does:
+        // audio streams to `audio.wav` and into the chunker as it is captured,
+        // so a long debrief is crash-safe and its chunks are transcribed while
+        // the user is still talking. Anything under one chunk still takes the
+        // single-pass path at the end, unchanged. A failure here is not fatal:
+        // the debrief simply falls back to the in-RAM `processAudio` path.
+        if configService.debriefModeEnabled, !isCallRecordingMode {
+            do {
+                let paths = try debriefStore.createSession()
+                let session = MicDebriefSession(
+                    paths: paths,
+                    writer: try debriefStore.makeStreamingAudioWriter(in: paths),
+                    live: try makeDebriefPipeline().startLiveSession(
+                        tracks: [.me],
+                        language: configService.language.whisperCode,
+                        micSensitivity: configService.micSensitivity,
+                        paths: paths
+                    )
+                )
+                activeMicDebriefSession = session
+                audioRecorder.accumulateInMemory = false
+                audioRecorder.onLiveSamples = { [weak session] samples in
+                    session?.append(samples)
+                }
+            } catch {
+                activeMicDebriefSession = nil
+                audioRecorder.onLiveSamples = nil
+                AppLogger.audio.error("Mic debrief: could not open a live session (\(error.localizedDescription)); falling back to the in-RAM path")
+                DiagnosticLogger.shared.log("DEBRIEF_LIVE | start_failed | \(error.localizedDescription)")
+            }
+        }
 
         // Set up silence auto-stop: when 10s of silence is detected, stop and process audio
         audioRecorder.onSilenceAutoStop = { [weak self] samples in
@@ -285,7 +374,13 @@ final class MenuBarViewModel: ObservableObject {
         }
 
         Task {
-            let muteTokens = muterRegistry.muteAll()
+            // Muting other apps' mics protects dictation from bleeding into a
+            // call app's own input, but debrief mode capturing system audio is
+            // recording that call itself — muting would silence the user in
+            // their own meeting. That case never reaches here (it is routed to
+            // `startCallRecording`, which takes no mute tokens); the guard is
+            // kept so the rule survives if that routing ever changes.
+            let muteTokens = isCallRecordingMode ? [] : muterRegistry.muteAll()
             activeMuteTokens = muteTokens
 
             do {
@@ -296,6 +391,14 @@ final class MenuBarViewModel: ObservableObject {
                 DiagnosticLogger.shared.log("START | mic=\(configService.micSensitivity.displayName) | rate=\(audioRecorder.inputSampleRate)Hz")
             } catch {
                 unmuteMicTargets()
+                // `startRecording()` threw, so no tap was installed and
+                // `onLiveSamples` cannot be firing — the mic debrief session
+                // opened above can be torn down directly.
+                if let micSession = activeMicDebriefSession {
+                    activeMicDebriefSession = nil
+                    audioRecorder.onLiveSamples = nil
+                    micSession.close()
+                }
                 sendNotification(title: "Error", body: "Failed to start recording: \(error.localizedDescription)")
                 DiagnosticLogger.shared.log("START_FAILED | \(error.localizedDescription)")
             }
@@ -306,11 +409,46 @@ final class MenuBarViewModel: ObservableObject {
     func stopRecording() {
         guard appState == .recording else { return }
 
+        if let session = activeCallSession {
+            stopCallRecording(session)
+            return
+        }
+
         activeRecordingMode = nil
         audioRecorder.onSilenceAutoStop = nil
         let audioSamples = audioRecorder.stopRecording()
         unmuteMicTargets()
         appState = .processing
+
+        // A mic-only debrief captured nothing in RAM (`accumulateInMemory` was
+        // off): its audio went to disk and into the chunker, so it finishes
+        // through the live session rather than `processAudio`.
+        if let micSession = activeMicDebriefSession {
+            activeMicDebriefSession = nil
+            audioRecorder.onLiveSamples = nil
+            micSession.close()
+
+            // `processAudio` owns this line on every other path, and this path
+            // never reaches it. Same fields, same order, so one grep still
+            // finds every recording. `samples` and `rms` are "n/a": nothing was
+            // accumulated in RAM to count or measure, and the frame count the
+            // writer holds would report what reached DISK, which is a different
+            // quantity from what the recorder captured.
+            let duration = recordingStartDate.map { Date().timeIntervalSince($0) } ?? 0
+            DiagnosticLogger.shared.log(
+                "AUDIO | dur=\(String(format: "%.1f", duration))s | samples=n/a | rms=n/a"
+                + " | routeChanges=\(audioRecorder.routeChangeCount)"
+                + " | converterErrors=\(audioRecorder.converterErrorCount)"
+                + " | emptyBuffers=\(audioRecorder.emptyBufferCount)"
+            )
+            recordingStartDate = nil
+
+            let live = micSession.live
+            Task {
+                await runLiveDebrief(live)
+            }
+            return
+        }
 
         Task {
             await processAudio(audioSamples)
@@ -465,7 +603,21 @@ final class MenuBarViewModel: ObservableObject {
         return store
     }
 
+    /// Flipping debrief mode decides which machinery a recording runs on, and
+    /// that decision is made once, at `startRecording`. Toggling it while a
+    /// recording or a debrief run is in flight would leave a live session
+    /// capturing while the app believes it is dictating (or the reverse), so
+    /// the toggle is ignored in those two states.
+    ///
+    /// `.loading` is deliberately NOT blocked: the app starts there and stays
+    /// there until the Whisper model finishes loading, and the menu has always
+    /// been usable during that wait. Nothing is capturing then, so there is no
+    /// decision to contradict.
     func toggleDebriefMode() {
+        guard appState != .recording, appState != .processing else {
+            AppLogger.general.info("Debrief mode toggle ignored: a recording or debrief is in progress")
+            return
+        }
         configService.debriefModeEnabled.toggle()
     }
 
@@ -473,17 +625,475 @@ final class MenuBarViewModel: ObservableObject {
         configService.debriefEngine = kind
     }
 
+    /// Current debrief audio source, forwarded from config. Readable here (in
+    /// addition to `configService.debriefSource`) so callers — and tests —
+    /// don't need to reach through to the config store just to check it.
+    var debriefSource: DebriefSource {
+        configService.debriefSource
+    }
+
+    func setDebriefSource(_ source: DebriefSource) {
+        configService.debriefSource = source
+    }
+
+    /// Selects `source` (persisting it, same as `setDebriefSource`) and owns
+    /// the one-time "Recording call audio" consent decision: returns true
+    /// exactly once, the first time `.microphoneAndSystemAudio` is chosen
+    /// while `callRecordingNoticeShown` is still false, and flips that flag
+    /// before returning. The caller (the Source menu) is only responsible for
+    /// presenting the alert when this returns true — it owns no state itself.
+    @discardableResult
+    func selectDebriefSource(_ source: DebriefSource) -> Bool {
+        let shouldShowNotice = source == .microphoneAndSystemAudio && !configService.callRecordingNoticeShown
+        if shouldShowNotice {
+            configService.callRecordingNoticeShown = true
+        }
+        setDebriefSource(source)
+        return shouldShowNotice
+    }
+
+    /// The recorder settings one recording runs with.
+    struct RecorderOverrides {
+        let silenceAutoStop: Bool
+        let maxBufferSamples: Int
+        /// False only for a call recording, which streams both tracks to disk
+        /// and must not also hold hours of audio in RAM.
+        let accumulateInMemory: Bool
+    }
+
     /// The recorder settings the next recording runs with. Pure so it can be
-    /// tested without a microphone; `startRecording` is its only caller.
-    func recorderOverrides(debriefEnabled: Bool) -> (silenceAutoStop: Bool, maxBufferSamples: Int) {
-        debriefEnabled
-            ? (silenceAutoStop: false, maxBufferSamples: Self.debriefMaxBufferSamples)
-            : (silenceAutoStop: true, maxBufferSamples: AudioRecorder.defaultMaxBufferSamples)
+    /// tested without a microphone; `startRecording`/`startCallRecording` are
+    /// its only callers.
+    func recorderOverrides(debriefEnabled: Bool, callRecording: Bool = false) -> RecorderOverrides {
+        guard debriefEnabled else {
+            return RecorderOverrides(
+                silenceAutoStop: true,
+                maxBufferSamples: AudioRecorder.defaultMaxBufferSamples,
+                accumulateInMemory: true
+            )
+        }
+        return RecorderOverrides(
+            silenceAutoStop: false,
+            maxBufferSamples: Self.debriefMaxBufferSamples,
+            accumulateInMemory: !callRecording
+        )
     }
 
     /// Two hours at 16 kHz. A debrief is minutes, not hours; this is a runaway
     /// guard, not an expected limit.
     static let debriefMaxBufferSamples: Int = 16_000 * 60 * 120
+
+    // MARK: - Mic-only debrief (live)
+
+    /// The live half of a mic-only debrief: one streaming `audio.wav` writer
+    /// and the live transcription session, both fed from one serial queue.
+    ///
+    /// Same discipline as `CallRecordingSession`: `StreamingWavWriter` is not
+    /// thread-safe and its auto-flush `fsync`s, which must never happen on the
+    /// AVAudioEngine tap thread (`onLiveSamples` runs there, under
+    /// `bufferLock`). So the tap only copies its buffer and hands it here.
+    private final class MicDebriefSession: @unchecked Sendable {
+        let paths: DebriefSessionPaths
+        let live: DebriefLiveSession
+        private let writer: StreamingWavWriter
+        private let queue = DispatchQueue(label: "com.duadigital.dikta.micdebrief", qos: .utility)
+        private var loggedFailure = false
+
+        init(paths: DebriefSessionPaths, writer: StreamingWavWriter, live: DebriefLiveSession) {
+            self.paths = paths
+            self.writer = writer
+            self.live = live
+        }
+
+        func append(_ samples: [Float]) {
+            guard !samples.isEmpty else { return }
+            queue.async {
+                self.live.append(samples, track: .me)
+                do {
+                    try self.writer.append(samples)
+                } catch {
+                    guard !self.loggedFailure else { return }
+                    self.loggedFailure = true
+                    AppLogger.audio.error("Mic debrief: writing audio.wav failed: \(error.localizedDescription) — the recording on disk stops here")
+                }
+            }
+        }
+
+        /// Drains the queue before closing, so every handed-off buffer is
+        /// written (and appended to the chunker) first.
+        func close() {
+            queue.sync {
+                do {
+                    try writer.close()
+                } catch {
+                    AppLogger.audio.error("Mic debrief: closing audio.wav failed: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    /// Non-nil for exactly as long as a mic-only debrief is capturing.
+    private var activeMicDebriefSession: MicDebriefSession?
+
+    // MARK: - Call recording (debrief, source = microphone + system audio)
+
+    /// True when the next/current recording is a call: two tracks, streamed
+    /// to disk, merged into a labeled transcript at stop.
+    var isCallRecordingMode: Bool {
+        configService.debriefModeEnabled && configService.debriefSource == .microphoneAndSystemAudio
+    }
+
+    /// Non-nil for exactly as long as a call recording is capturing. Retained
+    /// on the ViewModel (not just inside the start closure) so stop can reach
+    /// the writers and the session folder, and so the two WAVs on disk
+    /// survive a crash during processing.
+    private var activeCallSession: CallRecordingSession?
+
+    /// True from the moment a call start begins until it has either reached
+    /// `.recording` or failed. `appState` alone can't stand in for this: the
+    /// system-audio `start()` blocks while the TCC prompt is on screen, and
+    /// the app is still `.idle` throughout — so a second hotkey press would
+    /// otherwise open a second session folder, writers and tap.
+    private var isStartingCallRecording = false
+
+    /// The live half of a call recording: the session folder plus one
+    /// streaming WAV writer per track, each with its own serial queue.
+    ///
+    /// `StreamingWavWriter` is not thread-safe and writing to it means real
+    /// disk I/O (including an `fsync` on every auto-flush), which must never
+    /// happen on the AVAudioEngine tap thread or the capture's delivery
+    /// queue — both are audio-rate callbacks. So each producer callback only
+    /// copies its buffer and hands it to that track's `Track` below; every
+    /// touch of a writer — `append`, its failure bookkeeping, and `close` —
+    /// then happens on that one serial queue and nowhere else.
+    ///
+    /// `closeWriters()` is called from the main actor after both producers
+    /// have been stopped; it drains each track's queue (`sync {}`) before
+    /// closing that track's writer, so no append can still be in flight.
+    /// Hence `@unchecked Sendable`: every mutable field below is confined to
+    /// its own track's queue, and the immutable ones are read-only.
+    private final class CallRecordingSession: @unchecked Sendable {
+        let paths: DebriefSessionPaths
+        let capture: any SystemAudioCapturing
+        /// The live transcription/summarization session this recording feeds.
+        /// Fed from the *same* per-track queue as the writer, so the chunker
+        /// sees each track's buffers in exactly the order they were captured.
+        let live: DebriefLiveSession
+
+        /// One writer plus the serial queue that exclusively owns it.
+        private final class Track: @unchecked Sendable {
+            let writer: StreamingWavWriter
+            let queue: DispatchQueue
+            let name: DebriefTrack
+            /// Only ever read/written on `queue` — one log line per track
+            /// even if every buffer fails.
+            var loggedFailure = false
+
+            init(writer: StreamingWavWriter, name: DebriefTrack) {
+                self.writer = writer
+                self.name = name
+                self.queue = DispatchQueue(
+                    label: "com.duadigital.dikta.callrecording.\(name.rawValue)",
+                    qos: .utility
+                )
+            }
+        }
+
+        private let me: Track
+        private let them: Track
+
+        init(
+            paths: DebriefSessionPaths,
+            me: StreamingWavWriter,
+            them: StreamingWavWriter,
+            capture: any SystemAudioCapturing,
+            live: DebriefLiveSession
+        ) {
+            self.paths = paths
+            self.me = Track(writer: me, name: .me)
+            self.them = Track(writer: them, name: .them)
+            self.capture = capture
+            self.live = live
+        }
+
+        func appendMe(_ samples: [Float]) { append(samples, to: me) }
+        func appendThem(_ samples: [Float]) { append(samples, to: them) }
+
+        /// Returns immediately: the caller is an audio callback, so the write
+        /// is handed to the track's own queue rather than performed inline.
+        private func append(_ samples: [Float], to track: Track) {
+            guard !samples.isEmpty else { return }
+            track.queue.async {
+                // The chunker first, then disk: `append` only hands the buffer
+                // to the chunker's own queue and returns, so transcription is
+                // never delayed by this track's disk write — and a write that
+                // throws still leaves the audio transcribed. The ordering the
+                // chunker depends on ("sample index is time") is this queue's.
+                self.live.append(samples, track: track.name)
+                do {
+                    try track.writer.append(samples)
+                } catch {
+                    // A failed write must not kill capture of the other
+                    // track: the writer latches its own failure and the file
+                    // stays valid up to the last flush, so the call still
+                    // produces a usable (if truncated) track.
+                    guard !track.loggedFailure else { return }
+                    track.loggedFailure = true
+                    AppLogger.audio.error("Call recording: writing \(track.name.rawValue).wav failed: \(error.localizedDescription) — that track stops here")
+                }
+            }
+        }
+
+        /// Best-effort close of both writers, leaving valid WAV headers.
+        /// Drains each track's queue first so every already-handed-off buffer
+        /// is written before its writer closes.
+        func closeWriters() {
+            for track in [me, them] {
+                track.queue.sync {
+                    do {
+                        try track.writer.close()
+                    } catch {
+                        AppLogger.audio.error("Call recording: closing \(track.name.rawValue).wav failed: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+    }
+
+    /// Starts a two-track call recording: session folder and both writers
+    /// first, then the system-audio capture, then the microphone.
+    ///
+    /// The system capture goes first on purpose. Its `start()` is the
+    /// permission gate and can block for seconds while the TCC prompt is on
+    /// screen; starting the mic first would leave it recording (and the Me
+    /// track filling) throughout that wait, and the merger treats each
+    /// track's sample index as time, so the two tracks would be offset by the
+    /// whole prompt duration. Starting it second keeps both producers within
+    /// a few milliseconds of each other — and if the capture fails, nothing
+    /// else has been started yet.
+    private func startCallRecording() {
+        guard !isStartingCallRecording else { return }
+        isStartingCallRecording = true
+
+        let overrides = recorderOverrides(debriefEnabled: true, callRecording: true)
+        audioRecorder.silenceAutoStopEnabled = overrides.silenceAutoStop
+        audioRecorder.maxBufferSamples = overrides.maxBufferSamples
+        audioRecorder.accumulateInMemory = overrides.accumulateInMemory
+        // Nothing is buffered in RAM, so there is no captured audio for an
+        // auto-stop callback to hand over. The user stops a call themselves.
+        audioRecorder.onSilenceAutoStop = nil
+
+        Task {
+            defer { isStartingCallRecording = false }
+
+            // No muteAll: this recording *is* the user's call, and muting
+            // their mic-muting apps would silence them in it (same gate as
+            // the single-track debrief path).
+            activeMuteTokens = []
+
+            let session: CallRecordingSession
+            do {
+                let paths = try debriefStore.createSession()
+                // Built before either producer starts: the chunker must exist
+                // (and the Whisper model for the current language must already
+                // be loaded — see `reloadForCurrentLanguageIfNeeded`, which
+                // runs on language change while the app is idle) before the
+                // first buffer arrives.
+                let pipeline = makeDebriefPipeline()
+                session = CallRecordingSession(
+                    paths: paths,
+                    me: try debriefStore.makeStreamingWriter(for: .me, in: paths),
+                    them: try debriefStore.makeStreamingWriter(for: .them, in: paths),
+                    capture: systemAudioCaptureFactory(),
+                    live: try pipeline.startLiveSession(
+                        tracks: [.me, .them],
+                        language: configService.language.whisperCode,
+                        micSensitivity: configService.micSensitivity,
+                        paths: paths
+                    )
+                )
+            } catch {
+                DiagnosticLogger.shared.log("CALL_START_FAILED | session | \(error.localizedDescription)")
+                sendNotification(title: "Could Not Start Recording", body: error.localizedDescription)
+                appState = .idle
+                return
+            }
+
+            // Each writer is fed by exactly one producer, from that
+            // producer's own thread — see CallRecordingSession.
+            session.capture.onSamples = { [weak session] samples in
+                session?.appendThem(samples)
+            }
+            audioRecorder.onLiveSamples = { [weak session] samples in
+                session?.appendMe(samples)
+            }
+
+            do {
+                try await session.capture.start()
+            } catch {
+                // Detaching both callbacks here needs no lock: the mic was
+                // never started, so no tap is installed and `onLiveSamples`
+                // cannot be firing (the `bufferLock` discipline documented on
+                // it only governs a *running* recorder), and `capture.stop()`
+                // orders itself against its own delivery queue.
+                audioRecorder.onLiveSamples = nil
+                session.capture.onSamples = nil
+                session.capture.stop()
+                session.closeWriters()
+                let message = Self.systemAudioFailureMessage(for: error)
+                DiagnosticLogger.shared.log("CALL_START_FAILED | systemAudio | \(error.localizedDescription)")
+                sendNotification(title: message.title, body: message.body)
+                appState = .idle
+                return
+            }
+
+            do {
+                try await audioRecorder.startRecording(micSensitivity: configService.micSensitivity)
+            } catch {
+                session.capture.stop()
+                session.capture.onSamples = nil
+                // `startRecording()` threw, so the recorder is not running and
+                // installed no tap — clearing the live tap directly is safe
+                // for the same reason as the branch above. `stopRecording()`
+                // would be a no-op here (it guards on `isRecording`).
+                _ = audioRecorder.stopRecording()
+                audioRecorder.onLiveSamples = nil
+                session.closeWriters()
+                DiagnosticLogger.shared.log("CALL_START_FAILED | mic | \(error.localizedDescription)")
+                sendNotification(title: "Error", body: "Failed to start recording: \(error.localizedDescription)")
+                appState = .idle
+                return
+            }
+
+            activeCallSession = session
+            recordingStartDate = Date()
+            appState = .recording
+            audioFeedback.beepOn()
+            DiagnosticLogger.shared.log(
+                "CALL_START | mic=\(configService.micSensitivity.displayName) | rate=\(audioRecorder.inputSampleRate)Hz"
+                + " | folder=\(session.paths.folder.lastPathComponent)"
+            )
+        }
+    }
+
+    /// Stops both producers — system capture first, then the microphone, each
+    /// of which guarantees no further sample delivery once it returns — then
+    /// closes both writers and hands the session folder to the pipeline.
+    private func stopCallRecording(_ session: CallRecordingSession) {
+        activeCallSession = nil
+        activeRecordingMode = nil
+        audioRecorder.onSilenceAutoStop = nil
+
+        session.capture.stop()
+        session.capture.onSamples = nil
+        _ = audioRecorder.stopRecording()
+        audioRecorder.onLiveSamples = nil
+        session.closeWriters()
+
+        unmuteMicTargets()
+        recordingStartDate = nil
+        appState = .processing
+
+        let live = session.live
+        Task {
+            await runLiveDebrief(live)
+        }
+    }
+
+    /// Title/body for a system-audio capture failure. The permission case
+    /// names the exact System Settings pane, since a denied tap is invisible
+    /// otherwise — macOS shows no recording indicator for a process tap.
+    /// Pure and static so the wording is unit-testable.
+    nonisolated static func systemAudioFailureMessage(for error: Error) -> (title: String, body: String) {
+        guard let captureError = error as? SystemAudioCaptureError else {
+            return ("System Audio Unavailable", error.localizedDescription)
+        }
+        switch captureError {
+        case .permissionDenied:
+            return (
+                "System Audio Permission Needed",
+                "Dikta can't record the other side of the call. Allow it in System Settings → Privacy & Security → "
+                + "Screen & System Audio Recording (\"System Audio Recording Only\" on macOS 14), then start the recording again."
+            )
+        case .unavailable(let osStatus, let stage):
+            return (
+                "System Audio Unavailable",
+                "Could not start system audio capture at \(stage) (OSStatus \(osStatus)). Recording was cancelled."
+            )
+        case .alreadyRunning:
+            return (
+                "System Audio Unavailable",
+                "System audio capture is already running. Recording was cancelled."
+            )
+        }
+    }
+
+    /// The pipeline every debrief run uses. Built fresh per run (it is
+    /// stateless) but always from the same three config-driven pieces: the
+    /// loaded Whisper engine, the single-pass summarizer for short
+    /// recordings, and the delta engine a live session's rolling summarizer
+    /// runs on — the latter selected by exactly the same config values as the
+    /// former, so the two can never drift apart.
+    private func makeDebriefPipeline() -> DebriefPipeline {
+        let kind = configService.debriefEngine
+        let model = configService.ollamaModel
+        return DebriefPipeline(
+            engine: transcriber,
+            summarizer: debriefSummarizer,
+            store: debriefStore,
+            makeDeltaSummarizer: { DeltaSummarizerFactory.make(kind: kind, ollamaModel: model) }
+        )
+    }
+
+    /// Finishes a live session (call or mic) and reports the result exactly
+    /// like any other debrief. The transcription of everything but the last
+    /// chunk already happened during the recording, so this is the "~1 minute
+    /// after a 1 h meeting" path.
+    private func runLiveDebrief(_ live: DebriefLiveSession) async {
+        guard claimDebrief(status: "Transcribing…") else {
+            sendNotification(title: "Debrief Busy", body: "Debrief already in progress.")
+            releaseUnclaimedProcessingState()
+            return
+        }
+        defer { releaseDebrief() }
+
+        do {
+            let result = try await live.finish(
+                onStage: { [weak self] stage in self?.applyDebriefStage(stage) }
+            )
+            reportDebriefSuccess(result)
+        } catch {
+            reportDebriefFailure(error)
+        }
+    }
+
+    /// Runs the two-track pipeline over a finished call session on disk.
+    ///
+    /// The live path (`runLiveDebrief`) handles a call as it is recorded; this
+    /// re-runs one whose `me.wav`/`them.wav` are already on disk — a session
+    /// the app crashed during, replayed through "Load audio file".
+    func runCallDebrief(paths: DebriefSessionPaths) async {
+        guard claimDebrief(status: "Transcribing…") else {
+            sendNotification(title: "Debrief Busy", body: "Debrief already in progress.")
+            releaseUnclaimedProcessingState()
+            return
+        }
+        defer { releaseDebrief() }
+
+        let pipeline = makeDebriefPipeline()
+
+        do {
+            let result = try await pipeline.runTwoTrack(
+                paths: paths,
+                language: configService.language.whisperCode,
+                micSensitivity: configService.micSensitivity,
+                onStage: { [weak self] stage in self?.applyDebriefStage(stage) }
+            )
+            reportDebriefSuccess(result)
+        } catch {
+            reportDebriefFailure(error)
+        }
+    }
 
     /// Takes ownership of the debrief UI state, or returns false when another
     /// debrief already holds it. Claim and release are split out because
@@ -497,6 +1107,18 @@ final class MenuBarViewModel: ObservableObject {
         return true
     }
 
+    /// Called when a debrief run was refused the claim. The caller had
+    /// already moved the app to `.processing` (stop → process), so it must
+    /// not just return: if a debrief really does hold the claim, that run
+    /// owns `.processing` and its own `releaseDebrief()` will return the app
+    /// to `.idle`; but if nothing holds it, `.processing` would stick
+    /// forever with no recording and no run to clear it. Only that second
+    /// case is corrected here, so this can never fight the real owner.
+    private func releaseUnclaimedProcessingState() {
+        guard !isSummarizing, appState == .processing else { return }
+        appState = .idle
+    }
+
     private func releaseDebrief() {
         isSummarizing = false
         debriefStatus = nil
@@ -508,6 +1130,8 @@ final class MenuBarViewModel: ObservableObject {
     func runDebrief(samples: [Float], originalFile: URL?) async {
         guard claimDebrief(status: "Transcribing…") else {
             sendNotification(title: "Debrief Busy", body: "Debrief already in progress.")
+            // Same reasoning as the call path — see the helper's comment.
+            releaseUnclaimedProcessingState()
             return
         }
         await runClaimedDebrief(samples: samples, originalFile: originalFile)
@@ -519,51 +1143,61 @@ final class MenuBarViewModel: ObservableObject {
         debriefStatus = "Transcribing…"
         defer { releaseDebrief() }
 
-        let pipeline = DebriefPipeline(
-            engine: transcriber,
-            summarizer: debriefSummarizer,
-            store: debriefStore
-        )
+        let pipeline = makeDebriefPipeline()
 
         do {
             let result = try await pipeline.run(
                 samples: samples,
                 language: configService.language.whisperCode,
                 micSensitivity: configService.micSensitivity,
-                originalFile: originalFile
-            ) { [weak self] stage in
-                guard let self else { return }
-                switch stage {
-                case .transcribing: self.debriefStatus = "Transcribing…"
-                case .summarizing: self.debriefStatus = "Summarizing…"
-                case .saving: self.debriefStatus = "Saving…"
-                }
-            }
-
-            lastDebriefEngineName = result.engineName
-            DiagnosticLogger.shared.log(
-                "DEBRIEF | engine=\(result.engineName) | chars=\(result.renderedText.count)"
-                + " | folder=\(result.paths.folder.lastPathComponent)"
+                originalFile: originalFile,
+                onStage: { [weak self] stage in self?.applyDebriefStage(stage) }
             )
+            reportDebriefSuccess(result)
+        } catch {
+            reportDebriefFailure(error)
+        }
+    }
 
-            // Same history bookkeeping as a normal transcript (see outputText),
-            // but pasted through the multi-line path so the headings survive.
-            configService.addHistoryItem(text: result.renderedText)
-            clipboardManager.pasteMultiline(result.renderedText)
-            audioFeedback.beepOff()
+    /// Mirrors a pipeline stage into the status text shown in the menu.
+    private func applyDebriefStage(_ stage: DebriefStage) {
+        switch stage {
+        case .transcribing: debriefStatus = "Transcribing…"
+        case .summarizing: debriefStatus = "Summarizing…"
+        case .saving: debriefStatus = "Saving…"
+        }
+    }
 
-            let preview = result.renderedText.count > 50
-                ? String(result.renderedText.prefix(50)) + "..."
-                : result.renderedText
-            sendNotification(title: "Debrief Pasted", body: preview, isRoutine: true)
+    /// History, paste, sound and notification for a finished debrief — shared
+    /// by the mic path (`runClaimedDebrief`) and the call path
+    /// (`runCallDebrief`) so both behave identically.
+    private func reportDebriefSuccess(_ result: DebriefResult) {
+        lastDebriefEngineName = result.engineName
+        DiagnosticLogger.shared.log(
+            "DEBRIEF | engine=\(result.engineName) | chars=\(result.renderedText.count)"
+            + " | folder=\(result.paths.folder.lastPathComponent)"
+        )
 
-        } catch is TranscriptionTimeoutError {
+        // Same history bookkeeping as a normal transcript (see outputText),
+        // but pasted through the multi-line path so the headings survive.
+        configService.addHistoryItem(text: result.renderedText)
+        clipboardManager.pasteMultiline(result.renderedText)
+        audioFeedback.beepOff()
+
+        let preview = result.renderedText.count > 50
+            ? String(result.renderedText.prefix(50)) + "..."
+            : result.renderedText
+        sendNotification(title: "Debrief Pasted", body: preview, isRoutine: true)
+    }
+
+    private func reportDebriefFailure(_ error: Error) {
+        if error is TranscriptionTimeoutError {
             DiagnosticLogger.shared.log("DEBRIEF | timeout")
             sendNotification(title: "Transcription Timeout", body: "Processing took too long and was cancelled.")
-        } catch {
-            DiagnosticLogger.shared.log("DEBRIEF | error | \(error.localizedDescription)")
-            sendNotification(title: "Debrief Failed", body: error.localizedDescription)
+            return
         }
+        DiagnosticLogger.shared.log("DEBRIEF | error | \(error.localizedDescription)")
+        sendNotification(title: "Debrief Failed", body: error.localizedDescription)
     }
 
     /// Runs the same debrief pipeline on an existing recording (a Voice Memo,
@@ -576,6 +1210,15 @@ final class MenuBarViewModel: ObservableObject {
     /// (`appState` is no longer `.recording`) and the microphone never stops.
     func importAudioFile(url: URL) async {
         guard appState != .recording else { return }
+
+        // A crashed call left a session folder with `me.wav` and `them.wav` in
+        // it. Picking that folder — or either WAV inside it — re-runs it as a
+        // two-track call rather than importing one side as a mono recording.
+        if let callFolder = Self.callSessionFolder(for: url) {
+            await runCallDebrief(paths: DebriefSessionPaths(folder: callFolder))
+            return
+        }
+
         guard claimDebrief(status: "Loading audio…") else {
             sendNotification(title: "Debrief Busy", body: "Debrief already in progress.")
             return
@@ -599,6 +1242,33 @@ final class MenuBarViewModel: ObservableObject {
         await runClaimedDebrief(samples: samples, originalFile: url)
     }
 
+    /// The debrief session folder `url` identifies, when `url` is a two-track
+    /// call session: either the folder itself or one of its two WAVs. `nil`
+    /// for an ordinary single recording, which imports as before.
+    ///
+    /// Both tracks must exist — a folder holding only `me.wav` is a
+    /// single-track session and takes the normal import path.
+    nonisolated static func callSessionFolder(for url: URL) -> URL? {
+        let fileManager = FileManager.default
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return nil }
+
+        let folder: URL
+        if isDirectory.boolValue {
+            folder = url
+        } else if ["me.wav", "them.wav"].contains(url.lastPathComponent.lowercased()) {
+            folder = url.deletingLastPathComponent()
+        } else {
+            return nil
+        }
+
+        let paths = DebriefSessionPaths(folder: folder)
+        let bothTracksExist = [DebriefTrack.me, .them].allSatisfy {
+            fileManager.fileExists(atPath: paths.audioURL(for: $0).path)
+        }
+        return bothTracksExist ? folder : nil
+    }
+
     /// Menu action: pick an audio file, then run `importAudioFile` on it.
     func loadAudioFileFromPanel() {
         // A menu-bar-only app isn't frontmost when the menu is open, so the
@@ -607,9 +1277,11 @@ final class MenuBarViewModel: ObservableObject {
 
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
+        // Directories are selectable so a crashed call's session folder can be
+        // picked whole; `callSessionFolder(for:)` decides what it actually is.
+        panel.canChooseDirectories = true
         panel.canChooseFiles = true
-        panel.message = "Choose a recording to run through the debrief pipeline"
+        panel.message = "Choose a recording — or a call's session folder — to run through the debrief pipeline"
         // If none of the extensions resolve to a UTType, fall back to the audio
         // supertype rather than leaving the list empty — an empty
         // `allowedContentTypes` means "allow everything", which would let the
@@ -1082,6 +1754,10 @@ extension MenuBarViewModel: HotkeyManagerDelegate {
     nonisolated func hotkeyPressed(mode: HotkeyMode) {
         Task { @MainActor in
             if appState == .idle {
+                // A call recording is toggle-only (decision 10: "stop only").
+                // Push-to-talk must not start one — its release would end the
+                // recording the moment the user let go of the key, mid-call.
+                if mode == .pushToTalk && isCallRecordingMode { return }
                 // Start recording and track which mode initiated it
                 activeRecordingMode = mode
                 startRecording()
@@ -1095,8 +1771,11 @@ extension MenuBarViewModel: HotkeyManagerDelegate {
 
     nonisolated func hotkeyReleased(mode: HotkeyMode) {
         Task { @MainActor in
-            // Only stop if PTT released its own recording
-            if mode == .pushToTalk && activeRecordingMode == .pushToTalk {
+            // Only stop if PTT released its own recording — and never while a
+            // call recording is running: push-to-talk is ignored there
+            // entirely (decision 10), including a key that was already down
+            // when the call recording started.
+            if mode == .pushToTalk && activeRecordingMode == .pushToTalk && activeCallSession == nil {
                 stopRecording()
             }
         }

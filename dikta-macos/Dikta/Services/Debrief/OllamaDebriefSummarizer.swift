@@ -80,7 +80,7 @@ final class OllamaDebriefSummarizer: DebriefSummarizer {
             format: "json",
             options: OllamaChatRequest.Options(temperature: temperature),
             messages: [
-                OllamaChatRequest.Message(role: "system", content: DebriefPromptBuilder.systemPrompt(language: language)),
+                OllamaChatRequest.Message(role: "system", content: DebriefPromptBuilder.systemPrompt(language: language, isLabeledTranscript: TwoTrackMerger.isLabeledTranscript(trimmedTranscript))),
                 OllamaChatRequest.Message(role: "user", content: DebriefPromptBuilder.userPrompt(transcript: trimmedTranscript, language: language)),
             ]
         )

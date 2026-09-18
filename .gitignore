@@ -178,3 +178,6 @@ pi-team-lean-sprint.json
 dikta-feature-sprint.json
 .pi-team-lean/
 .claude/
+
+# SPM macro expansion output written to cwd by swift build
+swift-generated-sources/

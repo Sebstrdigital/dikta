@@ -3,7 +3,10 @@ import WhisperKit
 
 /// A segment's text, decoupled from WhisperKit's own `TranscriptionSegment` type
 /// so `Transcriber.cleanSegments` can be unit tested without linking WhisperKit.
-struct TranscriptSegment {
+///
+/// Named `Raw...` to avoid colliding with `Dikta/Models/TranscriptSegment.swift`,
+/// the timestamped segment type `transcribeSegments` returns.
+struct RawTranscriptSegment {
     let text: String
 }
 
@@ -214,7 +217,7 @@ final class Transcriber: ObservableObject, TranscriptionEngine {
         let logProbs = allSegments.map { String(format: "%.1f", $0.avgLogprob) }.joined(separator: ",")
         let segTexts = allSegments.map { "\"\($0.text.trimmingCharacters(in: .whitespaces))\"" }.joined(separator: ",")
 
-        let text = Self.cleanSegments(allSegments.map { TranscriptSegment(text: $0.text) })
+        let text = Self.cleanSegments(allSegments.map { RawTranscriptSegment(text: $0.text) })
 
         DiagnosticLogger.shared.log("WHISPER | segs=\(allSegments.count) valid=\(validSegmentCount) | noSpeech=[\(noSpeechProbs)] | logProb=[\(logProbs)] | texts=[\(segTexts)]")
         DiagnosticLogger.shared.log("WHISPER_CLEAN | text=\"\(text)\"")
@@ -230,18 +233,137 @@ final class Transcriber: ObservableObject, TranscriptionEngine {
     /// segments, and join what remains into one string.
     ///
     /// Pure function — no WhisperKit dependency — so it can be unit tested directly.
-    static func cleanSegments(_ segments: [TranscriptSegment]) -> String {
+    static func cleanSegments(_ segments: [RawTranscriptSegment]) -> String {
         let validSegments = segments.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
 
-        return validSegments.map { segment in
-            // Strip Whisper control tokens (e.g. <|startoftranscript|>, <|en|>, <|0.00|>, <|endoftext|>)
-            // Also strip bracket noise tokens (e.g. [BLANK_AUDIO], [ Silence ], [silence], [no speech])
-            // These represent trailing silence appended by Whisper and must not trigger a no_speech discard.
-            segment.text
-                .replacingOccurrences(of: "<\\|[^|]+\\|>", with: "", options: .regularExpression)
-                .replacingOccurrences(of: "\\[\\s*(?:BLANK_AUDIO|silence|no speech)\\s*\\]", with: "", options: [.regularExpression, .caseInsensitive])
-                .trimmingCharacters(in: .whitespaces)
-        }.filter { !$0.isEmpty }.joined(separator: " ")
+        return validSegments.map { sanitizedText($0.text) }.filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
+    /// Strip Whisper control tokens (e.g. `<|startoftranscript|>`, `<|en|>`,
+    /// `<|0.00|>`, `<|endoftext|>`) and bracket noise tokens (e.g.
+    /// `[BLANK_AUDIO]`, `[ Silence ]`, `[silence]`, `[no speech]`) — trailing
+    /// silence markers Whisper appends that must not trigger a no_speech
+    /// discard — then trim whitespace. Shared by `cleanSegments` (string path)
+    /// and `sanitizeAndDropEmpty` (segment path) so the two never drift apart
+    /// on what counts as real speech from a single Whisper segment.
+    private static func sanitizedText(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "<\\|[^|]+\\|>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\[\\s*(?:BLANK_AUDIO|silence|no speech)\\s*\\]", with: "", options: [.regularExpression, .caseInsensitive])
+            .trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Transcribe audio samples into timestamped segments instead of one
+    /// joined string. Used by the call-debrief pipeline to interleave
+    /// Me/Them tracks and dedupe overlapping chunks by time (see
+    /// `tasks/decisions-call-debrief.md`). Shares the same model/options as
+    /// `transcribe(_:language:micSensitivity:)`; does not affect it.
+    /// - Parameters:
+    ///   - samples: Float32 audio samples at 16kHz.
+    ///   - language: Language code for transcription.
+    ///   - promptText: Previous chunk's tail text, used to condition the
+    ///     decoder for continuity across chunk boundaries. Encoded to tokens
+    ///     and capped to `promptTokenBudget`, keeping the tail. Ignored when
+    ///     nil or empty.
+    /// - Returns: Segments sorted by `start`, with monotonic non-decreasing
+    ///   start times, sanitized text, and empty segments dropped.
+    func transcribeSegments(
+        _ samples: [Float],
+        language: String? = nil,
+        micSensitivity: MicSensitivity = .normal,
+        promptText: String? = nil
+    ) async throws -> [TranscriptSegment] {
+        guard let whisperKit = whisperKit else {
+            throw TranscriberError.modelNotLoaded
+        }
+
+        guard !samples.isEmpty else {
+            throw TranscriberError.emptyAudio
+        }
+
+        var promptTokens: [Int]?
+        if let promptText, !promptText.isEmpty {
+            let encoded = whisperKit.tokenizer?.encode(text: promptText) ?? []
+            let capped = Self.cappedPromptTokens(encoded)
+            promptTokens = capped.isEmpty ? nil : capped
+        }
+
+        let options = DecodingOptions(
+            language: language,
+            temperatureFallbackCount: 3,
+            withoutTimestamps: false,  // segment timestamps are the whole point of this path
+            wordTimestamps: false,
+            promptTokens: promptTokens,
+            compressionRatioThreshold: 3.0,
+            logProbThreshold: micSensitivity.logProbThreshold,
+            noSpeechThreshold: micSensitivity.noSpeechThreshold
+        )
+
+        AppLogger.transcription.debug(
+            "transcribeSegments: language=\(language ?? "auto"), samples=\(samples.count), promptTokens=\(promptTokens?.count ?? 0)"
+        )
+
+        let results = try await whisperKit.transcribe(audioArray: samples, decodeOptions: options)
+        let rawSegments = results.flatMap { $0.segments }.map {
+            TranscriptSegment(start: TimeInterval($0.start), end: TimeInterval($0.end), text: $0.text)
+        }
+
+        let segments = Self.sortMonotonic(Self.sanitizeAndDropEmpty(rawSegments))
+        DiagnosticLogger.shared.log("WHISPER_SEGMENTS | raw=\(rawSegments.count) kept=\(segments.count) | audioSec=\(String(format: "%.1f", Double(samples.count) / 16000)) | prompt=\(promptTokens?.count ?? 0)tok | span=\(String(format: "%.2f", segments.first?.start ?? 0))-\(String(format: "%.2f", segments.last?.end ?? 0))")
+        return segments
+    }
+
+    /// Sanitize each segment's text with the same rules as `cleanSegments`
+    /// and drop any segment whose text sanitizes to empty (e.g. a lone
+    /// `[BLANK_AUDIO]`).
+    ///
+    /// Pure function — no WhisperKit dependency — so it can be unit tested directly.
+    static func sanitizeAndDropEmpty(_ segments: [TranscriptSegment]) -> [TranscriptSegment] {
+        segments.compactMap { segment in
+            let text = sanitizedText(segment.text)
+            guard !text.isEmpty else { return nil }
+            var cleaned = segment
+            cleaned.text = text
+            return cleaned
+        }
+    }
+
+    /// Sort segments by `start`, guaranteeing non-decreasing start times in
+    /// the result (sorting alone makes this true by construction). WhisperKit
+    /// is expected to return segments already in order; when it doesn't,
+    /// that's logged so it's visible if it ever fires, and the sort fixes it.
+    ///
+    /// Pure function — no WhisperKit dependency — so it can be unit tested directly.
+    static func sortMonotonic(_ segments: [TranscriptSegment]) -> [TranscriptSegment] {
+        let wasOrdered = zip(segments, segments.dropFirst()).allSatisfy { $0.start <= $1.start }
+        if !wasOrdered {
+            AppLogger.transcription.error("transcribeSegments: WhisperKit returned segments out of order by start; sorting")
+        }
+
+        let sorted = segments.sorted { $0.start < $1.start }
+
+        assert(
+            zip(sorted, sorted.dropFirst()).allSatisfy { $0.start <= $1.start },
+            "sortMonotonic: segments not monotonic non-decreasing after sort"
+        )
+
+        return sorted
+    }
+
+    /// Token budget for `promptTokens` passed to WhisperKit. WhisperKit
+    /// itself also trims internally (`Constants.maxTokenContext / 2 - 1`),
+    /// but capping here keeps the encoded prompt small and its length
+    /// independent of WhisperKit's internal budget.
+    static let promptTokenBudget = 220
+
+    /// Cap `tokens` to `budget`, keeping the tail — the context immediately
+    /// before the new chunk matters most for continuity, so older prompt
+    /// tokens are the ones dropped.
+    ///
+    /// Pure function — no WhisperKit dependency — so it can be unit tested directly.
+    static func cappedPromptTokens(_ tokens: [Int], budget: Int = promptTokenBudget) -> [Int] {
+        guard tokens.count > budget else { return tokens }
+        return Array(tokens.suffix(budget))
     }
 }
 

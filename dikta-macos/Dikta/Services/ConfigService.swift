@@ -261,6 +261,24 @@ final class ConfigService: ObservableObject {
         }
     }
 
+    var debriefSource: DebriefSource {
+        get { config.debriefSource }
+        set {
+            config.debriefSource = newValue
+            objectWillChange.send()
+            save()
+        }
+    }
+
+    var callRecordingNoticeShown: Bool {
+        get { config.callRecordingNoticeShown }
+        set {
+            config.callRecordingNoticeShown = newValue
+            objectWillChange.send()
+            save()
+        }
+    }
+
     var ollamaModel: String {
         get { config.ollamaModel }
         set {
