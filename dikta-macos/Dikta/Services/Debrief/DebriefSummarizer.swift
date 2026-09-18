@@ -127,9 +127,9 @@ enum DebriefPromptBuilder {
         lines — you are still the user this summary is written for. A \
         commitment made on a "Me:" line belongs to you; never attribute it to \
         another attendee. A commitment made on a "Them:" line belongs to \
-        whichever participant is named on that line; if no name is given for \
-        a "Them:" commitment, use owner "them" rather than inventing a name \
-        or assuming it is yours.
+        whichever participant is named on or near that line, following the \
+        same owner rule as above; if nobody is named there, owner is null — \
+        never "them" and never a generic group.
         """
 
     private static let labeledTranscriptRuleSwedish = """
@@ -140,9 +140,8 @@ enum DebriefPromptBuilder {
         "Me:"-rader — det är fortfarande du sammanfattningen skrivs för. Ett \
         åtagande på en "Me:"-rad tillhör dig; tillskriv det aldrig en annan \
         deltagare. Ett åtagande på en "Them:"-rad tillhör den deltagare som \
-        namnges på den raden; om ingen namnges för ett åtagande på en \
-        "Them:"-rad, använd ägaren "them" istället för att hitta på ett namn \
-        eller anta att det är ditt.
+        namnges i eller nära den raden, enligt samma ägarregel som ovan; om \
+        ingen namnges där ska ägaren vara null — aldrig en generisk grupp.
         """
 
     /// - Parameter isLabeledTranscript: true when `transcript` was produced

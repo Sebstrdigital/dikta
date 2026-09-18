@@ -42,8 +42,16 @@ final class TwoTrackMergerMergeTests: XCTestCase {
     }
 
     func test_noSegmentIsDropped() {
-        let me = (0..<5).map { TranscriptSegment(start: TimeInterval($0 * 10), end: TimeInterval($0 * 10 + 1), text: "me\($0)") }
-        let them = (0..<3).map { TranscriptSegment(start: TimeInterval($0 * 10 + 5), end: TimeInterval($0 * 10 + 6), text: "them\($0)") }
+        let me: [TranscriptSegment] = (0..<5).map { i in
+            let start = TimeInterval(i * 10)
+            let end = TimeInterval(i * 10 + 1)
+            return TranscriptSegment(start: start, end: end, text: "me\(i)")
+        }
+        let them: [TranscriptSegment] = (0..<3).map { i in
+            let start = TimeInterval(i * 10 + 5)
+            let end = TimeInterval(i * 10 + 6)
+            return TranscriptSegment(start: start, end: end, text: "them\(i)")
+        }
 
         let merged = TwoTrackMerger.merge(me: me, them: them)
 
@@ -68,6 +76,21 @@ final class TwoTrackMergerMergeTests: XCTestCase {
         let merged = TwoTrackMerger.merge(me: [], them: them)
 
         XCTAssertEqual(merged, [LabeledSegment(speaker: .them, start: 0, end: 1, text: "only them")])
+    }
+
+    /// Explicit tie-break case (skeptic-requested): two segments on the
+    /// *same* track with an equal `start` must keep their original relative
+    /// order, exercising the third tie-break key (`index`) rather than the
+    /// Me-before-Them key (`speakerRank`), which doesn't distinguish them.
+    func test_tieAtSameStart_sameTrackPreservesOriginalIndex() {
+        let me = [
+            TranscriptSegment(start: 5, end: 6, text: "first me"),
+            TranscriptSegment(start: 5, end: 6, text: "second me"),
+        ]
+
+        let merged = TwoTrackMerger.merge(me: me, them: [])
+
+        XCTAssertEqual(merged.map(\.text), ["first me", "second me"])
     }
 
     func test_speakerLabelRemote_carriesIndexInDisplayAndID() {
@@ -119,6 +142,32 @@ final class TwoTrackMergerRenderTests: XCTestCase {
         XCTAssertEqual(TwoTrackMerger.render(segments), "Me: hello world")
     }
 
+    /// Skeptic finding: an empty/whitespace-only segment from a speaker who
+    /// otherwise says nothing in that turn must not leave a dangling
+    /// `"Them: "` paragraph with no text after it.
+    func test_emptySegmentAsOnlySegmentInATurn_leavesNoDanglingParagraph() {
+        let segments = [
+            LabeledSegment(speaker: .me, start: 0, end: 1, text: "hello"),
+            LabeledSegment(speaker: .them, start: 1, end: 2, text: "   "),
+            LabeledSegment(speaker: .me, start: 2, end: 3, text: "world"),
+        ]
+        XCTAssertEqual(TwoTrackMerger.render(segments), "Me: hello world")
+    }
+
+    /// Same finding: an empty Them segment sitting between two Me segments
+    /// must not force an unwanted paragraph split (two separate "Me:"
+    /// paragraphs instead of one joined paragraph).
+    func test_emptySegmentBetweenSameSpeakerSegments_doesNotSplitTheParagraph() {
+        let segments = [
+            LabeledSegment(speaker: .me, start: 0, end: 1, text: "hello"),
+            LabeledSegment(speaker: .them, start: 1, end: 2, text: ""),
+            LabeledSegment(speaker: .me, start: 2, end: 3, text: "world"),
+        ]
+        let rendered = TwoTrackMerger.render(segments)
+        XCTAssertEqual(rendered, "Me: hello world")
+        XCTAssertFalse(rendered.contains("Them:"))
+    }
+
     func test_endToEnd_mergeThenRender() {
         let me = [
             TranscriptSegment(start: 0, end: 1, text: "so about the launch"),
@@ -159,5 +208,30 @@ final class TwoTrackMergerIsLabeledTranscriptTests: XCTestCase {
 
     func test_false_forEmptyString() {
         XCTAssertFalse(TwoTrackMerger.isLabeledTranscript(""))
+    }
+}
+
+// MARK: - stripLabels
+
+final class TwoTrackMergerStripLabelsTests: XCTestCase {
+    func test_removesMeLabel() {
+        XCTAssertEqual(TwoTrackMerger.stripLabels("Me: hello there"), "hello there")
+    }
+
+    func test_removesThemLabel() {
+        XCTAssertEqual(TwoTrackMerger.stripLabels("Them: hi back"), "hi back")
+    }
+
+    func test_removesLabelFromEachParagraph_keepingParagraphBreaks() {
+        let labeled = "Me: hello\n\nThem: hi back\n\nMe: sounds good"
+        XCTAssertEqual(TwoTrackMerger.stripLabels(labeled), "hello\n\nhi back\n\nsounds good")
+    }
+
+    func test_leavesAnUnlabeledParagraphUntouched() {
+        XCTAssertEqual(TwoTrackMerger.stripLabels("no label here"), "no label here")
+    }
+
+    func test_emptyString_returnsEmptyString() {
+        XCTAssertEqual(TwoTrackMerger.stripLabels(""), "")
     }
 }
