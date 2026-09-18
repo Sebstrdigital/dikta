@@ -21,8 +21,19 @@ final class FakeDeltaSummarizer: DeltaSummarizing, @unchecked Sendable {
     /// When set, any call whose CHUNK alone exceeds this many characters throws
     /// the same error — the knob for "only a shorter chunk will fit".
     var maxChunkCharacters: Int?
-    /// Artificial per-chunk latency, for the ordering test.
-    var delayNanosecondsByChunk: [Int: UInt64] = [:]
+
+    /// Chunk indices whose `extractDelta` call pauses — after recording
+    /// "entered" but before doing any work — until the test calls
+    /// `releaseGate(for:)`. This is what lets the ordering test prove
+    /// serialization deterministically instead of racing a wall-clock delay.
+    var gatedChunks: Set<Int> = []
+    /// Fires the chunk index at the start of every `extractDelta` call, before
+    /// any gating. A test awaits this to know the fake is now running a given
+    /// chunk, rather than guessing with `Task.sleep`.
+    let entered: AsyncStream<Int>
+    private let enteredContinuation: AsyncStream<Int>.Continuation
+    private let gateLock = NSLock()
+    private var gateContinuationsByChunk: [Int: CheckedContinuation<Void, Never>] = [:]
 
     private(set) var seenStates: [DebriefState] = []
     private(set) var seenChunks: [String] = []
@@ -31,9 +42,21 @@ final class FakeDeltaSummarizer: DeltaSummarizing, @unchecked Sendable {
 
     init(name: String = "Fake") {
         self.name = name
+        var continuation: AsyncStream<Int>.Continuation!
+        self.entered = AsyncStream { continuation = $0 }
+        self.enteredContinuation = continuation
     }
 
     func isAvailable() async -> Bool { available }
+
+    /// Resumes a gated `extractDelta` call for `chunkIndex`. A no-op if that
+    /// chunk was never gated, or has already been released.
+    func releaseGate(for chunkIndex: Int) {
+        gateLock.lock()
+        let continuation = gateContinuationsByChunk.removeValue(forKey: chunkIndex)
+        gateLock.unlock()
+        continuation?.resume()
+    }
 
     func extractDelta(
         state: DebriefState,
@@ -41,8 +64,13 @@ final class FakeDeltaSummarizer: DeltaSummarizing, @unchecked Sendable {
         chunkIndex: Int,
         language: String
     ) async throws -> DebriefDelta {
-        if let delay = delayNanosecondsByChunk[chunkIndex] {
-            try? await Task.sleep(nanoseconds: delay)
+        enteredContinuation.yield(chunkIndex)
+        if gatedChunks.contains(chunkIndex) {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                gateLock.lock()
+                gateContinuationsByChunk[chunkIndex] = continuation
+                gateLock.unlock()
+            }
         }
         seenStates.append(state)
         seenChunks.append(chunk)
@@ -160,14 +188,26 @@ final class RollingDebriefSummarizerTests: XCTestCase {
 
     /// Two overlapping ingests must fold in CALL order: chunk 0's delta is
     /// computed against, and applied to, a state chunk 1 has not touched yet.
+    ///
+    /// Proven without any wall-clock delay: chunk 0 is gated inside
+    /// `extractDelta`, so the test deterministically waits until the fake is
+    /// running chunk 0 (via `entered`) before even starting chunk 1, then
+    /// releases chunk 0. `RollingDebriefSummarizer.serialized(_:)` captures
+    /// its queue tail synchronously when a call reaches the actor, so once
+    /// chunk 0 is confirmed running, chunk 1 can only ever queue behind it —
+    /// no race window, whatever the scheduler does with either `Task`.
     func testOverlappingIngestsSerializeInCallOrder() async throws {
         let fake = FakeDeltaSummarizer()
-        fake.delayNanosecondsByChunk = [0: 200_000_000]
+        fake.gatedChunks = [0]
         let rolling = makeSummarizer(fake)
+        var enteredIterator = fake.entered.makeAsyncIterator()
 
         let first = Task { try await rolling.ingest(chunkTranscript: "Me: slow first chunk", index: 0) }
-        try await Task.sleep(nanoseconds: 30_000_000)
+        let firstEntered = await enteredIterator.next()
+        XCTAssertEqual(firstEntered, 0, "chunk 0 must be inside extractDelta before chunk 1 is even started")
+
         let second = Task { try await rolling.ingest(chunkTranscript: "Me: fast second chunk", index: 1) }
+        fake.releaseGate(for: 0)
 
         try await first.value
         try await second.value
