@@ -111,4 +111,36 @@ Slack.app is open on the test machine — unrelated to Call Debrief, not a regre
 
 ---
 
+## Python port (dikta-py — core, engines, pipeline, worker, app)
+
+**Files**: `dikta-py/src/dikta/core/debrief/*.py` (summary model, parser, normalization, validation, render, prompts, sanitizer, store),
+`dikta-py/src/dikta/engines/{audio,stt,llm}/*.py`, `dikta-py/src/dikta/pipeline/file_debrief.py`, `dikta-py/src/dikta/worker/*.py`,
+`dikta-py/src/dikta/app/*.py`, `dikta-py/src/dikta/cli.py`
+
+**Tests**: `dikta-py/tests/core/`, `tests/engines/`, `tests/pipeline/`, `tests/worker/`, `tests/app/`, `tests/test_cli.py`
+
+**Run command** — the whole suite is fast (a few seconds); always run all of it:
+```bash
+cd dikta-py && uv run pytest -q && uv run ruff check .
+```
+
+GUI tests need an offscreen Qt platform when no display is attached:
+```bash
+cd dikta-py && QT_QPA_PLATFORM=offscreen uv run pytest -q tests/app
+```
+
+The real faster-whisper engine test downloads the `tiny` model and is skipped unless opted in:
+```bash
+cd dikta-py && DIKTA_REAL_STT=1 uv run pytest -q tests/engines/test_faster_whisper_engine.py
+```
+
+**Rules**:
+1. Same as the Swift areas: green baseline before analyzing, rerun after every change, add a test for every new behavior or fix.
+2. `core/` never imports `engines/` — `tests/core/test_layering.py` enforces it in a subprocess. Put shared types (errors, models) in `core/`; `engines/` may re-export them.
+3. Prompt text, render format, normalization and heuristic marker lists are ports of the Swift originals and are snapshot-tested; change the Swift side first (or in the same change) so the two apps stay in sync.
+4. The worker child owns stdout for the JSON-lines protocol; library code must never print. `tests/worker/test_client.py` has a stray-stdout test that must stay green.
+5. Real recordings for manual end-to-end runs live under `~/Documents/Dikta`; the CLI accepts them directly (`uv run dikta debrief ~/Documents/Dikta/<session>/audio.wav --root /tmp/dikta-e2e`). Never commit recordings, transcripts, or summaries.
+
+---
+
 *Add new sections here as validation rules are established for other areas.*

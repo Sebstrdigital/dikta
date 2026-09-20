@@ -17,7 +17,8 @@ Dikta is a minimal, fully offline dictation app for macOS (v0.4). Press a hotkey
 
 - **dikta-macos/** — Primary implementation (Swift/SwiftUI/WhisperKit)
 - **dikta-windows/** — Windows port (.NET 8/C#/WPF)
-- **dikta-python/** — Legacy, not actively developed
+- **dikta-py/** — Python cross-platform port (Windows/Linux target; foundation + audio-file debrief). Supersedes `dikta-python/`.
+- **dikta-python/** — Legacy prototype, not developed; kept for reference only
 
 ## Conventions
 
@@ -30,6 +31,16 @@ Dikta is a minimal, fully offline dictation app for macOS (v0.4). Press a hotkey
 cd dikta-macos
 open Dikta.xcodeproj        # Development
 ./scripts/build-release.sh   # Release: signed, notarized DMG → build/Dikta.dmg
+```
+
+Python port:
+
+```bash
+cd dikta-py
+uv sync                                  # once; creates .venv and installs deps
+uv run pytest -q && uv run ruff check .  # validation (see docs/validation.md)
+uv run dikta debrief <audio-file>        # CLI: transcribe + summarize a recording
+uv run dikta gui                         # drop-zone window (or: uv run python -m dikta.app)
 ```
 
 ## Validation (HARD RULE)

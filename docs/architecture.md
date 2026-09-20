@@ -167,3 +167,26 @@ Kokoro TTS is set up from the About window. Creates a Python venv at `~/Library/
 ## Release Build Notes
 
 The re-signing step after bundling the Whisper model must pass `--entitlements` or they get stripped. This is handled in `scripts/build-release.sh`.
+
+## Python port (dikta-py)
+
+`dikta-py/` is the cross-platform Python port (Windows/Linux target; macOS stays Swift). Layout and layering:
+
+```
+src/dikta/
+  core/debrief/   pure domain: DebriefSummary model, tolerant parser, normalization, validation, plain-text render (sv/en),
+                  prompt builder (byte-identical to Swift), transcript sanitizer, DebriefStore session folders. Never imports engines/.
+  engines/audio   AudioFileLoader — PyAV decode → 16 kHz mono float32, channels averaged (parity with AVAudioConverter path)
+  engines/stt     SpeechToText protocol, FakeSpeechToText, FasterWhisperEngine (CTranslate2, lazy-loaded)
+  engines/llm     Summarizer protocol, HeuristicSummarizer, OllamaSummarizer (httpx), ChainedSummarizer, make_summarizer(EngineKind)
+  pipeline/       FileDebriefPipeline — the whole-recording path of DebriefPipeline.run(samples:) + finishTranscribedDebrief, same step order
+  worker/         subprocess boundary: DebriefRequest in via stdin, JSON-lines events (stage/result/error/log) out via a private dup of fd 1;
+                  the child's fd 1 is redirected to stderr so library prints cannot corrupt the protocol. WorkerClient drives it and can cancel.
+  app/            PySide6 window: DropZone → DebriefJob (QThread around WorkerClient) → rendered summary, copy, open folder
+  cli.py          `dikta debrief <file>` and `dikta gui`
+```
+
+Differences from the Swift app, by design for v0: no chunking or rolling summary (a file longer than five minutes is transcribed whole),
+no Foundation Models engine (auto = Ollama → Heuristic), and when no language is chosen the language faster-whisper detects is used
+for summarizing and rendering. Session folders match the macOS layout (`~/Documents/Dikta/<timestamp>/{audio.wav, original.<ext>,
+transcript.txt, summary.txt}`).
