@@ -158,7 +158,7 @@ rolling, and seconds from stop to summary — the feature's headline metric).
 
 - **Microphone** — for recording (entitlement: `com.apple.security.device.audio-input`)
 - **Accessibility** — for global hotkeys and auto-paste
-- **System Audio Recording Only** — for the debrief "Microphone + system audio" source (CoreAudio process tap, deployment target 14.2+). This is an audio-only TCC prompt; it lands under Privacy & Security → "System Audio Recording Only", separate from Screen Recording. macOS shows **no** recording indicator while a tap runs — Dikta's icon/sounds and the one-time in-app consent notice are the only signal the user gets, so the user is responsible for telling call participants. The app is not sandboxed (hardened runtime only), so this requires no entitlement changes.
+- **System Audio Recording Only** — for the debrief "Microphone + system audio" source (CoreAudio process tap, deployment target 14.2+). This is an audio-only TCC prompt; it lands under Privacy & Security → "System Audio Recording Only", separate from Screen Recording. macOS shows **no** recording indicator while a tap runs — Dikta's icon/sounds and the one-time in-app consent notice are the only signal the user gets, so the user is responsible for telling call participants. If the permission is missing, the tap still starts and delivers exact zeros, so `MenuBarViewModel` watches the Them track and warns once (`silentSystemAudioMessage`) after `silentSystemAudioWarningSeconds` of digital silence; any non-zero sample switches the watchdog off for the rest of the call. The app is not sandboxed (hardened runtime only), so this requires no entitlement changes.
 
 ## Text-to-Speech
 

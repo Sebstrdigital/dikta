@@ -802,6 +802,20 @@ final class MenuBarViewModel: ObservableObject {
         private let me: Track
         private let them: Track
 
+        // Them-track silence watchdog. Only ever touched on `them.queue`.
+        // A tap that macOS refused (System Audio Recording permission not
+        // granted) starts without error and delivers nothing but exact
+        // zeros — there is no recording indicator and no failure to catch —
+        // so the only in-call signal is a long run of digital silence.
+        private var themSilentSamples = 0
+        private var themHeardAudio = false
+        private var themSilenceReported = false
+
+        /// Fired at most once per session, from `them.queue`, when
+        /// `MenuBarViewModel.silentSystemAudioWarningSamples` samples have
+        /// arrived on the Them track without a single non-zero value.
+        var onSilentSystemAudio: (() -> Void)?
+
         init(
             paths: DebriefSessionPaths,
             me: StreamingWavWriter,
@@ -824,6 +838,9 @@ final class MenuBarViewModel: ObservableObject {
         private func append(_ samples: [Float], to track: Track) {
             guard !samples.isEmpty else { return }
             track.queue.async {
+                if track === self.them {
+                    self.watchThemForSilence(samples)
+                }
                 // The chunker first, then disk: `append` only hands the buffer
                 // to the chunker's own queue and returns, so transcription is
                 // never delayed by this track's disk write — and a write that
@@ -842,6 +859,22 @@ final class MenuBarViewModel: ObservableObject {
                     AppLogger.audio.error("Call recording: writing \(track.name.rawValue).wav failed: \(error.localizedDescription) — that track stops here")
                 }
             }
+        }
+
+        /// Runs on `them.queue`. Stops looking the moment any non-zero sample
+        /// arrives; until then counts silent samples and reports once past
+        /// the threshold.
+        private func watchThemForSilence(_ samples: [Float]) {
+            guard !themHeardAudio else { return }
+            if samples.contains(where: { $0 != 0 }) {
+                themHeardAudio = true
+                return
+            }
+            themSilentSamples += samples.count
+            guard !themSilenceReported,
+                  themSilentSamples >= MenuBarViewModel.silentSystemAudioWarningSamples else { return }
+            themSilenceReported = true
+            onSilentSystemAudio?()
         }
 
         /// Best-effort close of both writers, leaving valid WAV headers.
@@ -924,6 +957,10 @@ final class MenuBarViewModel: ObservableObject {
             session.capture.onSamples = { [weak session] samples in
                 session?.appendThem(samples)
             }
+            silentSystemAudioWarningCount = 0
+            session.onSilentSystemAudio = { [weak self] in
+                Task { @MainActor in self?.reportSilentSystemAudio() }
+            }
             audioRecorder.onLiveSamples = { [weak session] samples in
                 session?.appendMe(samples)
             }
@@ -998,6 +1035,47 @@ final class MenuBarViewModel: ObservableObject {
         Task {
             await runLiveDebrief(live)
         }
+    }
+
+    /// How long the Them track may stay at exact digital zero before the user
+    /// is told that no system audio is arriving. Seen on 2026-09-22: with the
+    /// permission refused, the tap started normally and delivered zeros for
+    /// the whole call, and the only symptom was a one-sided transcript
+    /// afterwards. Twenty seconds is long enough that a call which simply
+    /// has not connected yet rarely trips it, and short enough to fix the
+    /// permission and restart while the meeting is still on.
+    nonisolated static let silentSystemAudioWarningSeconds: TimeInterval = 20
+
+    nonisolated static var silentSystemAudioWarningSamples: Int {
+        Int(silentSystemAudioWarningSeconds * SystemAudioTapRecorder.targetSampleRate)
+    }
+
+    /// Number of times the silent-system-audio warning fired for the current
+    /// call recording. Reset on every start; at most one per call.
+    private(set) var silentSystemAudioWarningCount = 0
+
+    /// Wording of the silent-system-audio warning. Hedged on purpose: a
+    /// call that has not connected yet is also silent, so the user is told
+    /// what to check rather than that something is definitely broken.
+    nonisolated static var silentSystemAudioMessage: (title: String, body: String) {
+        (
+            "No Call Audio Yet",
+            "Dikta has not received any system audio in the first "
+            + "\(Int(silentSystemAudioWarningSeconds)) seconds. If the other side is talking, allow Dikta under "
+            + "System Settings → Privacy & Security → Screen & System Audio Recording "
+            + "(\"System Audio Recording Only\" on macOS 14), then start the recording again."
+        )
+    }
+
+    private func reportSilentSystemAudio() {
+        guard activeCallSession != nil || isStartingCallRecording else { return }
+        silentSystemAudioWarningCount += 1
+        let message = Self.silentSystemAudioMessage
+        DiagnosticLogger.shared.log(
+            "CALL_SYSTEM_AUDIO_SILENT | seconds=\(Int(Self.silentSystemAudioWarningSeconds)) | no non-zero sample on the Them track yet"
+        )
+        AppLogger.audio.error("Call recording: no system audio received in the first \(Int(Self.silentSystemAudioWarningSeconds)) s — permission missing?")
+        sendNotification(title: message.title, body: message.body)
     }
 
     /// Title/body for a system-audio capture failure. The permission case
