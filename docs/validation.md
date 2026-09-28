@@ -22,7 +22,7 @@ cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta -only-t
 ## Config (AppConfig, ConfigService)
 
 **Files**: `dikta-macos/Dikta/Models/AppConfig.swift`, `dikta-macos/Dikta/Services/ConfigService.swift`
-**Tests**: `AppConfigDecodingTests`, `AppConfigEnabledLanguagesDecodingTests`
+**Tests**: `AppConfigDecodingTests`, `AppConfigEnabledLanguagesDecodingTests`, `ConfigServiceAtomicWriteTests`
 
 **Run command**: same as above (all in DiktaTests target)
 
