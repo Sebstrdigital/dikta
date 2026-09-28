@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Meet fixture</title>
+<style>.hidden { display: none; }</style>
+</head>
+<body>
+<!-- Reproduces the Meet guest pre-join DOM: name field, ask-to-join, lobby, in-call. Invented content only. -->
+<div id="prejoin">
+  <h1>What's your name?</h1>
+  <input type="text" aria-label="Your name" placeholder="Your name" value="">
+  <button id="ask" type="button"><span>Ask to join</span></button>
+</div>
+<div id="lobby" class="hidden">
+  <h1>Asking to be let in...</h1>
+  <p>Someone will let you in soon</p>
+</div>
+<div id="incall" class="hidden">
+  <p id="who"></p>
+  <button type="button" aria-label="Leave call">Leave</button>
+</div>
+<script>
+  var input = document.querySelector('input');
+  document.getElementById('ask').addEventListener('click', function () {
+    if (!input.value) return;                       // Meet refuses an empty name
+    document.getElementById('who').textContent = input.value;
+    document.getElementById('prejoin').classList.add('hidden');
+    document.getElementById('lobby').classList.remove('hidden');
+    setTimeout(function () {                        // "Odalys Brandt" lets us in
+      document.getElementById('lobby').classList.add('hidden');
+      document.getElementById('incall').classList.remove('hidden');
+    }, 400);
+  });
+</script>
+</body>
+</html>
