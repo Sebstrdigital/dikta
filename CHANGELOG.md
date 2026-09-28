@@ -4,6 +4,37 @@ All notable changes to Dikta will be documented in this file.
 
 - 2026-04-17: DiagnosticLogger (Windows) now correctly gated behind `[Conditional("DIAGNOSTICS")]` compile flag — release builds produce no log output
 
+## [Unreleased] - Dikta v1.5 — Parakeet
+
+**Draft release notes.** Version numbers are not bumped here — bump `MARKETING_VERSION` /
+`CURRENT_PROJECT_VERSION` in `Dikta.xcodeproj/project.pbxproj` at release time, per usual.
+
+### Features
+- **Parakeet transcription engine** — a new Engine submenu (Advanced menu) switches dictation
+  between WhisperKit (unchanged default) and three FluidAudio-backed Parakeet variants: Redux
+  (~480 MB), v3 (~600 MB, marked Recommended), and Ultra (~1200 MB). Switching engines takes effect
+  immediately, with a free-disk-space check before each new variant downloads; if a switch fails to
+  load, the previously active engine is kept rather than leaving dictation stuck. Swedish still
+  forces KB-Whisper Small regardless of the selected engine — every Parakeet variant benchmarked
+  roughly 3x worse than KB-Whisper on Swedish WER (see `docs/review-2026-09/parakeet-bench.md`), so
+  that existing auto-select rule is unchanged.
+- FLEURS sv+en benchmark of Parakeet Redux/v3/Ultra against Whisper Turbo and KB-Whisper, run via
+  `DiktaBench --engine parakeet` (`dikta-macos/bench/`); results and methodology in
+  `docs/review-2026-09/parakeet-bench.md`.
+
+### Platform
+- **macOS deployment target raised from 14.2 to 15.0** — required by the new FluidAudio dependency.
+  This is a floor for the whole app, not only the Parakeet engine.
+
+### Internal (tech debt)
+- **ConfigService now has one atomic-write strategy.** Config saves go through a single
+  write-to-temp-file-then-`replaceItemAt` path (POSIX rename), replacing whatever mixed approach
+  existed before, so a save is never left truncated if the app dies mid-write.
+- **build-release.sh and macOS CI now gate on the unit tests actually having run.** Both abort the
+  release/job if the test log has no `Executed N tests` line with `N > 0` (e.g. a build error before
+  tests ran, or a silently-empty `-only-testing:` filter) or if the run failed — closing a
+  green-looking-pipeline gap where a broken or empty test suite could still ship.
+
 ## [1.3] - 2026-09-16 — Svenska & Turbo
 
 ### Features
