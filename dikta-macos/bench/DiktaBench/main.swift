@@ -2,6 +2,8 @@ import Foundation
 import WhisperKit
 import Speech
 import AVFoundation
+import FluidAudio
+import CoreML
 
 /// DiktaBench — standalone STT benchmark CLI for Dikta's WhisperKit and Apple
 /// Dictation engines.
@@ -19,6 +21,8 @@ import AVFoundation
 ///       --audio-dir <dir> --out <results.jsonl>
 ///   swift run DiktaBench --engine apple --language sv|en \
 ///       --audio-dir <dir> --out <results.jsonl>
+///   swift run DiktaBench --engine parakeet --model-version redux|v3|ultra \
+///       --language sv|en --audio-dir <dir> --out <results.jsonl>
 ///
 /// `--engine` defaults to `whisper` (the original behaviour, `--repo`/`--variant`
 /// required, or `--model-folder` to load a local WhisperKit model folder instead
@@ -33,7 +37,16 @@ import AVFoundation
 /// `--variant`/`--model-folder` are ignored, and the tool exits non-zero with a
 /// clear message on older macOS. See `Dikta/Services/AppleDictationEngine.swift`
 /// and `docs/review-2026-09/apple-dictation-engine-spec.md` for the call pattern
-/// this mirrors.
+/// this mirrors. `--engine parakeet` drives FluidAudio's Parakeet models via
+/// `AsrModels`/`AsrManager` instead — `--model-version` (`redux`/`v3`/`ultra`)
+/// selects the variant, `--repo`/`--variant`/`--model-folder` are ignored.
+/// Redux loads with `encoderComputeUnits: .cpuAndGPU` (its ternary-quantized
+/// encoder benchmarks faster off the Neural Engine); v3/ultra load with the
+/// library default (`nil`, which resolves to ANE). See
+/// `Dikta/Services/ParakeetEngine.swift` for the call pattern this mirrors —
+/// `DiktaBench` cannot import the `Dikta` app target (SPM won't let one
+/// executable target depend on another), so the FluidAudio calls are
+/// duplicated here rather than shared.
 ///
 /// For every .wav/.flac file in `--audio-dir`, transcribes it and appends one JSON
 /// line to `--out`: {file, text, seconds_audio, seconds_wall, model_load_seconds}.
@@ -54,16 +67,29 @@ struct BenchArgs {
     var repo: String?
     var variant: String?
     var modelFolder: String?
+    var modelVersion: String?
     var language: String
     var audioDir: String
     var out: String
 }
+
+let usage = """
+Usage: DiktaBench --repo <hf-repo> --variant <name> --language sv|en \
+--audio-dir <dir> --out <results.jsonl>
+       DiktaBench --model-folder <path> --language sv|en \
+--audio-dir <dir> --out <results.jsonl>
+       DiktaBench --engine apple --language sv|en \
+--audio-dir <dir> --out <results.jsonl>
+       DiktaBench --engine parakeet --model-version redux|v3|ultra \
+--language sv|en --audio-dir <dir> --out <results.jsonl>
+"""
 
 func parseArgs() -> BenchArgs {
     var engine = "whisper"
     var repo: String?
     var variant: String?
     var modelFolder: String?
+    var modelVersion: String?
     var language: String?
     var audioDir: String?
     var out: String?
@@ -81,6 +107,7 @@ func parseArgs() -> BenchArgs {
         case "--repo": repo = value
         case "--variant": variant = value
         case "--model-folder": modelFolder = value
+        case "--model-version": modelVersion = value
         case "--language": language = value
         case "--audio-dir": audioDir = value
         case "--out": out = value
@@ -90,19 +117,12 @@ func parseArgs() -> BenchArgs {
         i += 2
     }
 
-    guard engine == "whisper" || engine == "apple" else {
-        fail("Unknown --engine \(engine): expected whisper|apple")
+    guard engine == "whisper" || engine == "apple" || engine == "parakeet" else {
+        fail("Unknown --engine \(engine): expected whisper|apple|parakeet")
     }
 
     guard let language, let audioDir, let out else {
-        fail("""
-        Usage: DiktaBench --repo <hf-repo> --variant <name> --language sv|en \
-        --audio-dir <dir> --out <results.jsonl>
-               DiktaBench --model-folder <path> --language sv|en \
-        --audio-dir <dir> --out <results.jsonl>
-               DiktaBench --engine apple --language sv|en \
-        --audio-dir <dir> --out <results.jsonl>
-        """)
+        fail(usage)
     }
 
     if engine == "whisper" {
@@ -110,21 +130,30 @@ func parseArgs() -> BenchArgs {
             guard repo == nil, variant == nil else {
                 fail("--model-folder is mutually exclusive with --repo/--variant")
             }
-            return BenchArgs(engine: engine, repo: nil, variant: nil, modelFolder: modelFolder, language: language, audioDir: audioDir, out: out)
+            return BenchArgs(engine: engine, repo: nil, variant: nil, modelFolder: modelFolder, modelVersion: nil, language: language, audioDir: audioDir, out: out)
         }
         guard let repo, let variant else {
             fail("""
             --engine whisper (the default) requires --repo <hf-repo> --variant <name>, \
             or --model-folder <path> to load a local WhisperKit model folder.
-            Usage: DiktaBench --repo <hf-repo> --variant <name> --language sv|en \
-            --audio-dir <dir> --out <results.jsonl>
+            \(usage)
             """)
         }
-        return BenchArgs(engine: engine, repo: repo, variant: variant, modelFolder: nil, language: language, audioDir: audioDir, out: out)
+        return BenchArgs(engine: engine, repo: repo, variant: variant, modelFolder: nil, modelVersion: nil, language: language, audioDir: audioDir, out: out)
+    }
+
+    if engine == "parakeet" {
+        guard let modelVersion, ["redux", "v3", "ultra"].contains(modelVersion) else {
+            fail("""
+            --engine parakeet requires --model-version redux|v3|ultra, got \(modelVersion ?? "<missing>").
+            \(usage)
+            """)
+        }
+        return BenchArgs(engine: engine, repo: nil, variant: nil, modelFolder: nil, modelVersion: modelVersion, language: language, audioDir: audioDir, out: out)
     }
 
     // engine == "apple": --repo/--variant/--model-folder are ignored if passed.
-    return BenchArgs(engine: engine, repo: nil, variant: nil, modelFolder: nil, language: language, audioDir: audioDir, out: out)
+    return BenchArgs(engine: engine, repo: nil, variant: nil, modelFolder: nil, modelVersion: nil, language: language, audioDir: audioDir, out: out)
 }
 
 func fail(_ message: String) -> Never {
@@ -347,6 +376,140 @@ func runAppleEngine(_ args: BenchArgs, audioFiles: [String], fm: FileManager) as
     """)
 }
 
+// MARK: - Parakeet engine
+
+/// Maps the harness's `--model-version redux|v3|ultra` to FluidAudio's
+/// `AsrModelVersion`. `parseArgs()` already restricted `modelVersion` to
+/// these three strings, so this is never `nil` in practice.
+func parakeetModelVersion(for modelVersion: String) -> AsrModelVersion? {
+    switch modelVersion {
+    case "redux": return .redux
+    case "v3": return .v3
+    case "ultra": return .ultra
+    default: return nil
+    }
+}
+
+/// Redux's ternary-quantized encoder benchmarks faster on GPU than on ANE;
+/// v3/ultra use the library default (`nil`, which resolves to ANE) — mirrors
+/// `ParakeetEngine.encoderComputeUnits(for:)`.
+func parakeetEncoderComputeUnits(for modelVersion: String) -> MLComputeUnits? {
+    modelVersion == "redux" ? .cpuAndGPU : nil
+}
+
+func describeComputeUnits(_ computeUnits: MLComputeUnits?) -> String {
+    guard let computeUnits else { return "default" }
+    switch computeUnits {
+    case .cpuOnly: return "cpuOnly"
+    case .cpuAndGPU: return "cpuAndGPU"
+    case .all: return "all"
+    case .cpuAndNeuralEngine: return "cpuAndNeuralEngine"
+    @unknown default: return "unknown"
+    }
+}
+
+/// Parakeet engine run loop, parallel to the WhisperKit loop in
+/// `DiktaBench.main()` and `runAppleEngine`. Loads the model once via
+/// FluidAudio's `AsrModels`/`AsrManager` (mirroring
+/// `FluidAudioParakeetBackend.loadModel` in
+/// `Dikta/Services/ParakeetEngine.swift` — duplicated rather than shared,
+/// since `DiktaBench` cannot import the `Dikta` app target), then transcribes
+/// each clip with a **fresh** `TdtDecoderState` — clips in a FLEURS
+/// audio-dir are independent utterances, not one continuous stream, so
+/// carrying decoder state across them (as the streaming app path does)
+/// would leak context between unrelated clips.
+func runParakeetEngine(_ args: BenchArgs, audioFiles: [String], fm: FileManager) async {
+    guard let modelVersionArg = args.modelVersion, let version = parakeetModelVersion(for: modelVersionArg) else {
+        fail("--engine parakeet requires --model-version redux|v3|ultra")
+    }
+    let encoderComputeUnits = parakeetEncoderComputeUnits(for: modelVersionArg)
+
+    print("DiktaBench: engine=parakeet version=\(modelVersionArg) computeUnits=\(describeComputeUnits(encoderComputeUnits)) language=\(args.language) files=\(audioFiles.count)")
+
+    // Load model, timing the load. First load of Redux on the Neural Engine
+    // compiles for several minutes — using .cpuAndGPU above (per this
+    // function's contract) keeps that compile off the critical path here.
+    let loadStart = Date()
+    let manager: AsrManager
+    let decoderLayers: Int
+    do {
+        let models = try await AsrModels.downloadAndLoad(
+            version: version,
+            encoderComputeUnits: encoderComputeUnits
+        )
+        let mgr = AsrManager(models: models)
+        decoderLayers = await mgr.decoderLayerCount
+        manager = mgr
+    } catch {
+        fail("Failed to load Parakeet model \(modelVersionArg): \(error)")
+    }
+    let modelLoadSeconds = Date().timeIntervalSince(loadStart)
+    print("Model loaded in \(String(format: "%.2f", modelLoadSeconds))s")
+
+    if fm.fileExists(atPath: args.out) {
+        try? fm.removeItem(atPath: args.out)
+    }
+    fm.createFile(atPath: args.out, contents: nil)
+    guard let outHandle = FileHandle(forWritingAtPath: args.out) else {
+        fail("Could not open \(args.out) for writing")
+    }
+
+    let encoder = JSONEncoder()
+    var totalAudioSeconds = 0.0
+    var totalWallSeconds = 0.0
+
+    for audioPath in audioFiles {
+        let fileName = (audioPath as NSString).lastPathComponent
+
+        let audioSamples: [Float]
+        do {
+            audioSamples = try AudioProcessor.loadAudioAsFloatArray(fromPath: audioPath)
+        } catch {
+            fail("Failed to load audio \(audioPath): \(error)")
+        }
+        let secondsAudio = Double(audioSamples.count) / Double(WhisperKit.sampleRate)
+
+        let wallStart = Date()
+        let text: String
+        do {
+            var decoderState = TdtDecoderState.make(decoderLayers: decoderLayers)
+            let result = try await manager.transcribe(audioSamples, decoderState: &decoderState)
+            text = result.text
+        } catch {
+            fail("Transcription failed for \(audioPath): \(error)")
+        }
+        let secondsWall = Date().timeIntervalSince(wallStart)
+
+        totalAudioSeconds += secondsAudio
+        totalWallSeconds += secondsWall
+
+        let result = BenchResult(
+            file: fileName,
+            text: text,
+            seconds_audio: secondsAudio,
+            seconds_wall: secondsWall,
+            model_load_seconds: modelLoadSeconds
+        )
+        if let line = try? encoder.encode(result) {
+            outHandle.write(line)
+            outHandle.write("\n".data(using: .utf8)!)
+        }
+
+        print("  \(fileName): \(String(format: "%.2f", secondsWall))s wall / \(String(format: "%.2f", secondsAudio))s audio")
+    }
+
+    outHandle.closeFile()
+
+    let rtf = totalAudioSeconds > 0 ? totalWallSeconds / totalAudioSeconds : 0
+    print("""
+    Summary: \(audioFiles.count) files, \
+    total audio \(String(format: "%.1f", totalAudioSeconds))s, \
+    total wall \(String(format: "%.1f", totalWallSeconds))s, \
+    overall RTF \(String(format: "%.3f", rtf)), \
+    model load \(String(format: "%.2f", modelLoadSeconds))s
+    """)
+}
+
 @main
 struct DiktaBench {
     static func main() async {
@@ -371,6 +534,11 @@ struct DiktaBench {
                 fail("--engine apple requires macOS 26.0 or later (DictationTranscriber is unavailable on this OS).")
             }
             await runAppleEngine(args, audioFiles: audioFiles, fm: fm)
+            return
+        }
+
+        if args.engine == "parakeet" {
+            await runParakeetEngine(args, audioFiles: audioFiles, fm: fm)
             return
         }
 

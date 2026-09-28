@@ -13,6 +13,18 @@
 # docs/review-2026-09/apple-dictation-engine-spec.md). It ignores repo/variant
 # and is scored/labelled as model `apple-dictation`, e.g.:
 #   ./run.sh apple apple
+#
+# The literal first element `parakeet` pairs with a model version
+# (`redux`/`v3`/`ultra`) instead of a repo/variant, selecting FluidAudio's
+# Parakeet engine (see `Dikta/Services/ParakeetEngine.swift`). It's
+# scored/labelled as model `parakeet-<version>`, e.g.:
+#   ./run.sh parakeet redux
+#   ./run.sh parakeet v3
+#   ./run.sh parakeet ultra
+# An unrecognised version exits non-zero with a usage message. Note: the
+# first load of Redux still compiles the non-encoder model parts (decoder,
+# joint, preprocessor) on the Neural Engine — `.cpuAndGPU` in DiktaBench only
+# covers the encoder — which can take several minutes; see bench/README.md.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -46,6 +58,24 @@ if (( $# % 2 != 0 )); then
     exit 1
 fi
 
+# Validate pairs up front (fail before the build/fetch below, not partway
+# through the run) — the only pair shape that needs validation beyond "two
+# args" is `parakeet <version>`, since `apple apple` and `<repo> <variant>`
+# accept any value in their second slot.
+pair_args=("$@")
+for (( i = 0; i < ${#pair_args[@]}; i += 2 )); do
+    if [[ "${pair_args[i]}" == "parakeet" ]]; then
+        case "${pair_args[i+1]}" in
+            redux|v3|ultra) ;;
+            *)
+                echo "Error: unknown parakeet model version '${pair_args[i+1]}' (expected redux|v3|ultra)" >&2
+                echo "Usage: ./run.sh parakeet redux|v3|ultra" >&2
+                exit 1
+                ;;
+        esac
+    fi
+done
+
 mkdir -p "$RESULTS_DIR"
 
 # --- build DiktaBench once --------------------------------------------------
@@ -60,6 +90,17 @@ while (( $# > 0 )); do
     if [[ "$repo" == "apple" && "$variant" == "apple" ]]; then
         engine="apple"
         model_label="apple-dictation"
+    elif [[ "$repo" == "parakeet" ]]; then
+        case "$variant" in
+            redux|v3|ultra) ;;
+            *)
+                echo "Error: unknown parakeet model version '$variant' (expected redux|v3|ultra)" >&2
+                echo "Usage: ./run.sh parakeet redux|v3|ultra" >&2
+                exit 1
+                ;;
+        esac
+        engine="parakeet"
+        model_label="parakeet-$variant"
     else
         engine="whisper"
         model_label="$variant"
@@ -77,6 +118,13 @@ while (( $# > 0 )); do
         if [[ "$engine" == "apple" ]]; then
             "$DIKTABENCH_BIN" \
                 --engine apple \
+                --language "$lang" \
+                --audio-dir "$audio_dir" \
+                --out "$raw_out"
+        elif [[ "$engine" == "parakeet" ]]; then
+            "$DIKTABENCH_BIN" \
+                --engine parakeet \
+                --model-version "$variant" \
                 --language "$lang" \
                 --audio-dir "$audio_dir" \
                 --out "$raw_out"
