@@ -13,6 +13,14 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     /// Models (by rawValue) whose `reload(model:)` should fail.
     var modelsThatFail: Set<String> = []
 
+    /// When true, `load()` reports failure (`isReady = false`, `errorMessage`
+    /// set) instead of succeeding. `reload(model:)`'s `modelsThatFail` doesn't
+    /// cover this: `MenuBarViewModel.setEngine` builds a brand-new engine
+    /// instance for the target kind and calls `load()` on it, never
+    /// `reload(model:)`, so this is the seam `MenuBarViewModelSetEngineTests`
+    /// uses to exercise that failure/fallback path.
+    var shouldFailLoad = false
+
     /// Every model passed to `reload(model:)`, in call order.
     private(set) var reloadedModels: [WhisperModel] = []
 
@@ -49,7 +57,13 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     private(set) var receivedSegmentSampleCounts: [Int] = []
 
     func load() async {
+        if shouldFailLoad {
+            isReady = false
+            errorMessage = "Fake failure loading"
+            return
+        }
         isReady = true
+        errorMessage = nil
     }
 
     func reload(model: WhisperModel) async throws {

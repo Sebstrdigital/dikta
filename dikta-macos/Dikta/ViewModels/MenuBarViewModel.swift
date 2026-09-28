@@ -44,7 +44,16 @@ final class MenuBarViewModel: ObservableObject {
     // Services
     let configService: ConfigService
     private var cancellables = Set<AnyCancellable>()
-    private let transcriber: any TranscriptionEngine
+    /// The active transcription engine. `var` (not `let`): `setEngine(_:)`
+    /// swaps it for a new instance built by `engineFactory` when the user
+    /// switches engine kind, dropping the strong reference to the old one so
+    /// it deinits ("unloads") once nothing else holds it.
+    private var transcriber: any TranscriptionEngine
+    /// Builds a `TranscriptionEngine` for a given kind/model pair. Used for
+    /// the startup engine (when `engine:` isn't injected) and by every
+    /// `setEngine(_:)` call thereafter — the one seam both paths share; see
+    /// `init`'s `engineFactory:` parameter doc.
+    private let engineFactory: (TranscriptionEngineKind, WhisperModel) -> any TranscriptionEngine
     /// Internal rather than private so tests can drive the recorder's live
     /// sample tap (`onLiveSamples`) directly, which is the only way to feed
     /// the call-recording Me track without a real microphone. Held as the
@@ -107,11 +116,13 @@ final class MenuBarViewModel: ObservableObject {
     /// - Parameters:
     ///   - engine: Transcription engine to use. Defaults to a real WhisperKit-backed
     ///     `Transcriber` built from the saved config; tests can inject a fake instead.
-    ///   - engineFactory: Alternative to `engine` for tests that need to observe which
-    ///     model the engine is constructed with (a plain injected `engine` never sees
-    ///     the startup model — the fake doesn't care what it's "loaded" with). Ignored
-    ///     if `engine` is provided. Production never sets this; it falls through to
-    ///     the real `Transcriber(model:)`.
+    ///   - engineFactory: Builds a `TranscriptionEngine` for a `(TranscriptionEngineKind,
+    ///     WhisperModel)` pair. Used for the startup engine when `engine` isn't provided
+    ///     (letting a test observe which model/kind `init` resolved — a plain injected
+    ///     `engine` never sees the startup model, since the fake doesn't care what it's
+    ///     "loaded" with) and, always, by every later `setEngine(_:)` call. Production
+    ///     never sets this; it falls through to the real `Transcriber(model:)` /
+    ///     `ParakeetEngine(kind:)`.
     ///   - configService: Config store to use. Defaults to `.shared` (the real, persisted
     ///     config); tests can inject an isolated instance instead.
     ///   - debriefSummarizer: Summarizer for debrief mode. Defaults to one built lazily
@@ -139,7 +150,7 @@ final class MenuBarViewModel: ObservableObject {
     ///     `makeDefaultAudioFeedback`); tests inject `FakeAudioFeedback`.
     init(
         engine: (any TranscriptionEngine)? = nil,
-        engineFactory: ((WhisperModel) -> any TranscriptionEngine)? = nil,
+        engineFactory: ((TranscriptionEngineKind, WhisperModel) -> any TranscriptionEngine)? = nil,
         configService: ConfigService? = nil,
         debriefSummarizer: DebriefSummarizer? = nil,
         debriefStore: DebriefStore? = nil,
@@ -157,21 +168,28 @@ final class MenuBarViewModel: ObservableObject {
         self.audioFileLoader = audioFileLoader ?? { try AudioFileLoader().load(url: $0) }
         let preferenceModel = WhisperModel(rawValue: configService.whisperModel) ?? .small
         let startupModel = Self.effectiveModel(for: configService.language, preference: preferenceModel)
-        self.loadedModel = startupModel
-        self.transcriber = engine ?? engineFactory?(startupModel) ?? {
-            // A `MenuBarViewModel` built without an injected engine while XCTest is
-            // linked into this process (a unit test, or `Dikta.app` itself hosting
-            // one — see `DiktaApp`) would fall through to a real `Transcriber` here
-            // and attempt a live WhisperKit model download/network call as a side
-            // effect of the app merely launching. That's silent and harmless on a
-            // machine with the model already cached, but hangs or crashes the test
-            // host on a clean CI runner. Fail loudly instead of downloading.
+        let startupKind = configService.engine
+        self.loadedModel = startupKind.usesWhisperModelSubmenu ? startupModel : nil
+        let resolvedEngineFactory: (TranscriptionEngineKind, WhisperModel) -> any TranscriptionEngine = engineFactory ?? { kind, model in
+            // A `MenuBarViewModel` built without an injected engine/engineFactory while
+            // XCTest is linked into this process (a unit test, or `Dikta.app` itself
+            // hosting one — see `DiktaApp`) would fall through to a real, network-touching
+            // engine here as a side effect of the app merely launching. That's silent and
+            // harmless on a machine with the model already cached, but hangs or crashes
+            // the test host on a clean CI runner. Fail loudly instead of downloading.
             assert(
                 !Self.isRunningUnderXCTestHost,
-                "MenuBarViewModel() constructed under XCTest without engine:/engineFactory: — this would build a real, network-touching Transcriber. Inject a fake engine."
+                "MenuBarViewModel() constructed under XCTest without engine:/engineFactory: — this would build a real, network-touching engine. Inject a fake engine."
             )
-            return Transcriber(model: startupModel)
-        }()
+            switch kind {
+            case .whisper:
+                return Transcriber(model: model)
+            case .parakeetRedux, .parakeetV3, .parakeetUltra:
+                return ParakeetEngine(kind: kind)
+            }
+        }
+        self.engineFactory = resolvedEngineFactory
+        self.transcriber = engine ?? resolvedEngineFactory(startupKind, startupModel)
         self.audioRecorder = audioRecorder ?? AudioRecorder()
         self.systemAudioCaptureFactory = systemAudioCaptureFactory ?? { SystemAudioTapRecorder() }
         self.audioFeedback = audioFeedback ?? Self.makeDefaultAudioFeedback()
@@ -1409,6 +1427,12 @@ final class MenuBarViewModel: ObservableObject {
     /// `$appState` subscription in `init` re-runs this as soon as `appState`
     /// becomes `.idle` again.
     private func reloadForCurrentLanguageIfNeeded() {
+        // Parakeet engines don't track a Whisper model, so a language change
+        // has no reload to trigger — see `TranscriptionEngineKind.usesWhisperModelSubmenu`.
+        guard configService.engine.usesWhisperModelSubmenu else {
+            languageModelReloadPending = false
+            return
+        }
         let target = effectiveModel(for: configService.language)
         guard target != loadedModel else {
             languageModelReloadPending = false
@@ -1474,6 +1498,14 @@ final class MenuBarViewModel: ObservableObject {
     @discardableResult
     func setWhisperModel(_ model: WhisperModel) -> Task<Void, Never>? {
         guard model.rawValue != configService.whisperModel else { return nil }
+
+        // Parakeet engines have no Whisper Model submenu equivalent (see
+        // `TranscriptionEngineKind.usesWhisperModelSubmenu`) — just remember the
+        // preference for whenever Whisper becomes the active engine again.
+        guard configService.engine.usesWhisperModelSubmenu else {
+            configService.whisperModel = model.rawValue
+            return nil
+        }
 
         // While Svenska is active, KB-Whisper stays loaded no matter what the
         // user picks here — just remember the preference for later languages.
@@ -1573,6 +1605,69 @@ final class MenuBarViewModel: ObservableObject {
                 sendNotification(
                     title: "Error",
                     body: transcriber.errorMessage ?? "Failed to load Whisper model"
+                )
+            }
+        }
+    }
+
+    // MARK: - Transcription Engine
+
+    /// Switches the active transcription engine to `kind` — Whisper or one
+    /// of the Parakeet variants (see `TranscriptionEngineKind`). Mirrors
+    /// `setWhisperModel`'s shape: a `.loading` state while the swap is in
+    /// flight, the choice persisted only once the new engine has actually
+    /// loaded, and on failure the previous engine is restored (not
+    /// persisted) rather than leaving the app on a broken one. Unlike
+    /// `setWhisperModel`'s three-step fallback ladder, there's only one
+    /// fallback here: the engine that was already loaded and working — it
+    /// doesn't need reloading, just restoring.
+    ///
+    /// Building a `.whisper` engine uses `effectiveModel(for:)` for the
+    /// current language, not the raw preference — so switching back to
+    /// Whisper while Svenska is active loads KB-Whisper Small, exactly as if
+    /// Svenska had just been selected.
+    ///
+    /// Returns the `Task` doing the work (nil if the switch was skipped —
+    /// already on `kind`, or idle-blocked) so tests can await its completion
+    /// instead of polling `appState`. Production callers can ignore the
+    /// return value.
+    @discardableResult
+    func setEngine(_ kind: TranscriptionEngineKind) -> Task<Void, Never>? {
+        guard kind != configService.engine else { return nil }
+        guard appState == .idle else { return nil }
+
+        let previousEngine = transcriber
+        let previousKind = configService.engine
+        let model = effectiveModel(for: configService.language)
+        let newEngine = engineFactory(kind, model)
+
+        appState = .loading
+        transcriber = newEngine
+
+        return Task { @MainActor in
+            await self.withDownloadProgressPolling {
+                await newEngine.load()
+            }
+
+            if newEngine.isReady {
+                self.configService.engine = kind
+                self.loadedModel = kind.usesWhisperModelSubmenu ? model : nil
+                self.appState = .idle
+                self.sendNotification(
+                    title: "Engine Changed",
+                    body: "Switched to \(kind.displayName).",
+                    isRoutine: true
+                )
+            } else {
+                // The new engine failed to load. Restore the engine that was
+                // working before — it's already loaded, so no need to reload
+                // it — so recording (which requires appState == .idle)
+                // doesn't stay broken until an app restart.
+                self.transcriber = previousEngine
+                self.appState = .idle
+                self.sendNotification(
+                    title: "Error",
+                    body: "Could not switch to \(kind.displayName): \(newEngine.errorMessage ?? "failed to load"). Kept \(previousKind.displayName)."
                 )
             }
         }
