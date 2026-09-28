@@ -101,7 +101,8 @@ final class DebriefPipeline {
         micSensitivity: MicSensitivity,
         paths: DebriefSessionPaths? = nil,
         chunking: ChunkingConfig? = nil,
-        finishTimeoutFloor: TimeInterval = DebriefLiveSession.minimumFinishTimeout
+        finishTimeoutFloor: TimeInterval = DebriefLiveSession.minimumFinishTimeout,
+        speakers: URL? = nil
     ) throws -> DebriefLiveSession {
         DebriefLiveSession(
             pipeline: self,
@@ -114,7 +115,8 @@ final class DebriefPipeline {
             micSensitivity: micSensitivity,
             chunking: chunking ?? self.chunking,
             transcriptionTimeout: transcriptionTimeout,
-            finishTimeoutFloor: finishTimeoutFloor
+            finishTimeoutFloor: finishTimeoutFloor,
+            speakersURL: speakers
         )
     }
 
@@ -215,6 +217,7 @@ final class DebriefPipeline {
         paths: DebriefSessionPaths,
         language: String?,
         issues: [String] = [],
+        speakerNames: [String] = [],
         summarize: (@Sendable (_ transcript: String, _ renderLanguage: String) async throws -> (DebriefSummary, String, [String]))? = nil,
         onStage: @escaping @MainActor (DebriefStage) -> Void
     ) async throws -> DebriefResult {
@@ -249,7 +252,7 @@ final class DebriefPipeline {
         }
         let summary = produced
             .normalized()
-            .validated(against: transcript)
+            .validated(against: transcript, knownNames: speakerNames)
         let renderedText = summary.renderPlainText(language: renderLanguage)
 
         onStage(.saving)
@@ -287,10 +290,15 @@ final class DebriefPipeline {
     /// A missing or empty track is allowed (nobody spoke on it, or the user
     /// never granted system audio permission): it simply contributes no
     /// segments, and the merged transcript carries only the other speaker.
+    ///
+    /// - Parameter speakers: the `speakers.jsonl` a shadow join recorded, so a
+    ///   recovered call keeps its participant names. `nil` reads
+    ///   `paths.speakers`; a missing file just means "Them" stays "Them".
     func runTwoTrack(
         paths: DebriefSessionPaths,
         language: String?,
         micSensitivity: MicSensitivity,
+        speakers: URL? = nil,
         onStage: @escaping @MainActor (DebriefStage) -> Void
     ) async throws -> DebriefResult {
         onStage(.transcribing)
@@ -300,16 +308,19 @@ final class DebriefPipeline {
         // chunking, one track at a time.
         let longestTrackSeconds = max(trackSeconds(.me, in: paths), trackSeconds(.them, in: paths))
         guard longestTrackSeconds > chunking.targetChunkSeconds else {
+            let timeline = SpeakerTimeline.load(from: speakers ?? paths.speakers)
             let transcript = try await mergedTranscript(
                 paths: paths,
                 language: language,
-                micSensitivity: micSensitivity
+                micSensitivity: micSensitivity,
+                timeline: timeline
             )
 
             return try await finishTranscribedDebrief(
                 transcript: transcript,
                 paths: paths,
                 language: language,
+                speakerNames: timeline.names,
                 onStage: onStage
             )
         }
@@ -318,7 +329,8 @@ final class DebriefPipeline {
             tracks: [.me, .them],
             language: language,
             micSensitivity: micSensitivity,
-            paths: paths
+            paths: paths,
+            speakers: speakers
         )
         feedTracksFromDisk(paths: paths, into: session)
         return try await session.finish(onStage: onStage)
@@ -370,7 +382,8 @@ final class DebriefPipeline {
     private func mergedTranscript(
         paths: DebriefSessionPaths,
         language: String?,
-        micSensitivity: MicSensitivity
+        micSensitivity: MicSensitivity,
+        timeline: SpeakerTimeline
     ) async throws -> String {
         // One track in RAM at a time: each `loadTrack` result is consumed by
         // the `transcribeTrack` call in the same expression and released
@@ -383,7 +396,8 @@ final class DebriefPipeline {
             loadTrack(.them, in: paths), language: language, micSensitivity: micSensitivity
         )
 
-        return TwoTrackMerger.render(TwoTrackMerger.merge(me: meSegments, them: themSegments))
+        let merged = TwoTrackMerger.merge(me: meSegments, them: themSegments)
+        return TwoTrackMerger.render(SpeakerAttributor.attributeIfRecorded(merged, timeline: timeline))
     }
 
     /// Loads one track's samples, or an empty array when the track is absent,

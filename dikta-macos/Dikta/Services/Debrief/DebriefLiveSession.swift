@@ -64,6 +64,9 @@ final class DebriefLiveSession: @unchecked Sendable {
     /// Name of the delta engine backing `rolling`, for result reporting.
     private let deltaEngineName: String
     private let paths: DebriefSessionPaths
+    /// Where the shadow join's `speakers.jsonl` lives; re-read per chunk, since
+    /// the recorder appends to it for the whole call.
+    private let speakersURL: URL
     private let tracks: [DebriefTrack]
     private let language: String?
     /// How long `finish()` may wait for the remaining transcription work.
@@ -108,10 +111,12 @@ final class DebriefLiveSession: @unchecked Sendable {
         micSensitivity: MicSensitivity,
         chunking: ChunkingConfig,
         transcriptionTimeout: TimeInterval,
-        finishTimeoutFloor: TimeInterval = DebriefLiveSession.minimumFinishTimeout
+        finishTimeoutFloor: TimeInterval = DebriefLiveSession.minimumFinishTimeout,
+        speakersURL: URL? = nil
     ) {
         self.pipeline = pipeline
         self.paths = paths
+        self.speakersURL = speakersURL ?? paths.speakers
         self.deltaEngineName = deltaSummarizer.name
         var seen = Set<DebriefTrack>()
         let uniqueTracks = tracks.filter { seen.insert($0).inserted }
@@ -151,7 +156,7 @@ final class DebriefLiveSession: @unchecked Sendable {
     /// transcription jobs are done. Never calls `finish()` — that would
     /// deadlock the chunker's job chain.
     private func handleChunk(_ result: ChunkResult) {
-        let transcript = Self.renderChunk(result.segments, tracks: tracks)
+        let transcript = Self.renderChunk(result.segments, tracks: tracks, timeline: SpeakerTimeline.load(from: speakersURL))
         logChunk(result)
 
         lock.lock()
@@ -256,7 +261,8 @@ final class DebriefLiveSession: @unchecked Sendable {
             (observedSegments, observedChunkCount, heldFirstChunk, issues)
         }
         let segments = chunked?.segments ?? observed
-        let transcript = Self.renderFull(segments, tracks: tracks)
+        let timeline = SpeakerTimeline.load(from: speakersURL)
+        let transcript = Self.renderFull(segments, tracks: tracks, timeline: timeline)
         let chunks = chunked?.chunks.count ?? chunkCount
 
         // 4. One chunk (or none) → the single-pass summarizer over the whole
@@ -270,6 +276,7 @@ final class DebriefLiveSession: @unchecked Sendable {
                 paths: paths,
                 language: language,
                 issues: collectedIssues,
+                speakerNames: timeline.names,
                 onStage: onStage
             )
         }
@@ -281,6 +288,7 @@ final class DebriefLiveSession: @unchecked Sendable {
             paths: paths,
             language: language,
             issues: collectedIssues,
+            speakerNames: timeline.names,
             summarize: { [deltaEngineName] _, _ in
                 let summary = try await rolling.finish()
                 let events = await rolling.events
@@ -297,7 +305,15 @@ final class DebriefLiveSession: @unchecked Sendable {
     /// segment texts for a single-track one — a mic debrief has exactly one
     /// speaker, so labeling it would only give the summarizer a speaker rule
     /// it must not apply.
-    static func renderChunk(_ segments: [DebriefTrack: [TranscriptSegment]], tracks: [DebriefTrack]) -> String {
+    ///
+    /// For two tracks, `timeline` names the "Them" segments and drops the
+    /// user's relayed voice (`SpeakerAttributor`) after the merge and before the
+    /// text reaches the rolling summarizer.
+    static func renderChunk(
+        _ segments: [DebriefTrack: [TranscriptSegment]],
+        tracks: [DebriefTrack],
+        timeline: SpeakerTimeline = .empty
+    ) -> String {
         guard tracks.count > 1 else {
             let track = tracks.first ?? .me
             return (segments[track] ?? [])
@@ -305,16 +321,19 @@ final class DebriefLiveSession: @unchecked Sendable {
                 .filter { !$0.isEmpty }
                 .joined(separator: " ")
         }
-        return TwoTrackMerger.render(
-            TwoTrackMerger.merge(me: segments[.me] ?? [], them: segments[.them] ?? [])
-        )
+        let merged = TwoTrackMerger.merge(me: segments[.me] ?? [], them: segments[.them] ?? [])
+        return TwoTrackMerger.render(SpeakerAttributor.attributeIfRecorded(merged, timeline: timeline))
     }
 
     /// The whole session's transcript. Same rules as `renderChunk`; the
     /// two-track case re-merges across chunk boundaries so a Me paragraph that
     /// straddles a cut is not split by the cut.
-    static func renderFull(_ segments: [DebriefTrack: [TranscriptSegment]], tracks: [DebriefTrack]) -> String {
-        renderChunk(segments, tracks: tracks)
+    static func renderFull(
+        _ segments: [DebriefTrack: [TranscriptSegment]],
+        tracks: [DebriefTrack],
+        timeline: SpeakerTimeline = .empty
+    ) -> String {
+        renderChunk(segments, tracks: tracks, timeline: timeline)
     }
 
     // MARK: - Diagnostics

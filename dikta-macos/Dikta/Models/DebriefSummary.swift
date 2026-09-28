@@ -169,7 +169,19 @@ struct DebriefActionItem: Codable, Equatable {
         return String(value[range])
     }
 
-    func validated(against transcript: String) -> DebriefActionItem {
+    private static func isKnownName(_ owner: String, in knownNames: [String]) -> Bool {
+        let wanted = owner.lowercased()
+        return knownNames.contains { name in
+            let lowered = name.lowercased()
+            return lowered == wanted || lowered.split(whereSeparator: { $0.isWhitespace }).contains { String($0) == wanted }
+        }
+    }
+
+    /// - Parameter knownNames: participant names from the meeting's speaker
+    ///   timeline. An owner that is one of them, or one word of one (the model
+    ///   often writes "Anna" for "Anna Svensson"), is real even when nobody
+    ///   said it aloud, so the never-spoken check does not apply to it.
+    func validated(against transcript: String, knownNames: [String] = []) -> DebriefActionItem {
         var result = self
 
         if let due {
@@ -181,6 +193,7 @@ struct DebriefActionItem: Codable, Equatable {
         }
 
         if let owner, !Self.firstPersonOwners.contains(owner.lowercased()),
+           !Self.isKnownName(owner, in: knownNames),
            Self.isCapitalizedSingleWord(owner), !Self.containsWholeWord(owner, in: transcript) {
             result.owner = nil
         }
@@ -286,11 +299,11 @@ struct DebriefSummary: Codable, Equatable {
     /// spoken — see `DebriefActionItem.validated(against:)` for exactly what
     /// this does and does not catch. Applied by the pipeline right after
     /// `normalized()`.
-    func validated(against transcript: String) -> DebriefSummary {
+    func validated(against transcript: String, knownNames: [String] = []) -> DebriefSummary {
         DebriefSummary(
             summary: summary,
             decisions: decisions,
-            actionItems: actionItems.map { $0.validated(against: transcript) },
+            actionItems: actionItems.map { $0.validated(against: transcript, knownNames: knownNames) },
             openQuestions: openQuestions
         )
     }
