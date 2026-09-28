@@ -825,7 +825,9 @@ final class MenuBarViewModel: ObservableObject {
     /// its own track's queue, and the immutable ones are read-only.
     private final class CallRecordingSession: @unchecked Sendable {
         let paths: DebriefSessionPaths
-        let capture: any SystemAudioCapturing
+        /// Replaced on the main actor only (the shadow source swaps in the real tap on
+        /// admission); the track queues never touch it.
+        var capture: any SystemAudioCapturing
         /// The live transcription/summarization session this recording feeds.
         /// Fed from the *same* per-track queue as the writer, so the chunker
         /// sees each track's buffers in exactly the order they were captured.
@@ -861,6 +863,14 @@ final class MenuBarViewModel: ObservableObject {
         private var themSilentSamples = 0
         private var themHeardAudio = false
         private var themSilenceReported = false
+        /// Them samples above digital silence, for the SHADOW_JOIN finish line. `them.queue` only.
+        private var themNonSilentSamples = 0
+        /// False until `openThem()`: samples the tap delivers before then are dropped, so the
+        /// track starts with padding on the Me clock. `them.queue` only.
+        private var themOpen: Bool
+
+        private let meCountLock = NSLock()
+        private var meSampleCount = 0
 
         /// Fired at most once per session, from `them.queue`, when
         /// `MenuBarViewModel.silentSystemAudioWarningSamples` samples have
@@ -872,8 +882,10 @@ final class MenuBarViewModel: ObservableObject {
             me: StreamingWavWriter,
             them: StreamingWavWriter,
             capture: any SystemAudioCapturing,
-            live: DebriefLiveSession
+            live: DebriefLiveSession,
+            themOpen: Bool = true
         ) {
+            self.themOpen = themOpen
             self.paths = paths
             self.me = Track(writer: me, name: .me)
             self.them = Track(writer: them, name: .them)
@@ -881,7 +893,10 @@ final class MenuBarViewModel: ObservableObject {
             self.live = live
         }
 
-        func appendMe(_ samples: [Float]) { append(samples, to: me) }
+        func appendMe(_ samples: [Float]) {
+            meCountLock.withLock { meSampleCount += samples.count }
+            append(samples, to: me)
+        }
         func appendThem(_ samples: [Float]) { append(samples, to: them) }
 
         /// Returns immediately: the caller is an audio callback, so the write
@@ -890,6 +905,8 @@ final class MenuBarViewModel: ObservableObject {
             guard !samples.isEmpty else { return }
             track.queue.async {
                 if track === self.them {
+                    guard self.themOpen else { return }
+                    self.themNonSilentSamples += samples.reduce(0) { $0 + (abs($1) > 0.001 ? 1 : 0) }
                     self.watchThemForSilence(samples)
                 }
                 // The chunker first, then disk: `append` only hands the buffer
@@ -910,6 +927,30 @@ final class MenuBarViewModel: ObservableObject {
                     AppLogger.audio.error("Call recording: writing \(track.name.rawValue).wav failed: \(error.localizedDescription) — that track stops here")
                 }
             }
+        }
+
+        /// Opens the Them track. Zeros covering everything the Me track has recorded so far
+        /// are written first, so a tap that started late still lines up with Me (the merger
+        /// treats sample index as time). The padding is not seen by the silence watchdog.
+        func openThem() {
+            let padding = meCountLock.withLock { meSampleCount }
+            them.queue.async {
+                guard !self.themOpen else { return }
+                self.themOpen = true
+                guard padding > 0 else { return }
+                let zeros = [Float](repeating: 0, count: padding)
+                self.live.append(zeros, track: .them)
+                do {
+                    try self.them.writer.append(zeros)
+                } catch {
+                    AppLogger.audio.error("Call recording: padding them.wav failed: \(error.localizedDescription)")
+                }
+            }
+        }
+
+        /// Seconds of Them audio above digital silence so far.
+        var themNonSilentSeconds: TimeInterval {
+            them.queue.sync { Double(themNonSilentSamples) / SystemAudioTapRecorder.targetSampleRate }
         }
 
         /// Runs on `them.queue`. Stops looking the moment any non-zero sample
@@ -1102,16 +1143,47 @@ final class MenuBarViewModel: ObservableObject {
     /// One join, from the host being built until the debrief has been handed off.
     private final class ShadowRun {
         let host: any ShadowHost
+        let hostKind: ShadowHostKind
+        /// Set-up, join and then the event loop.
         var task: Task<Void, Never>?
-        /// Non-nil once the host admitted us and capture is running.
+        /// Fires the "not admitted yet" warning; cancelled once admitted, stopped or lost.
+        var timeoutTask: Task<Void, Never>?
+        /// Non-nil from the moment the Me track starts, i.e. before admission.
         var session: CallRecordingSession?
         var recorder: SpeakerTimelineRecorder?
         var stopping = false
+        /// The host let us in and the Them tap is on the host's processes.
+        var admitted = false
+        /// The user moved this recording to Microphone + system audio.
+        var switchedToSystemAudio = false
+        /// The host has left, crashed or been left on purpose: nothing more to `leave()`.
+        var hostGone = false
+        let joinStart = ContinuousClock.now
+        var admittedAfter: TimeInterval?
+        var speakerEventCount = 0
 
-        init(host: any ShadowHost) { self.host = host }
+        init(host: any ShadowHost, hostKind: ShadowHostKind) {
+            self.host = host
+            self.hostKind = hostKind
+        }
+
+        /// True when stopping should produce a debrief rather than discard the recording.
+        var hasSomethingToDebrief: Bool { admitted || switchedToSystemAudio }
     }
 
     private var activeShadowRun: ShadowRun?
+
+    /// Non-fatal problems of the last finished debrief (`DebriefResult.issues`).
+    private(set) var lastDebriefIssues: [String] = []
+
+    /// Titles of the shadow warnings shown to the user, in order. Notifications are not
+    /// observable in the test host, so this is what a test asserts "warned once" against.
+    private(set) var shadowWarningTitles: [String] = []
+
+    private func warnShadow(title: String, body: String) {
+        shadowWarningTitles.append(title)
+        sendNotification(title: title, body: body)
+    }
 
     /// True from the hotkey press until the run exists: the meeting sheet is modal-async,
     /// so `appState` is still `.idle` while it is up.
@@ -1142,35 +1214,28 @@ final class MenuBarViewModel: ObservableObject {
             }
             if showNotice { configService.shadowNoticeShown = true }
 
-            let run = ShadowRun(host: shadow.hostFactory(configService.shadowHost))
+            let run = ShadowRun(host: shadow.hostFactory(configService.shadowHost), hostKind: configService.shadowHost)
             activeShadowRun = run
             // Recording from the user's point of view: the hotkey now stops the join,
             // whether or not we have been admitted yet.
             appState = .recording
-            DiagnosticLogger.shared.log("SHADOW_START | host=\(configService.shadowHost.rawValue)")
-            run.task = Task { [weak self] in await self?.consumeShadowEvents(run) }
-            await run.host.join(url: url, displayName: displayName)
-        }
-    }
-
-    private func consumeShadowEvents(_ run: ShadowRun) async {
-        for await event in run.host.events {
-            switch event {
-            case .state(.admitted):
-                if run.session == nil, !run.stopping { await beginShadowCapture(run) }
-            case .state(.failed(let failure)):
-                guard run.session == nil, !run.stopping else { continue }
-                abortShadow(run, message: Self.shadowFailureMessage(for: failure))
-                return
-            default:
-                run.recorder?.record(event)
+            DiagnosticLogger.shared.log("SHADOW_START | host=\(run.hostKind.rawValue)")
+            run.task = Task { [weak self] in
+                guard let self else { return }
+                guard await self.beginShadowMicrophone(run) else { return }
+                guard !run.stopping else { return }
+                self.startAdmissionWatch(run)
+                await run.host.join(url: url, displayName: displayName)
+                await self.consumeShadowEvents(run)
             }
         }
     }
 
-    /// Admitted: session folder, both tracks, then the tap on the host's processes, then
-    /// the microphone. Same order and reasoning as `startCallRecording`.
-    private func beginShadowCapture(_ run: ShadowRun) async {
+    /// Session folder, both tracks and the microphone, started at the hotkey rather than at
+    /// admission: what the user says while waiting to be let in belongs to the meeting and
+    /// survives a switch to system audio. The Them track stays closed (and is zero-padded
+    /// to this clock when it opens), so both tracks share t = 0.
+    private func beginShadowMicrophone(_ run: ShadowRun) async -> Bool {
         let session: CallRecordingSession
         do {
             let paths = try debriefStore.createSession()
@@ -1179,63 +1244,169 @@ final class MenuBarViewModel: ObservableObject {
                 paths: paths,
                 me: try debriefStore.makeStreamingWriter(for: .me, in: paths),
                 them: try debriefStore.makeStreamingWriter(for: .them, in: paths),
-                capture: shadow.captureFactory(Set(run.host.audioProcessIDs)),
+                capture: IdleSystemAudioCapture(),
                 live: try pipeline.startLiveSession(
                     tracks: [.me, .them],
                     language: configService.language.whisperCode,
                     micSensitivity: configService.micSensitivity,
                     paths: paths
-                )
+                ),
+                themOpen: false
             )
         } catch {
             DiagnosticLogger.shared.log("SHADOW_START_FAILED | session | \(error.localizedDescription)")
             abortShadow(run, message: ("Could Not Start Recording", error.localizedDescription))
-            return
+            return false
         }
 
-        session.capture.onSamples = { [weak session] samples in session?.appendThem(samples) }
         silentSystemAudioWarningCount = 0
         session.onSilentSystemAudio = { [weak self] in
             Task { @MainActor in self?.reportSilentSystemAudio() }
         }
         audioRecorder.onLiveSamples = { [weak session] samples in session?.appendMe(samples) }
-
-        do {
-            try await session.capture.start()
-        } catch {
-            audioRecorder.onLiveSamples = nil
-            session.capture.onSamples = nil
-            session.capture.stop()
-            session.closeWriters()
-            DiagnosticLogger.shared.log("SHADOW_START_FAILED | systemAudio | \(error.localizedDescription)")
-            abortShadow(run, message: Self.systemAudioFailureMessage(for: error))
-            return
-        }
-
-        // t = 0 of speakers.jsonl is the moment the tap started, matching the track clocks.
-        let recorder = SpeakerTimelineRecorder(fileURL: session.paths.speakers)
+        // t = 0 of speakers.jsonl is the moment the microphone started, matching the track clocks.
+        run.recorder = SpeakerTimelineRecorder(fileURL: session.paths.speakers)
+        run.session = session
+        activeCallSession = session
 
         do {
             try await audioRecorder.startRecording(micSensitivity: configService.micSensitivity)
         } catch {
-            session.capture.stop()
-            session.capture.onSamples = nil
-            _ = audioRecorder.stopRecording()
-            audioRecorder.onLiveSamples = nil
-            session.closeWriters()
-            recorder.close()
             DiagnosticLogger.shared.log("SHADOW_START_FAILED | mic | \(error.localizedDescription)")
             abortShadow(run, message: ("Error", "Failed to start recording: \(error.localizedDescription)"))
-            return
+            return false
         }
 
-        run.session = session
-        run.recorder = recorder
-        activeCallSession = session
         recordingStartDate = Date()
         audioFeedback.beepOn()
         DiagnosticLogger.shared.log(
+            "SHADOW_MIC | rate=\(audioRecorder.inputSampleRate)Hz | folder=\(session.paths.folder.lastPathComponent)"
+        )
+        return true
+    }
+
+    private func consumeShadowEvents(_ run: ShadowRun) async {
+        for await event in run.host.events {
+            switch event {
+            case .state(let state):
+                DiagnosticLogger.shared.log(Self.shadowJoinStateLine(state, after: Self.seconds(since: run.joinStart)))
+                switch state {
+                case .admitted:
+                    if !run.admitted, !run.stopping, !run.hostGone { await admitShadow(run) }
+                case .failed(let failure):
+                    guard !run.stopping else { continue }
+                    if run.admitted {
+                        hostLost(run)
+                    } else {
+                        abortShadow(run, message: Self.shadowFailureMessage(for: failure))
+                    }
+                    return
+                case .left:
+                    guard run.hasSomethingToDebrief, !run.stopping, !run.hostGone else { continue }
+                    hostLost(run)
+                    return
+                case .joining, .waitingForAdmission:
+                    break
+                }
+            case .activeSpeaker, .participantJoined, .participantLeft:
+                run.speakerEventCount += 1
+                run.recorder?.record(event)
+            case .pageWarning:
+                break
+            }
+        }
+        // The stream ended without us asking: the browser is gone.
+        if run.admitted, !run.stopping, !run.hostGone { hostLost(run) }
+    }
+
+    /// Admitted: the tap on the host's processes, then the Them track opens at the current
+    /// point of the Me clock. The microphone has been running since the hotkey.
+    private func admitShadow(_ run: ShadowRun) async {
+        guard let session = run.session else { return }
+        run.timeoutTask?.cancel()
+
+        let capture = shadow.captureFactory(Set(run.host.audioProcessIDs))
+        session.capture = capture
+        capture.onSamples = { [weak session] samples in session?.appendThem(samples) }
+        do {
+            try await capture.start()
+        } catch {
+            capture.onSamples = nil
+            capture.stop()
+            DiagnosticLogger.shared.log("SHADOW_START_FAILED | systemAudio | \(error.localizedDescription)")
+            abortShadow(run, message: Self.systemAudioFailureMessage(for: error))
+            return
+        }
+        session.openThem()
+        run.admitted = true
+        run.admittedAfter = Self.seconds(since: run.joinStart)
+        DiagnosticLogger.shared.log(
             "SHADOW_ADMITTED | rate=\(audioRecorder.inputSampleRate)Hz | folder=\(session.paths.folder.lastPathComponent)"
+        )
+    }
+
+    /// Asks "keep waiting or switch?" every `shadowJoinTimeoutSeconds` until admitted.
+    private func startAdmissionWatch(_ run: ShadowRun) {
+        run.timeoutTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                let seconds = self.configService.shadowJoinTimeoutSeconds
+                try? await Task.sleep(for: .seconds(seconds))
+                guard !Task.isCancelled, !run.admitted, !run.stopping, !run.hostGone else { return }
+                DiagnosticLogger.shared.log(Self.shadowJoinStateLine(nil, after: Self.seconds(since: run.joinStart), note: "admission_timeout"))
+                let choice = await self.shadow.askAdmissionTimeout(seconds)
+                guard !Task.isCancelled, !run.admitted, !run.stopping, !run.hostGone else { return }
+                switch choice {
+                case .keepWaiting:
+                    continue
+                case .switchToSystemAudio:
+                    await self.switchShadowToSystemAudio(run)
+                    return
+                }
+            }
+        }
+    }
+
+    /// Leaves the meeting and carries on as a plain Microphone + system audio call
+    /// recording in the same session folder: the Me track keeps everything captured so far.
+    private func switchShadowToSystemAudio(_ run: ShadowRun) async {
+        guard let session = run.session else { return }
+        run.switchedToSystemAudio = true
+        run.hostGone = true
+        DiagnosticLogger.shared.log(Self.shadowJoinStateLine(nil, after: Self.seconds(since: run.joinStart), note: "switched_to_system_audio"))
+        await run.host.leave()
+
+        let capture = systemAudioCaptureFactory()
+        session.capture = capture
+        capture.onSamples = { [weak session] samples in session?.appendThem(samples) }
+        do {
+            try await capture.start()
+            session.openThem()
+        } catch {
+            // The Me track is still good: keep it rather than lose the meeting.
+            capture.onSamples = nil
+            capture.stop()
+            session.capture = IdleSystemAudioCapture()
+            DiagnosticLogger.shared.log("SHADOW_START_FAILED | switch systemAudio | \(error.localizedDescription)")
+            let message = Self.systemAudioFailureMessage(for: error)
+            warnShadow(title: message.title, body: "\(message.body) Dikta keeps recording your microphone only.")
+        }
+    }
+
+    /// The browser closed or crashed after admission. The Me track carries on; the user is
+    /// told once and the result lists when it happened.
+    private func hostLost(_ run: ShadowRun) {
+        guard !run.hostGone else { return }
+        run.hostGone = true
+        run.timeoutTask?.cancel()
+        let elapsed = recordingStartDate.map { Date().timeIntervalSince($0) } ?? 0
+        let when = Self.formatShadowTime(elapsed)
+        run.session?.live.noteIssue("shadow participant lost at \(when)")
+        DiagnosticLogger.shared.log(Self.shadowJoinStateLine(nil, after: Self.seconds(since: run.joinStart), note: "host_lost"))
+        Task { await run.host.leave() }
+        warnShadow(
+            title: "Meeting Participant Lost",
+            body: "Dikta's meeting participant disconnected at \(when). Your microphone keeps recording, but the other side is no longer captured."
         )
     }
 
@@ -1243,30 +1414,51 @@ final class MenuBarViewModel: ObservableObject {
     private func abortShadow(_ run: ShadowRun, message: (title: String, body: String)) {
         activeShadowRun = nil
         activeRecordingMode = nil
+        run.timeoutTask?.cancel()
+        discardShadowSession(run)
         recordingStartDate = nil
         appState = .idle
+        logShadowFinish(run)
         Task { await run.host.leave() }
         sendNotification(title: message.title, body: message.body)
     }
 
+    /// Stops what has been recording so far and deletes the session folder.
+    private func discardShadowSession(_ run: ShadowRun) {
+        guard let session = run.session else { return }
+        run.session = nil
+        activeCallSession = nil
+        session.capture.stop()
+        session.capture.onSamples = nil
+        _ = audioRecorder.stopRecording()
+        audioRecorder.onLiveSamples = nil
+        session.closeWriters()
+        run.recorder?.close()
+        try? FileManager.default.removeItem(at: session.paths.folder)
+    }
+
     /// Leaves the meeting (closing the browser surface), stops both producers, closes the
     /// writers and finishes the debrief like a call recording. Stopped before admission,
-    /// there is nothing recorded and nothing to debrief.
+    /// there is nothing to debrief and the Me audio is discarded.
     private func stopShadowRecording(_ run: ShadowRun) {
         run.stopping = true
+        run.timeoutTask?.cancel()
         activeShadowRun = nil
         activeRecordingMode = nil
         audioRecorder.onSilenceAutoStop = nil
         appState = .processing
 
         Task {
-            await run.host.leave()
+            if !run.hostGone { await run.host.leave() }
             // Ends when `leave()` finishes the event stream; also lets an in-flight
-            // `beginShadowCapture` complete so its session is torn down below.
+            // admission complete so its session is torn down below.
             await run.task?.value
 
-            guard let session = run.session else {
+            guard run.hasSomethingToDebrief, let session = run.session else {
+                discardShadowSession(run)
+                recordingStartDate = nil
                 appState = .idle
+                logShadowFinish(run)
                 DiagnosticLogger.shared.log("SHADOW_STOP | not_admitted")
                 sendNotification(title: "Meeting Not Joined", body: "Left before the host let Dikta in. Nothing was recorded.")
                 return
@@ -1281,9 +1473,50 @@ final class MenuBarViewModel: ObservableObject {
             run.recorder?.close()
             unmuteMicTargets()
             recordingStartDate = nil
+            logShadowFinish(run, session: session)
             DiagnosticLogger.shared.log("SHADOW_STOP | admitted")
             await runLiveDebrief(session.live)
         }
+    }
+
+    // MARK: Shadow diagnostics
+
+    private static func seconds(since instant: ContinuousClock.Instant) -> TimeInterval {
+        let d = (ContinuousClock.now - instant).components
+        return Double(d.seconds) + Double(d.attoseconds) / 1e18
+    }
+
+    /// `m:ss` for "shadow participant lost at ...".
+    nonisolated static func formatShadowTime(_ seconds: TimeInterval) -> String {
+        let whole = max(0, Int(seconds))
+        return "\(whole / 60):" + String(format: "%02d", whole % 60)
+    }
+
+    nonisolated static func shadowJoinStateLine(_ state: ShadowJoinState?, after seconds: TimeInterval, note: String? = nil) -> String {
+        let name: String
+        switch state {
+        case .joining: name = "joining"
+        case .waitingForAdmission: name = "waitingForAdmission"
+        case .admitted: name = "admitted"
+        case .failed(let failure): name = "failed(\(failure))"
+        case .left: name = "left"
+        case nil: name = note ?? "event"
+        }
+        return "SHADOW_JOIN | state=\(name) | t=\(String(format: "%.1f", seconds))s"
+    }
+
+    nonisolated static func shadowJoinFinishLine(host: ShadowHostKind, admittedAfter: TimeInterval?, speakerEvents: Int, themNonSilentSeconds: TimeInterval) -> String {
+        let admitted = admittedAfter.map { String(format: "%.1fs", $0) } ?? "never"
+        return "SHADOW_JOIN | finish | host=\(host.rawValue) | admitted_after=\(admitted) | speaker_events=\(speakerEvents) | them_nonsilent=\(String(format: "%.1f", themNonSilentSeconds))s"
+    }
+
+    private func logShadowFinish(_ run: ShadowRun, session: CallRecordingSession? = nil) {
+        DiagnosticLogger.shared.log(Self.shadowJoinFinishLine(
+            host: run.hostKind,
+            admittedAfter: run.admittedAfter,
+            speakerEvents: run.speakerEventCount,
+            themNonSilentSeconds: session?.themNonSilentSeconds ?? 0
+        ))
     }
 
     nonisolated static func shadowFailureMessage(for failure: ShadowFailure) -> (title: String, body: String) {
@@ -1515,6 +1748,7 @@ final class MenuBarViewModel: ObservableObject {
     /// (`runCallDebrief`) so both behave identically.
     private func reportDebriefSuccess(_ result: DebriefResult) {
         lastDebriefEngineName = result.engineName
+        lastDebriefIssues = result.issues
         DiagnosticLogger.shared.log(
             "DEBRIEF | engine=\(result.engineName) | chars=\(result.renderedText.count)"
             + " | folder=\(result.paths.folder.lastPathComponent)"

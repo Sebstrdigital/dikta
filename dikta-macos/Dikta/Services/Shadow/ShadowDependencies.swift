@@ -1,5 +1,20 @@
 import AppKit
 
+/// What the user picked when the host had not admitted the shadow participant in time.
+enum ShadowTimeoutChoice: Equatable {
+    case keepWaiting
+    case switchToSystemAudio
+}
+
+/// Stands in for the system-audio tap while the shadow participant is still waiting to be
+/// admitted: the Me track is already recording, and the real tap replaces this on admission
+/// (or on a switch to Microphone + system audio).
+final class IdleSystemAudioCapture: SystemAudioCapturing {
+    var onSamples: (([Float]) -> Void)?
+    func start() async throws {}
+    func stop() {}
+}
+
 /// The outside-world seams of a shadow participant session. Tests replace all of
 /// them: no browser, no tap, no modal sheet.
 struct ShadowDependencies {
@@ -11,6 +26,8 @@ struct ShadowDependencies {
     /// the one-time consent notice. Returns nil when the user cancels.
     var promptForMeeting: @MainActor (URL?, String, Bool) async -> URL?
     var clipboardText: () -> String?
+    /// Asks what to do when the host has not admitted us after the given number of seconds.
+    var askAdmissionTimeout: @MainActor (TimeInterval) async -> ShadowTimeoutChoice = { _ in .keepWaiting }
 
     static let live = ShadowDependencies(
         isEnabled: { ShadowParticipantFlag.isEnabled() },
@@ -24,7 +41,8 @@ struct ShadowDependencies {
         promptForMeeting: { prefill, name, showNotice in
             ShadowMeetingSheet.askForMeeting(prefill: prefill, notetakerName: name, showNotice: showNotice)
         },
-        clipboardText: { NSPasteboard.general.string(forType: .string) }
+        clipboardText: { NSPasteboard.general.string(forType: .string) },
+        askAdmissionTimeout: { ShadowMeetingSheet.askAfterAdmissionTimeout(seconds: $0) }
     )
 }
 
@@ -55,6 +73,17 @@ enum ShadowMeetingSheet {
             field.stringValue = ""
             field.placeholderString = "Not a Meet, Teams or Zoom link"
         }
+    }
+
+    static func askAfterAdmissionTimeout(seconds: TimeInterval) -> ShadowTimeoutChoice {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Dikta has not been let into the meeting"
+        alert.informativeText = "The host has not admitted Dikta after \(Int(seconds)) seconds. Keep waiting, or switch this recording to Microphone + system audio. Your microphone has been recorded all along and the recording continues in the same session."
+        alert.addButton(withTitle: "Keep Waiting")
+        alert.addButton(withTitle: "Use Microphone + System Audio")
+        return alert.runModal() == .alertFirstButtonReturn ? .keepWaiting : .switchToSystemAudio
     }
 
     /// Returns the new name, or nil when cancelled or empty.

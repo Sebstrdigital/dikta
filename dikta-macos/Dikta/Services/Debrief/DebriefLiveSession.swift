@@ -209,6 +209,10 @@ final class DebriefLiveSession: @unchecked Sendable {
         }
     }
 
+    /// Adds a non-fatal problem noticed outside the session (e.g. the shadow participant
+    /// dropping out mid-call) to `DebriefResult.issues`.
+    func noteIssue(_ issue: String) { record(issue) }
+
     private func record(_ issue: String) {
         lock.lock()
         issues.append(issue)

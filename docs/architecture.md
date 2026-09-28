@@ -215,7 +215,7 @@ UserDefaults key `experimentalShadowParticipant` is true (`ShadowParticipantFlag
 is the v1.5 menu, and a saved `debrief_source` of this case is ignored (`MenuBarViewModel.isShadowMode`).
 
 Config: `shadow_host` (`wkWebView` | `chrome`, default `wkWebView`), `shadow_display_name` (default
-`Dikta · notes (<macOS full name>)`), `shadow_notice_shown` (one-time consent notice). All decode with defaults.
+`Dikta · notes (<macOS full name>)`), `shadow_notice_shown` (one-time consent notice), `shadow_join_timeout_seconds` (default 90). All decode with defaults.
 
 Pieces (`Dikta/Services/Shadow/`):
 - `ShadowHost` — browser-backed guest (`WKWebViewShadowHost` off-screen web view, `ChromeShadowHost` installed
@@ -227,11 +227,19 @@ Pieces (`Dikta/Services/Shadow/`):
   clipboard); tests replace all of them.
 
 Flow (`MenuBarViewModel.startShadowRecording` / `stopShadowRecording`): hotkey → meeting sheet (clipboard
-pre-fill, consent notice with the notetaker name on first use) → host joins, `appState = .recording` at once so
-the hotkey can cancel a join → on `.admitted`: session folder, two writers, live session, tap targeted at
-`host.audioProcessIDs`, then the mic → stop: host leaves, tap and mic stop, writers close, `runLiveDebrief`
-exactly as a call recording. `muteAll()` is never called; push-to-talk is ignored. Stopping before admission or a
-`.failed` state returns to idle with no session folder and no debrief.
+pre-fill, consent notice with the notetaker name on first use) → `appState = .recording` at once, session folder,
+two writers, live session and the mic start (the Them track stays closed) → host joins → on `.admitted`: tap
+targeted at `host.audioProcessIDs`, Them opens zero-padded to the Me clock → stop: host leaves, tap and mic stop,
+writers close, `runLiveDebrief` exactly as a call recording. `muteAll()` is never called; push-to-talk is ignored.
+Stopping before admission or a `.failed` state returns to idle and deletes the session folder, no debrief.
+
+Failure handling: `shadow_join_timeout_seconds` (default 90) arms a timer at join; when it fires without admission
+`ShadowDependencies.askAdmissionTimeout` asks keep waiting (re-arms) or switch. Switch leaves the meeting and starts
+the all-system-audio tap (`systemAudioCaptureFactory`) in the same session, keeping the Me audio so far. A `.left`/
+`.failed` state or a finished event stream after admission is a host loss: warned once, Me keeps recording,
+`DebriefResult.issues` gets `shadow participant lost at m:ss`. With diagnostic logging on, each state transition
+logs a `SHADOW_JOIN | state=` line and the end of the run a `SHADOW_JOIN | finish` line (host, admitted_after or
+`never`, speaker_events, them_nonsilent).
 
 ## macOS Permissions
 

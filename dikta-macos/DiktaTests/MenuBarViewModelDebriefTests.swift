@@ -1126,6 +1126,9 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
         var promptCalls: [(prefill: URL?, name: String, showNotice: Bool)] = []
         var hostKinds: [ShadowHostKind] = []
         var capturePIDs: [Set<pid_t>] = []
+        /// Answers to the admission-timeout warning, consumed in order; keep waiting once empty.
+        var timeoutChoices: [ShadowTimeoutChoice] = []
+        var timeoutAsks: [TimeInterval] = []
     }
 
     private func makeShadowViewModel(
@@ -1133,7 +1136,8 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
         host: FakeShadowHost,
         capture: FakeSystemAudioCapture,
         summarizer: DebriefSummarizer,
-        muterRegistry: (any MuterRegistering)? = nil
+        muterRegistry: (any MuterRegistering)? = nil,
+        systemAudioCaptureFactory: (() -> any SystemAudioCapturing)? = nil
     ) -> (MenuBarViewModel, FakeTranscriptionEngine) {
         configService.debriefModeEnabled = true
         configService.debriefSource = .joinMeetingAsParticipant
@@ -1145,9 +1149,13 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
                 probe.promptCalls.append((prefill, name, notice))
                 return probe.promptResult
             },
-            clipboardText: { probe.clipboard }
+            clipboardText: { probe.clipboard },
+            askAdmissionTimeout: { seconds in
+                probe.timeoutAsks.append(seconds)
+                return probe.timeoutChoices.isEmpty ? .keepWaiting : probe.timeoutChoices.removeFirst()
+            }
         )
-        return makeViewModel(summarizer: summarizer, transcript: "", muterRegistry: muterRegistry, shadow: deps)
+        return makeViewModel(summarizer: summarizer, transcript: "", muterRegistry: muterRegistry, systemAudioCaptureFactory: systemAudioCaptureFactory, shadow: deps)
     }
 
     func test_shadowSource_flagOff_hidesCaseAndIgnoresSavedSource() {
@@ -1323,5 +1331,179 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
         XCTAssertNil(host.joinedURL)
         XCTAssertEqual(viewModel.appState, .idle)
         XCTAssertFalse(configService.shadowNoticeShown, "a cancelled sheet does not count as consent given")
+    }
+
+    // MARK: Shadow participant: failing loudly and falling back
+
+    /// Size of a WAV that holds at least `seconds` of 16 kHz mono audio, whatever the sample
+    /// width (16-bit at the least): a floor, not an exact figure.
+    private func wavBytes(atLeastSeconds seconds: Int) -> Int { 44 + 16_000 * 2 * seconds }
+
+    private func fileSize(_ url: URL) -> Int {
+        ((try? FileManager.default.attributesOfItem(atPath: url.path)[.size]) as? Int) ?? 0
+    }
+
+    func test_shadowTimeout_keepWaiting_asksAgainAndStillAdmits() async {
+        let probe = ShadowProbe()
+        probe.promptResult = meetURL
+        probe.timeoutChoices = [.keepWaiting, .keepWaiting]
+        configService.shadowJoinTimeoutSeconds = 0.1
+        let host = FakeShadowHost()
+        let capture = FakeSystemAudioCapture()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeShadowViewModel(probe: probe, host: host, capture: capture, summarizer: summarizer)
+
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await waitUntil(timeout: 5) { host.joinedURL != nil }
+        host.send(.state(.waitingForAdmission))
+        await waitUntil(timeout: 5) { probe.timeoutAsks.count >= 2 }
+
+        XCTAssertEqual(probe.timeoutAsks.first, 0.1)
+        XCTAssertGreaterThanOrEqual(probe.timeoutAsks.count, 2, "keep waiting re-arms the timer")
+        XCTAssertEqual(viewModel.appState, .recording)
+        XCTAssertEqual(host.leaveCallCount, 0, "keep waiting stays in the meeting")
+        XCTAssertEqual(capture.startCallCount, 0)
+
+        host.send(.state(.admitted))
+        await waitUntil(timeout: 5) { capture.isRunning }
+        XCTAssertTrue(capture.isRunning)
+        let asks = probe.timeoutAsks.count
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(probe.timeoutAsks.count, asks, "no more warnings once admitted")
+    }
+
+    func test_shadowTimeout_switchToSystemAudio_keepsMeAudioInSameSession() async throws {
+        let probe = ShadowProbe()
+        probe.promptResult = meetURL
+        probe.timeoutChoices = [.switchToSystemAudio]
+        configService.shadowJoinTimeoutSeconds = 0.5
+        let host = FakeShadowHost()
+        let shadowTap = FakeSystemAudioCapture()
+        let systemTap = FakeSystemAudioCapture()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, engine) = makeShadowViewModel(
+            probe: probe, host: host, capture: shadowTap, summarizer: summarizer,
+            systemAudioCaptureFactory: { systemTap }
+        )
+        engine.segmentsToReturn = [TranscriptSegment(start: 0, end: 1, text: "We agreed on the plan.")]
+
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await waitUntil(timeout: 5) { host.joinedURL != nil && viewModel.audioRecorder.recording }
+        host.send(.state(.waitingForAdmission))
+
+        // Me audio captured while waiting to be let in.
+        for _ in 0..<3 { viewModel.audioRecorder.onLiveSamples?([Float](repeating: 0.2, count: 16_000)) }
+        let folder = try XCTUnwrap(sessionFolders.first, "the session folder exists from the hotkey on")
+
+        await waitUntil(timeout: 5) { systemTap.isRunning }
+
+        XCTAssertEqual(probe.timeoutAsks, [0.5])
+        XCTAssertTrue(systemTap.isRunning, "the switch starts the all-system-audio tap")
+        XCTAssertEqual(shadowTap.startCallCount, 0)
+        XCTAssertEqual(host.leaveCallCount, 1, "the shadow participant leaves the meeting")
+        XCTAssertEqual(viewModel.appState, .recording, "recording continues through the switch")
+        XCTAssertTrue(viewModel.audioRecorder.recording, "the microphone never stopped")
+
+        systemTap.feed([Float](repeating: 0.2, count: 16_000))
+        viewModel.audioRecorder.onLiveSamples?([Float](repeating: 0.2, count: 16_000))
+        viewModel.stopRecording()
+        await waitUntil(timeout: 10) { viewModel.appState == .idle && summarizer.summarizeCallCount > 0 }
+
+        XCTAssertEqual(sessionFolders, [folder], "same session folder, no second one")
+        XCTAssertGreaterThanOrEqual(fileSize(folder.appendingPathComponent("me.wav")), wavBytes(atLeastSeconds: 4), "Me audio from before the switch is kept")
+        XCTAssertGreaterThanOrEqual(fileSize(folder.appendingPathComponent("them.wav")), wavBytes(atLeastSeconds: 4), "Them is padded to the Me clock")
+        XCTAssertEqual(systemTap.stopCallCount, 1)
+        XCTAssertEqual(host.leaveCallCount, 1, "stopping does not leave twice")
+        XCTAssertEqual(summarizer.summarizeCallCount, 1)
+        XCTAssertEqual(clipboard.pastedMultiline.count, 1)
+    }
+
+    func test_shadowHostLost_midCall_keepsMeTrackWarnsOnceAndListsIssue() async throws {
+        let probe = ShadowProbe()
+        probe.promptResult = meetURL
+        let host = FakeShadowHost()
+        let capture = FakeSystemAudioCapture()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, engine) = makeShadowViewModel(probe: probe, host: host, capture: capture, summarizer: summarizer)
+        engine.segmentsToReturn = [TranscriptSegment(start: 0, end: 1, text: "We agreed on the plan.")]
+
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await waitUntil(timeout: 5) { host.joinedURL != nil }
+        host.send(.state(.admitted))
+        await waitUntil(timeout: 5) { capture.isRunning }
+
+        host.send(.state(.left))
+        host.send(.state(.failed(.pageLoadFailed("gone"))))
+        await waitUntil(timeout: 5) { host.leaveCallCount == 1 && !viewModel.shadowWarningTitles.isEmpty }
+
+        XCTAssertEqual(viewModel.shadowWarningTitles.count, 1, "warned once")
+        XCTAssertEqual(viewModel.appState, .recording, "the Me track keeps recording")
+        XCTAssertTrue(viewModel.audioRecorder.recording)
+
+        viewModel.audioRecorder.onLiveSamples?([Float](repeating: 0.2, count: 16_000))
+        viewModel.stopRecording()
+        await waitUntil(timeout: 10) { viewModel.appState == .idle && summarizer.summarizeCallCount > 0 }
+
+        XCTAssertEqual(viewModel.shadowWarningTitles.count, 1)
+        XCTAssertEqual(host.leaveCallCount, 1, "a lost host is not left again")
+        XCTAssertEqual(summarizer.summarizeCallCount, 1, "the debrief still finishes")
+        XCTAssertTrue(
+            viewModel.lastDebriefIssues.contains { $0.hasPrefix("shadow participant lost at ") },
+            "issues: \(viewModel.lastDebriefIssues)"
+        )
+    }
+
+    func test_shadowHostLost_whenEventStreamEndsWithoutStop_isTreatedAsLoss() async {
+        let probe = ShadowProbe()
+        probe.promptResult = meetURL
+        let host = FakeShadowHost()
+        let capture = FakeSystemAudioCapture()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeShadowViewModel(probe: probe, host: host, capture: capture, summarizer: summarizer)
+
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await waitUntil(timeout: 5) { host.joinedURL != nil }
+        host.send(.state(.admitted))
+        await waitUntil(timeout: 5) { capture.isRunning }
+
+        await host.leave()   // the stream finishes on its own, as when the browser dies
+        await waitUntil(timeout: 5) { !viewModel.shadowWarningTitles.isEmpty }
+
+        XCTAssertEqual(viewModel.shadowWarningTitles.count, 1)
+        XCTAssertEqual(viewModel.appState, .recording)
+    }
+
+    func test_shadowJoinLogLines_carryStateAndFinishFields() {
+        XCTAssertEqual(
+            MenuBarViewModel.shadowJoinStateLine(.waitingForAdmission, after: 3.24),
+            "SHADOW_JOIN | state=waitingForAdmission | t=3.2s"
+        )
+        XCTAssertEqual(
+            MenuBarViewModel.shadowJoinFinishLine(host: .chrome, admittedAfter: 12.5, speakerEvents: 7, themNonSilentSeconds: 41.25),
+            "SHADOW_JOIN | finish | host=chrome | admitted_after=12.5s | speaker_events=7 | them_nonsilent=41.2s"
+        )
+        XCTAssertTrue(
+            MenuBarViewModel.shadowJoinFinishLine(host: .wkWebView, admittedAfter: nil, speakerEvents: 0, themNonSilentSeconds: 0)
+                .contains("admitted_after=never")
+        )
+        XCTAssertEqual(MenuBarViewModel.formatShadowTime(125.9), "2:05")
+    }
+
+    func test_appConfig_shadowJoinTimeout_defaultsTo90AndRoundTrips() throws {
+        XCTAssertEqual(AppConfig.default.shadowJoinTimeoutSeconds, 90)
+        let encoded = try JSONEncoder().encode(AppConfig.default)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        json.removeValue(forKey: "shadow_join_timeout_seconds")
+        let old = try JSONDecoder().decode(AppConfig.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertEqual(old.shadowJoinTimeoutSeconds, 90)
+
+        var config = AppConfig.default
+        config.shadowJoinTimeoutSeconds = 30
+        let back = try JSONDecoder().decode(AppConfig.self, from: JSONEncoder().encode(config))
+        XCTAssertEqual(back.shadowJoinTimeoutSeconds, 30)
     }
 }

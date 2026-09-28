@@ -306,6 +306,15 @@ final class ConfigService: ObservableObject {
         }
     }
 
+    var shadowJoinTimeoutSeconds: TimeInterval {
+        get { config.shadowJoinTimeoutSeconds }
+        set {
+            config.shadowJoinTimeoutSeconds = newValue
+            objectWillChange.send()
+            save()
+        }
+    }
+
     var ollamaModel: String {
         get { config.ollamaModel }
         set {
