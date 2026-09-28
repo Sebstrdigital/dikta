@@ -14,7 +14,7 @@ All notable changes to Dikta will be documented in this file.
 ### Features
 - **Parakeet transcription engine** — a new Engine submenu (Advanced menu) switches dictation
   between WhisperKit (unchanged default) and three FluidAudio-backed Parakeet variants: Redux
-  (~480 MB), v3 (~600 MB, marked Recommended), and Ultra (~1200 MB). Switching engines takes effect
+  (~210 MB), v3 (~460 MB, marked Recommended), and Ultra (~600 MB). Switching engines takes effect
   immediately, with a free-disk-space check before each new variant downloads; if a switch fails to
   load, the previously active engine is kept rather than leaving dictation stuck. Under the Whisper
   engine, Svenska still auto-selects KB-Whisper Small — every Parakeet variant benchmarked roughly

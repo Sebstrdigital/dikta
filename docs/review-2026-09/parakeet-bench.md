@@ -99,7 +99,7 @@ On this evidence, the Engine menu's `(Recommended)` label belongs on
 **Parakeet v3** for English — it has the best English WER of every model
 measured here (5.38%, beating turbo's 6.67%, Redux's 5.81%, and Ultra's
 6.45%), an overall RTF roughly 10x faster than turbo (0.009 vs 0.087), and a
-mid-sized footprint (600MB) between Redux (480MB) and Ultra (1200MB); the
+mid-sized footprint (461 MB on disk) between Redux (210 MB) and Ultra (603 MB); the
 one real cost is a one-time ~86s cold load on first use (Neural Engine
 compile), which is a one-off per machine, not a per-transcription tax.
 Swedish should **not** move off KB-Whisper: every Parakeet variant scored

@@ -26,13 +26,19 @@ enum TranscriptionEngineKind: String, Codable, CaseIterable {
 
     /// Approximate on-disk size of the downloaded model, in megabytes. Used for
     /// the free-disk-space pre-check before a download starts (see
-    /// `WhisperModel.approximateSizeMB` for the equivalent Whisper-side check).
+    /// `WhisperModel.approximateSizeMB` for the equivalent Whisper-side check)
+    /// and for the size shown in the Engine submenu.
+    ///
+    /// Parakeet figures are what FluidAudio actually leaves in
+    /// `~/Library/Application Support/FluidAudio/Models/` after a download,
+    /// measured 2026-09-28 with FluidAudio 0.17.x: redux 210 MB, v3 461 MB,
+    /// ultra 603 MB. Whisper's figure is the turbo default download.
     var approximateSizeMB: Int {
         switch self {
         case .whisper: return 650
-        case .parakeetRedux: return 480
-        case .parakeetV3: return 600
-        case .parakeetUltra: return 1200
+        case .parakeetRedux: return 210
+        case .parakeetV3: return 460
+        case .parakeetUltra: return 600
         }
     }
 
