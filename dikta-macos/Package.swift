@@ -1,10 +1,10 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 import PackageDescription
 
 let package = Package(
     name: "Dikta",
     platforms: [
-        .macOS("14.2")
+        .macOS("15.0")
     ],
     products: [
         .executable(name: "Dikta", targets: ["Dikta"]),
@@ -14,6 +14,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/argmaxinc/argmax-oss-swift", from: "1.1.0"),
         .package(url: "https://github.com/sparkle-project/Sparkle", "2.0.0"..<"3.0.0"),
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.17.3"),
     ],
     targets: [
         .executableTarget(
@@ -21,6 +22,7 @@ let package = Package(
             dependencies: [
                 .product(name: "WhisperKit", package: "argmax-oss-swift"),
                 .product(name: "Sparkle", package: "Sparkle"),
+                .product(name: "FluidAudio", package: "FluidAudio"),
             ],
             path: "Dikta",
             exclude: ["Resources/Info.plist", "Resources/Dikta.entitlements"],
@@ -37,6 +39,7 @@ let package = Package(
             name: "DiktaBench",
             dependencies: [
                 .product(name: "WhisperKit", package: "argmax-oss-swift"),
+                .product(name: "FluidAudio", package: "FluidAudio"),
             ],
             path: "bench/DiktaBench"
         ),
