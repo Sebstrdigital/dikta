@@ -2,6 +2,8 @@
 
 All notable changes to Dikta will be documented in this file.
 
+- 2026-09-28: `build-release.sh` and macOS CI now abort the release/job if `DiktaTests` didn't actually execute (zero matched tests or a non-zero exit) — closing tech debt carried unresolved for 14 sprints.
+- 2026-09-28: `ConfigService.save()` now uses a single atomic-write strategy (temp file + `replaceItemAt`), removing the duplicate approach that had carried as unresolved tech debt for 14 sprints.
 - 2026-04-17: DiagnosticLogger (Windows) now correctly gated behind `[Conditional("DIAGNOSTICS")]` compile flag — release builds produce no log output
 
 ## [Unreleased] - Dikta v1.5 — Parakeet
