@@ -1,0 +1,9 @@
+{
+  "model": "parakeet-redux",
+  "lang": "sv",
+  "n_files": 20,
+  "wer": 0.10981308411214953,
+  "median_rtf": 0.01052489644498538,
+  "model_load_seconds": 0.17396104335784912,
+  "scored_at": "2026-09-28T06:51:01.721046+00:00"
+}
