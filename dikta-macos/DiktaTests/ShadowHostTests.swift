@@ -1,5 +1,13 @@
 import XCTest
+import CoreAudio
 @testable import Dikta
+
+/// Stands in for a WKWebView that exposes the `_gpuProcessIdentifier` SPI.
+private final class WithGPUProcessSPI: NSObject {
+    let value: pid_t
+    init(_ value: pid_t) { self.value = value }
+    @objc var _gpuProcessIdentifier: pid_t { value }
+}
 
 @MainActor
 final class ShadowHostTests: XCTestCase {
@@ -82,7 +90,7 @@ final class ShadowHostTests: XCTestCase {
 
     // MARK: - WebKit process filter
 
-    func testWebKitScanner_picksOnlyOwnedAudioHelpers() {
+    func testWebKitScanner_picksOnlyOwnedGPUProcess() {
         let own: pid_t = 100
         let procs = [
             ShadowProcessInfo(pid: 100, path: "/Applications/Dikta.app/Contents/MacOS/Dikta", responsiblePID: 100),
@@ -90,8 +98,121 @@ final class ShadowHostTests: XCTestCase {
             ShadowProcessInfo(pid: 102, path: "/S/WebKit.framework/XPCServices/com.apple.WebKit.GPU.xpc/x", responsiblePID: 100),
             ShadowProcessInfo(pid: 103, path: "/S/WebKit.framework/XPCServices/com.apple.WebKit.Networking.xpc/x", responsiblePID: 100),
             ShadowProcessInfo(pid: 200, path: "/S/WebKit.framework/XPCServices/com.apple.WebKit.WebContent.xpc/x", responsiblePID: 999),
+            ShadowProcessInfo(pid: 201, path: "/S/WebKit.framework/XPCServices/com.apple.WebKit.GPU.xpc/x", responsiblePID: 999),
         ]
-        XCTAssertEqual(WebKitProcessScanner.audioProcessIDs(in: procs, ownPID: own), [101, 102])
+        XCTAssertEqual(WebKitProcessScanner.audioProcessIDs(in: procs, ownPID: own), [102])
+    }
+
+    func testWebKitScanner_unionsSPIGPUPid_ignoresZeroAndOwnPid() {
+        let own: pid_t = 100
+        let procs = [
+            ShadowProcessInfo(pid: 100, path: "/Applications/Dikta.app/Contents/MacOS/Dikta", responsiblePID: 100),
+            ShadowProcessInfo(pid: 101, path: "/S/WebKit.framework/XPCServices/com.apple.WebKit.WebContent.xpc/x", responsiblePID: 100),
+            ShadowProcessInfo(pid: 102, path: "/S/WebKit.framework/XPCServices/com.apple.WebKit.GPU.xpc/x", responsiblePID: 100),
+        ]
+        // The GPU process is launchd-spawned; the scan may miss it, the SPI pid still counts.
+        XCTAssertEqual(WebKitProcessScanner.audioProcessIDs(in: procs, ownPID: own, gpuPID: 300), [102, 300])
+        XCTAssertEqual(WebKitProcessScanner.audioProcessIDs(in: procs, ownPID: own, gpuPID: 102), [102])
+        XCTAssertEqual(WebKitProcessScanner.audioProcessIDs(in: [], ownPID: own, gpuPID: 300), [300])
+        XCTAssertEqual(WebKitProcessScanner.audioProcessIDs(in: procs, ownPID: own, gpuPID: 0), [102])
+        XCTAssertEqual(WebKitProcessScanner.audioProcessIDs(in: procs, ownPID: own, gpuPID: own), [102])
+    }
+
+    func testWebKitSPI_readsGPUPidWhenPresent_nilWhenAbsentOrZero() {
+        XCTAssertEqual(WebKitProcessScanner.gpuProcessIdentifier(of: WithGPUProcessSPI(4321)), 4321)
+        XCTAssertNil(WebKitProcessScanner.gpuProcessIdentifier(of: WithGPUProcessSPI(0)))
+        XCTAssertNil(WebKitProcessScanner.gpuProcessIdentifier(of: NSObject()), "no SPI: nil, no exception")
+    }
+
+    // MARK: - Chromium process tree
+
+    private static let chromeTable = [
+        ShadowProcessInfo(pid: 1, path: "/sbin/launchd", responsiblePID: 1, parentPID: 0),
+        ShadowProcessInfo(pid: 500, path: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", responsiblePID: 99, parentPID: 99),
+        ShadowProcessInfo(pid: 501, path: "/x/Google Chrome Helper.app/Contents/MacOS/Google Chrome Helper", responsiblePID: 500, parentPID: 500),
+        ShadowProcessInfo(pid: 502, path: "/x/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)", responsiblePID: 500, parentPID: 500),
+        ShadowProcessInfo(pid: 503, path: "/x/grandchild", responsiblePID: 500, parentPID: 502),
+        ShadowProcessInfo(pid: 600, path: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", responsiblePID: 600, parentPID: 1),
+        ShadowProcessInfo(pid: 601, path: "/x/Google Chrome Helper.app/Contents/MacOS/Google Chrome Helper", responsiblePID: 600, parentPID: 600),
+        ShadowProcessInfo(pid: 99, path: "/Applications/Dikta.app/Contents/MacOS/Dikta", responsiblePID: 99, parentPID: 1),
+    ]
+
+    func testChromeHost_audioPIDs_mainPlusDescendantsOnly() {
+        XCTAssertEqual(ChromeShadowHost.audioProcessIDs(root: 500, in: Self.chromeTable), [500, 501, 502, 503],
+                       "the user's own Chrome (600) and Dikta (99) are not part of the shadow's tree")
+    }
+
+    func testChromeHost_audioPIDs_rootMissingFromTable_keepsRoot() {
+        XCTAssertEqual(ChromeShadowHost.audioProcessIDs(root: 700, in: Self.chromeTable), [700])
+        XCTAssertEqual(ChromeShadowHost.audioProcessIDs(root: 700, in: []), [700])
+    }
+
+    func testChromeHost_notRunning_hasNoAudioPIDs() {
+        let host = ChromeShadowHost(profiles: Self.fixtureProfiles, browser: { nil }, processLister: { Self.chromeTable })
+        XCTAssertEqual(host.audioProcessIDs, [])
+    }
+
+    func testProcessTree_parentCycleTerminates() {
+        let table = [
+            ShadowProcessInfo(pid: 10, path: "a", responsiblePID: 10, parentPID: 11),
+            ShadowProcessInfo(pid: 11, path: "b", responsiblePID: 10, parentPID: 10),
+        ]
+        XCTAssertEqual(WebKitProcessScanner.processTree(rootedAt: 10, in: table), [10, 11])
+    }
+
+    // MARK: - Tap target wait after admission
+
+    /// Resolves nothing until `resolvableFromCall`, then resolves the listed pids.
+    private final class TickingLister: AudioProcessListing {
+        let resolvable: Set<pid_t>
+        let resolvableFromCall: Int
+        private(set) var calls = 0
+        init(resolvable: Set<pid_t>, fromCall: Int) { self.resolvable = resolvable; self.resolvableFromCall = fromCall }
+        func audioProcessObject(forPID pid: pid_t) -> (status: OSStatus, id: AudioObjectID?) {
+            calls += 1
+            return calls >= resolvableFromCall && resolvable.contains(pid) ? (0, AudioObjectID(pid)) : (-1, nil)
+        }
+    }
+
+    func testTapTargetWait_retriesUntilResolvable() async {
+        let lister = TickingLister(resolvable: [42], fromCall: 2)
+        var sleeps: [Duration] = []
+        let wait = ShadowTapTargetWait(lister: lister, timeout: .seconds(10), interval: .milliseconds(500),
+                                       sleep: { sleeps.append($0) })
+        var reads = 0
+        let outcome = await wait.run(currentPIDs: { reads += 1; return reads < 3 ? [] : [42] })
+        XCTAssertEqual(outcome, .init(pids: [42], resolvable: true, attempts: 4))
+        XCTAssertEqual(sleeps, Array(repeating: .milliseconds(500), count: 3))
+        XCTAssertEqual(reads, 4, "PIDs are re-read on every check")
+    }
+
+    func testTapTargetWait_givesUpAfterTimeout() async {
+        let lister = TickingLister(resolvable: [], fromCall: 0)
+        var sleeps = 0
+        let wait = ShadowTapTargetWait(lister: lister, timeout: .seconds(10), interval: .milliseconds(500),
+                                       sleep: { _ in sleeps += 1 })
+        let outcome = await wait.run(currentPIDs: { [7, 8] })
+        XCTAssertEqual(outcome, .init(pids: [7, 8], resolvable: false, attempts: 21))
+        XCTAssertEqual(sleeps, 20, "10 s at 500 ms: 21 checks, 20 sleeps")
+    }
+
+    func testTapTargetWait_resolvableImmediately_doesNotSleep() async {
+        let lister = TickingLister(resolvable: [5], fromCall: 0)
+        var sleeps = 0
+        let wait = ShadowTapTargetWait(lister: lister, sleep: { _ in sleeps += 1 })
+        let outcome = await wait.run(currentPIDs: { [5, 6] })
+        XCTAssertEqual(outcome, .init(pids: [5, 6], resolvable: true, attempts: 1))
+        XCTAssertEqual(sleeps, 0)
+    }
+
+    func testTapTargetWait_stopsEarlyWhenToldTo() async {
+        let lister = TickingLister(resolvable: [], fromCall: 0)
+        var sleeps = 0
+        let wait = ShadowTapTargetWait(lister: lister, sleep: { _ in sleeps += 1 })
+        let outcome = await wait.run(currentPIDs: { [7] }, shouldContinue: { sleeps < 2 })
+        XCTAssertFalse(outcome.resolvable)
+        XCTAssertEqual(sleeps, 2)
+        XCTAssertEqual(outcome.attempts, 2)
     }
 
     // MARK: - WKWebView host against the fixture
@@ -157,7 +278,8 @@ final class ShadowHostTests: XCTestCase {
         let states = await collectStates(from: host)
         await host.leave()
         XCTAssertEqual(states, [.joining, .waitingForAdmission, .admitted])
-        XCTAssertEqual(pids.count, 1)
+        XCTAssertFalse(pids.isEmpty, "the launched browser (and its helpers) are tap targets")
+        XCTAssertFalse(pids.contains(getpid()))
     }
 
     // MARK: - Speaker capture

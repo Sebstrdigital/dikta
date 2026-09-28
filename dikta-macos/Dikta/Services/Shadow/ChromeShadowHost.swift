@@ -133,6 +133,8 @@ final class ChromeShadowHost: ShadowHost {
     private let profileDir: URL
     private let extraArguments: [String]
     private let driverTemplate: ShadowJoinDriver?
+    /// Process table used to find the browser's helper processes; injectable for tests.
+    private let processLister: () -> [ShadowProcessInfo]
 
     private var process: Process?
     private var connection: CDPConnection?
@@ -149,7 +151,8 @@ final class ChromeShadowHost: ShadowHost {
          browser: @escaping () -> URL? = { ChromiumLocator.find() },
          profileDir: URL = ChromeShadowHost.defaultProfileDir,
          extraArguments: [String] = [],
-         driver: ShadowJoinDriver? = nil) {
+         driver: ShadowJoinDriver? = nil,
+         processLister: @escaping () -> [ShadowProcessInfo] = WebKitProcessScanner.liveProcesses) {
         var cont: AsyncStream<ShadowEvent>.Continuation!
         events = AsyncStream { cont = $0 }
         continuation = cont
@@ -158,11 +161,22 @@ final class ChromeShadowHost: ShadowHost {
         self.profileDir = profileDir
         self.extraArguments = extraArguments
         self.driverTemplate = driver
+        self.processLister = processLister
     }
 
+    /// The launched browser plus all its live descendants. Chromium plays audio from a
+    /// child helper (`--utility-sub-type=audio.mojom.AudioService`), never from the main
+    /// process, so the main PID alone never resolves to a CoreAudio process object.
     var audioProcessIDs: [pid_t] {
         guard let process, process.isRunning else { return [] }
-        return [process.processIdentifier]
+        return Self.audioProcessIDs(root: process.processIdentifier, in: processLister())
+    }
+
+    /// `root` and its descendants in `processes`; `[root]` when the table does not list it
+    /// (e.g. the process listing failed), so the main PID is never lost.
+    nonisolated static func audioProcessIDs(root: pid_t, in processes: [ShadowProcessInfo]) -> [pid_t] {
+        let tree = WebKitProcessScanner.processTree(rootedAt: root, in: processes)
+        return tree.isEmpty ? [root] : tree
     }
 
     func join(url: URL, displayName: String) async {

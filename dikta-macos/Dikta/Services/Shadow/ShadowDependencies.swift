@@ -15,6 +15,47 @@ final class IdleSystemAudioCapture: SystemAudioCapturing {
     func stop() {}
 }
 
+/// Waits, for a bounded time after admission, until at least one of the host's audio PIDs
+/// has a CoreAudio process object. The meeting page's audio object (WebKit GPU process,
+/// Chromium audio helper) only exists once playback has started, so resolving right at
+/// admission can find nothing and the tap would fall back to the unmuted global tap.
+struct ShadowTapTargetWait {
+    struct Outcome: Equatable {
+        /// The host's PIDs at the last check; what the tap is built from.
+        let pids: Set<pid_t>
+        /// True when at least one of `pids` resolved.
+        let resolvable: Bool
+        /// Checks made, including the first one.
+        let attempts: Int
+    }
+
+    var lister: AudioProcessListing
+    var timeout: Duration = .seconds(10)
+    var interval: Duration = .milliseconds(500)
+    /// Injectable so tests tick without sleeping.
+    var sleep: @MainActor (Duration) async -> Void = { try? await Task.sleep(for: $0) }
+
+    /// Re-reads `currentPIDs` on every check (helpers can appear after admission). Stops
+    /// early when `shouldContinue` turns false.
+    @MainActor
+    func run(currentPIDs: () -> [pid_t], shouldContinue: () -> Bool = { true }) async -> Outcome {
+        let maxAttempts = max(1, Int((timeout / interval).rounded(.down)) + 1)
+        var pids = Set<pid_t>()
+        var attempts = 0
+        while attempts < maxAttempts {
+            attempts += 1
+            pids = Set(currentPIDs())
+            if pids.contains(where: { lister.audioProcessObject(forPID: $0).id != nil }) {
+                return Outcome(pids: pids, resolvable: true, attempts: attempts)
+            }
+            guard attempts < maxAttempts, shouldContinue() else { break }
+            await sleep(interval)
+            guard shouldContinue() else { break }
+        }
+        return Outcome(pids: pids, resolvable: false, attempts: attempts)
+    }
+}
+
 /// The outside-world seams of a shadow participant session. Tests replace all of
 /// them: no browser, no tap, no modal sheet.
 struct ShadowDependencies {
@@ -28,6 +69,9 @@ struct ShadowDependencies {
     var clipboardText: () -> String?
     /// Asks what to do when the host has not admitted us after the given number of seconds.
     var askAdmissionTimeout: @MainActor (TimeInterval) async -> ShadowTimeoutChoice = { _ in .keepWaiting }
+    /// Bounded wait for the host's audio PIDs to become tappable after admission. nil
+    /// (the test default) builds the tap from the PIDs as they are at admission.
+    var tapTargetWait: ShadowTapTargetWait? = nil
 
     static let live = ShadowDependencies(
         isEnabled: { ShadowParticipantFlag.isEnabled() },
@@ -42,7 +86,8 @@ struct ShadowDependencies {
             ShadowMeetingSheet.askForMeeting(prefill: prefill, notetakerName: name, showNotice: showNotice)
         },
         clipboardText: { NSPasteboard.general.string(forType: .string) },
-        askAdmissionTimeout: { ShadowMeetingSheet.askAfterAdmissionTimeout(seconds: $0) }
+        askAdmissionTimeout: { ShadowMeetingSheet.askAfterAdmissionTimeout(seconds: $0) },
+        tapTargetWait: ShadowTapTargetWait(lister: CoreAudioProcessLister())
     )
 }
 

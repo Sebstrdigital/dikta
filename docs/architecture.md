@@ -219,7 +219,10 @@ Config: `shadow_host` (`wkWebView` | `chrome`, default `wkWebView`), `shadow_dis
 
 Pieces (`Dikta/Services/Shadow/`):
 - `ShadowHost` — browser-backed guest (`WKWebViewShadowHost` off-screen web view, `ChromeShadowHost` installed
-  Chromium over CDP). Reports `ShadowEvent`s (join state, active speaker, roster) and `audioProcessIDs`.
+  Chromium over CDP). Reports `ShadowEvent`s (join state, active speaker, roster) and `audioProcessIDs`:
+  WKWebView → the WebKit GPU process only (the one process with a CoreAudio process object during playback;
+  `_gpuProcessIdentifier` SPI, guarded by `responds(to:)`, unioned with a responsibility scan); Chrome → the
+  launched browser plus all descendants by parent PID (audio plays from a `Google Chrome Helper` child).
 - `ShadowPlatform` / `ShadowJoinDriver` — URL table, selectors, join flow. Only Meet has selectors.
 - `ShadowSpeakerPoller` + `SpeakerTimelineRecorder` — active speaker to `speakers.jsonl` in the session folder;
   `SpeakerAttributor` names the Them track from it (Debrief/).
@@ -228,10 +231,17 @@ Pieces (`Dikta/Services/Shadow/`):
 
 Flow (`MenuBarViewModel.startShadowRecording` / `stopShadowRecording`): hotkey → meeting sheet (clipboard
 pre-fill, consent notice with the notetaker name on first use) → `appState = .recording` at once, session folder,
-two writers, live session and the mic start (the Them track stays closed) → host joins → on `.admitted`: tap
-targeted at `host.audioProcessIDs`, Them opens zero-padded to the Me clock → stop: host leaves, tap and mic stop,
+two writers, live session and the mic start (the Them track stays closed) → host joins → on `.admitted`: up to
+10 s (every 500 ms, `ShadowTapTargetWait`) for at least one `host.audioProcessIDs` PID to get a CoreAudio process
+object (it appears only once the page plays audio; `SHADOW_TAP_TARGET` log line), then the tap targeted at those
+PIDs, Them opens zero-padded to the Me clock → stop: host leaves, tap and mic stop,
 writers close, `runLiveDebrief` exactly as a call recording. `muteAll()` is never called; push-to-talk is ignored.
 Stopping before admission or a `.failed` state returns to idle and deletes the session folder, no debrief.
+
+Tap target (`TapTarget.resolve`): taps the resolvable subset of the PIDs, muted (`.mutedWhenTapped`) so the
+shadow's audio is never heard; skipped PIDs log one `DEBRIEF_TAP | partial_target` line. Only when no PID resolves
+does it fall back to the v1.5 unmuted global tap (`DEBRIEF_TAP | fallback_to_global`). Stopping during the wait
+debriefs the Me track without building a tap.
 
 Failure handling: `shadow_join_timeout_seconds` (default 90) arms a timer at join; when it fires without admission
 `ShadowDependencies.askAdmissionTimeout` asks keep waiting (re-arms) or switch. Switch leaves the meeting and starts

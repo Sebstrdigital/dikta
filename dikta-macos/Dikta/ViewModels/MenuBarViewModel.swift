@@ -1325,7 +1325,26 @@ final class MenuBarViewModel: ObservableObject {
         guard let session = run.session else { return }
         run.timeoutTask?.cancel()
 
-        let capture = shadow.captureFactory(Set(run.host.audioProcessIDs))
+        var pids = Set(run.host.audioProcessIDs)
+        if let wait = shadow.tapTargetWait {
+            let started = ContinuousClock.now
+            let outcome = await wait.run(currentPIDs: { run.host.audioProcessIDs },
+                                         shouldContinue: { !run.stopping })
+            pids = outcome.pids
+            DiagnosticLogger.shared.log(
+                "SHADOW_TAP_TARGET | \(outcome.resolvable ? "resolved" : "unresolved") | after=\(String(format: "%.1f", Self.seconds(since: started)))s"
+                + " | attempts=\(outcome.attempts) | pids=\(pids.sorted())"
+            )
+            if run.stopping {
+                // Stopped while waiting: the host did let us in, so the Me track is still
+                // debriefed; no tap is built just to be torn down again.
+                run.admitted = true
+                run.admittedAfter = Self.seconds(since: run.joinStart)
+                return
+            }
+        }
+
+        let capture = shadow.captureFactory(pids)
         session.capture = capture
         capture.onSamples = { [weak session] samples in session?.appendThem(samples) }
         do {

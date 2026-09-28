@@ -1,4 +1,5 @@
 import XCTest
+import CoreAudio
 @testable import Dikta
 
 /// Records paste calls instead of posting CGEvents, so a test run never types
@@ -1129,6 +1130,16 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
         /// Answers to the admission-timeout warning, consumed in order; keep waiting once empty.
         var timeoutChoices: [ShadowTimeoutChoice] = []
         var timeoutAsks: [TimeInterval] = []
+        /// Bounded post-admission wait for tappable PIDs; nil = tap the PIDs as they are.
+        var tapTargetWait: ShadowTapTargetWait?
+    }
+
+    /// Resolves exactly the pids in `resolvable`, which the test changes over time.
+    private final class MutableProcessLister: AudioProcessListing {
+        var resolvable: Set<pid_t> = []
+        func audioProcessObject(forPID pid: pid_t) -> (status: OSStatus, id: AudioObjectID?) {
+            resolvable.contains(pid) ? (0, AudioObjectID(pid)) : (-1, nil)
+        }
     }
 
     private func makeShadowViewModel(
@@ -1153,7 +1164,8 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
             askAdmissionTimeout: { seconds in
                 probe.timeoutAsks.append(seconds)
                 return probe.timeoutChoices.isEmpty ? .keepWaiting : probe.timeoutChoices.removeFirst()
-            }
+            },
+            tapTargetWait: probe.tapTargetWait
         )
         return makeViewModel(summarizer: summarizer, transcript: "", muterRegistry: muterRegistry, systemAudioCaptureFactory: systemAudioCaptureFactory, shadow: deps)
     }
@@ -1268,6 +1280,72 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
         let speakers = try String(contentsOf: folder.appendingPathComponent("speakers.jsonl"), encoding: .utf8)
         XCTAssertTrue(speakers.contains("\"joined\""))
         XCTAssertTrue(speakers.contains("\"Sam\""))
+    }
+
+    /// The meeting's audio helper only gets a CoreAudio process object once playback
+    /// starts: the tap must be built from the PIDs that resolve after admission, not from
+    /// the (unresolvable) set seen at admission.
+    func test_shadowAdmitted_waitsForTappablePIDsBeforeBuildingTap() async {
+        let probe = ShadowProbe()
+        probe.promptResult = meetURL
+        let host = FakeShadowHost()
+        host.audioProcessIDs = [4242]
+        let lister = MutableProcessLister()
+        var ticks = 0
+        probe.tapTargetWait = ShadowTapTargetWait(lister: lister, timeout: .seconds(10), interval: .milliseconds(500), sleep: { _ in
+            ticks += 1
+            if ticks == 3 {
+                // The GPU / audio helper appears and gets an audio object.
+                host.audioProcessIDs = [4242, 4250]
+                lister.resolvable = [4250]
+            }
+        })
+        let capture = FakeSystemAudioCapture()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeShadowViewModel(probe: probe, host: host, capture: capture, summarizer: summarizer)
+
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await waitUntil(timeout: 5) { host.joinedURL != nil }
+        host.send(.state(.admitted))
+        await waitUntil(timeout: 5) { capture.isRunning }
+
+        XCTAssertEqual(ticks, 3, "retried until a PID resolved, then stopped waiting")
+        XCTAssertEqual(probe.capturePIDs, [[4242, 4250]])
+        XCTAssertEqual(capture.startCallCount, 1)
+
+        viewModel.stopRecording()
+        await waitUntil(timeout: 10) { viewModel.appState == .idle }
+    }
+
+    /// Stopped while waiting for a tappable PID after admission: no tap is built, but the
+    /// host did let us in, so the Me track is still debriefed.
+    func test_shadowStop_whileWaitingForTapTarget_debriefsWithoutTap() async {
+        let probe = ShadowProbe()
+        probe.promptResult = meetURL
+        let host = FakeShadowHost()
+        host.audioProcessIDs = [4242]
+        var viewModelRef: MenuBarViewModel?
+        probe.tapTargetWait = ShadowTapTargetWait(lister: MutableProcessLister(), timeout: .seconds(10), interval: .milliseconds(500), sleep: { _ in
+            viewModelRef?.stopRecording()
+            await Task.yield()
+        })
+        let capture = FakeSystemAudioCapture()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, engine) = makeShadowViewModel(probe: probe, host: host, capture: capture, summarizer: summarizer)
+        engine.segmentsToReturn = [TranscriptSegment(start: 0, end: 1, text: "We agreed on the plan.")]
+        viewModelRef = viewModel
+
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await waitUntil(timeout: 5) { host.joinedURL != nil }
+        viewModel.audioRecorder.onLiveSamples?([Float](repeating: 0.2, count: 16_000))
+        host.send(.state(.admitted))
+        await waitUntil(timeout: 10) { viewModel.appState == .idle && summarizer.summarizeCallCount > 0 }
+
+        XCTAssertTrue(probe.capturePIDs.isEmpty, "no tap built once stopped")
+        XCTAssertEqual(capture.startCallCount, 0)
+        XCTAssertEqual(summarizer.summarizeCallCount, 1, "admitted, so the Me track is debriefed")
     }
 
     func test_shadowStop_beforeAdmission_leavesAndRecordsNothing() async {

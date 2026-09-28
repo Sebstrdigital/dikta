@@ -31,11 +31,49 @@ final class SystemAudioTapRecorderTests: XCTestCase {
         XCTAssertEqual(TapTarget.resolve(targetPIDs: [200, 100], using: lister), .processes([7, 9]))
     }
 
-    func testResolve_unresolvablePID_fallsBackToGlobalWithReason() {
+    func testResolve_someUnresolvable_tapsResolvedSubsetWithSkippedReason() {
         let lister = FakeProcessLister(objects: [100: 7])
         let result = TapTarget.resolve(targetPIDs: [100, 555], using: lister)
+        guard case .processes(let objects, let skipped) = result else {
+            return XCTFail("expected the resolvable subset, got \(result)")
+        }
+        XCTAssertEqual(objects, [7])
+        XCTAssertTrue(skipped?.contains("555") ?? false, "skipped reason should name the pid: \(String(describing: skipped))")
+        XCTAssertFalse(skipped?.contains("100 (") ?? true, "resolved pid is not skipped: \(String(describing: skipped))")
+    }
+
+    func testResolve_allResolvable_hasNoSkippedReason() {
+        let lister = FakeProcessLister(objects: [100: 7, 200: 9])
+        XCTAssertEqual(TapTarget.resolve(targetPIDs: [100, 200], using: lister), .processes([7, 9], skippedReason: nil))
+    }
+
+    func testResolve_noneResolvable_fallsBackToGlobalWithReason() {
+        let lister = FakeProcessLister(objects: [:])
+        let result = TapTarget.resolve(targetPIDs: [300, 555], using: lister)
         guard case .global(let reason) = result else { return XCTFail("expected global fallback, got \(result)") }
-        XCTAssertTrue(reason?.contains("555") ?? false, "reason should name the pid: \(String(describing: reason))")
+        XCTAssertTrue(reason?.contains("300") ?? false, "reason should name the pids: \(String(describing: reason))")
+        XCTAssertTrue(reason?.contains("555") ?? false, "reason should name the pids: \(String(describing: reason))")
+    }
+
+    func testPartialTarget_writesExactlyOnePartialDiagnosticLine() {
+        var lines: [String] = []
+        let lister = FakeProcessLister(objects: [100: 7])
+        let recorder = SystemAudioTapRecorder(targetPIDs: [100, 555], processLister: lister, diagnosticSink: { lines.append($0) })
+        guard case .processes(_, let skipped) = TapTarget.resolve(targetPIDs: [100, 555], using: lister) else {
+            return XCTFail("expected a partial process target")
+        }
+        recorder.reportPartialTarget(skipped)
+        recorder.reportFallback(nil)
+        XCTAssertEqual(lines.count, 1)
+        XCTAssertTrue(lines.first?.hasPrefix("DEBRIEF_TAP | partial_target | ") ?? false, "\(lines)")
+        XCTAssertTrue(lines.first?.contains("555") ?? false, "\(lines)")
+    }
+
+    func testPartialTarget_nothingSkipped_writesNoLine() {
+        var lines: [String] = []
+        let recorder = SystemAudioTapRecorder(diagnosticSink: { lines.append($0) })
+        recorder.reportPartialTarget(nil)
+        XCTAssertTrue(lines.isEmpty)
     }
 
     func testFallback_unresolvablePID_writesExactlyOneDiagnosticLine() {

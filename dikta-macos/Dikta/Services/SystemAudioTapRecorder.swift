@@ -66,26 +66,38 @@ protocol AudioProcessListing {
 
 /// How a tap should be built: from specific processes, or the v1.5 global tap.
 enum TapTarget: Equatable {
-    /// `stereoMixdownOfProcesses` over these audio process objects.
-    case processes([AudioObjectID])
+    /// `stereoMixdownOfProcesses` over these audio process objects. `skippedReason` is
+    /// non-nil when some requested PIDs had no audio process object and were left out
+    /// (it is the diagnostic to log).
+    case processes([AudioObjectID], skippedReason: String? = nil)
     /// v1.5 global tap excluding Dikta. `reason` is non-nil when this is a
     /// fallback from a requested target (it is the diagnostic to log).
     case global(fallbackReason: String?)
 
-    /// Resolves `targetPIDs` through `lister`. `nil`/empty targets yield the
-    /// plain global tap (no fallback reason). If any target PID cannot be
-    /// resolved, falls back to global with a single reason string.
+    /// Resolves `targetPIDs` through `lister` and taps the resolvable subset.
+    /// `nil`/empty targets yield the plain global tap (no fallback reason). When at
+    /// least one PID resolves the result is `.processes` over those, with the skipped
+    /// PIDs summarised in `skippedReason`; only when none resolve does it fall back to
+    /// global, with a single reason string.
     static func resolve(targetPIDs: Set<pid_t>?, using lister: AudioProcessListing) -> TapTarget {
         guard let targetPIDs, !targetPIDs.isEmpty else { return .global(fallbackReason: nil) }
         var objects: [AudioObjectID] = []
+        var skipped: [String] = []
         for pid in targetPIDs.sorted() {
             let (status, id) = lister.audioProcessObject(forPID: pid)
-            guard let id else {
-                return .global(fallbackReason: "target pid \(pid) has no audio process object (status \(status))")
+            if let id {
+                objects.append(id)
+            } else {
+                skipped.append("\(pid) (status \(status))")
             }
-            objects.append(id)
         }
-        return .processes(objects)
+        guard !objects.isEmpty else {
+            return .global(fallbackReason: "no target pid has an audio process object: \(skipped.joined(separator: ", "))")
+        }
+        let skippedReason = skipped.isEmpty
+            ? nil
+            : "tapping \(objects.count) of \(targetPIDs.count) target pids; no audio process object for \(skipped.joined(separator: ", "))"
+        return .processes(objects, skippedReason: skippedReason)
     }
 }
 
@@ -400,6 +412,14 @@ final class SystemAudioTapRecorder: SystemAudioCapturing, @unchecked Sendable {
         }
     }
 
+    /// Records which target PIDs a targeted tap left out, in one diagnostic line.
+    /// No-op when every target resolved.
+    func reportPartialTarget(_ skippedReason: String?) {
+        guard let skippedReason else { return }
+        AppLogger.audio.info("SystemAudioTapRecorder: partial tap target: \(skippedReason)")
+        diagnosticSink("DEBRIEF_TAP | partial_target | \(skippedReason)")
+    }
+
     /// Records why a targeted tap was abandoned: once to the OS log and once
     /// to the diagnostic log file. No-op when there was no fallback.
     func reportFallback(_ fallbackReason: String?) {
@@ -417,7 +437,8 @@ final class SystemAudioTapRecorder: SystemAudioCapturing, @unchecked Sendable {
         let tapDescription: CATapDescription
         let tapTarget = TapTarget.resolve(targetPIDs: targetPIDs, using: processLister)
         switch tapTarget {
-        case .processes(let objects):
+        case .processes(let objects, let skippedReason):
+            reportPartialTarget(skippedReason)
             tapDescription = CATapDescription(stereoMixdownOfProcesses: objects)
         case .global(let fallbackReason):
             reportFallback(fallbackReason)
