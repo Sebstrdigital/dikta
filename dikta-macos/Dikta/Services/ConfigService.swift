@@ -287,4 +287,15 @@ final class ConfigService: ObservableObject {
             save()
         }
     }
+
+    // MARK: - Transcription Engine
+
+    var engine: TranscriptionEngineKind {
+        get { config.engine }
+        set {
+            config.engine = newValue
+            objectWillChange.send()
+            save()
+        }
+    }
 }

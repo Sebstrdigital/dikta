@@ -87,6 +87,7 @@ final class HotkeyConfigMatchesModifiersTests: XCTestCase {
 
 // MARK: - AppConfig Backward-Compatible Decoding Tests
 
+@MainActor
 final class AppConfigDecodingTests: XCTestCase {
 
     func test_decode_fullCurrentConfig() throws {
@@ -141,9 +142,10 @@ final class AppConfigDecodingTests: XCTestCase {
                        HotkeyConfig(modifiers: [.cmd, .ctrl], key: nil))
     }
 
-    /// A config with a leftover "engine" key (from the now-removed selectable
-    /// transcription engine feature) must still decode without error —
-    /// unknown keys are ignored by Codable since the CodingKey case was removed.
+    /// A config with an unrecognized "engine" value — whether a genuine leftover
+    /// from the earlier, now-removed selectable transcription engine feature
+    /// (PR #16), or a raw value from a newer build this one doesn't know about —
+    /// must still decode without error, falling back to `.whisper`.
     func test_decode_toleratesLeftoverEngineKey() throws {
         let json = """
         {
@@ -155,6 +157,59 @@ final class AppConfigDecodingTests: XCTestCase {
         """.data(using: .utf8)!
         let config = try JSONDecoder().decode(AppConfig.self, from: json)
         XCTAssertEqual(config.whisperModel, "small")
+        XCTAssertEqual(config.engine, .whisper)
+    }
+
+    func test_decode_missingEngineKey_defaultsToWhisper() throws {
+        let json = """
+        {
+            "version": 3,
+            "hotkeys": {"toggle": {"modifiers":["shift","ctrl"]},"push_to_talk":{"modifiers":["cmd","shift"]}},
+            "output_mode": "general", "history": [], "whisper_model": "small", "llm_model": "gemma3"
+        }
+        """.data(using: .utf8)!
+        let config = try JSONDecoder().decode(AppConfig.self, from: json)
+        XCTAssertEqual(config.engine, .whisper)
+    }
+
+    func test_decode_unknownEngineValue_fallsBackToWhisperWithoutThrowing() throws {
+        let json = """
+        {
+            "version": 3,
+            "hotkeys": {"toggle": {"modifiers":["shift","ctrl"]},"push_to_talk":{"modifiers":["cmd","shift"]}},
+            "output_mode": "general", "history": [], "whisper_model": "small", "llm_model": "gemma3",
+            "engine": "not-a-real-engine"
+        }
+        """.data(using: .utf8)!
+        let config = try JSONDecoder().decode(AppConfig.self, from: json)
+        XCTAssertEqual(config.engine, .whisper)
+    }
+
+    func test_decode_knownEngineValue_roundTrips() throws {
+        let json = """
+        {
+            "version": 3,
+            "hotkeys": {"toggle": {"modifiers":["shift","ctrl"]},"push_to_talk":{"modifiers":["cmd","shift"]}},
+            "output_mode": "general", "history": [], "whisper_model": "small", "llm_model": "gemma3",
+            "engine": "parakeet-v3"
+        }
+        """.data(using: .utf8)!
+        let config = try JSONDecoder().decode(AppConfig.self, from: json)
+        XCTAssertEqual(config.engine, .parakeetV3)
+    }
+
+    /// The engine a caller sets via `ConfigService` must survive a save/reload
+    /// cycle through the real atomic-write path, not just direct JSON decode.
+    func test_configService_engine_roundTripsThroughSaveAndReload() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let configFile = tempDir.appendingPathComponent("config.json")
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let service = ConfigService(configFile: configFile)
+        service.engine = .parakeetUltra
+
+        let reloaded = ConfigService(configFile: configFile)
+        XCTAssertEqual(reloaded.engine, .parakeetUltra)
     }
 
     func test_decode_migratesBaseWhisperModel() throws {
