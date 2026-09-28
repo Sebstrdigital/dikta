@@ -50,5 +50,12 @@ let package = Package(
             ],
             path: "bench/TimestampProbe"
         )
-    ]
+    ],
+    // Match the Xcode project's SWIFT_VERSION = 5.0. Tools-version 6.0 (needed
+    // for the FluidAudio dependency) would otherwise default every target to
+    // Swift 6 language mode and its strict concurrency checking, which the
+    // pre-existing formatter statics and the bench tools do not satisfy —
+    // that broke `swift build` / `swift test` (the first two CI steps) while
+    // xcodebuild kept working.
+    swiftLanguageModes: [.v5]
 )
