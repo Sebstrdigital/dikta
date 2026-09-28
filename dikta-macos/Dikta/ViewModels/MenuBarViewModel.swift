@@ -406,7 +406,7 @@ final class MenuBarViewModel: ObservableObject {
                 recordingStartDate = Date()
                 appState = .recording
                 audioFeedback.beepOn()
-                DiagnosticLogger.shared.log("START | mic=\(configService.micSensitivity.displayName) | rate=\(audioRecorder.inputSampleRate)Hz")
+                DiagnosticLogger.shared.log("START | mic=\(configService.micSensitivity.displayName) | rate=\(audioRecorder.inputSampleRate)Hz | \(diagnosticEngineContext()) | \(diagnosticMemoryTag())")
             } catch {
                 unmuteMicTargets()
                 // `startRecording()` threw, so no tap was installed and
@@ -537,23 +537,23 @@ final class MenuBarViewModel: ObservableObject {
                 return
             }
 
-            DiagnosticLogger.shared.log("RESULT | pasted | chars=\(text.count)")
+            DiagnosticLogger.shared.log("RESULT | pasted | chars=\(text.count) | \(diagnosticEngineContext()) | \(diagnosticMemoryTag())")
             await outputText(text)
             appState = .idle
 
         } catch is TranscriptionTimeoutError {
-            DiagnosticLogger.shared.log("RESULT | timeout")
+            DiagnosticLogger.shared.log("RESULT | timeout | \(diagnosticEngineContext()) | \(diagnosticMemoryTag())")
             sendNotification(title: "Transcription Timeout", body: "Processing took too long and was cancelled.")
             appState = .idle
         } catch is TranscriberError {
-            DiagnosticLogger.shared.log("RESULT | no_speech (TranscriberError)")
+            DiagnosticLogger.shared.log("RESULT | no_speech (TranscriberError) | \(diagnosticEngineContext())")
             sendNotification(
                 title: "No Speech",
                 body: "No speech detected. Try adjusting Mic Sensitivity in Audio settings."
             )
             appState = .idle
         } catch {
-            DiagnosticLogger.shared.log("RESULT | error | \(error.localizedDescription)")
+            DiagnosticLogger.shared.log("RESULT | error | \(error.localizedDescription) | \(diagnosticEngineContext())")
             sendNotification(title: "Error", body: error.localizedDescription)
             appState = .idle
         }
@@ -1826,6 +1826,26 @@ final class MenuBarViewModel: ObservableObject {
     }
 
     /// Returns the app's memory footprint in MB, or nil if unavailable.
+    /// Compact "which engine and model actually handled this take" tag for the
+    /// diagnostic log. Added while chasing a report that transcription quality
+    /// decays over a long session and recovers after a restart: without the
+    /// loaded model on every START/RESULT line, the log cannot tell a genuine
+    /// decay apart from a take that ran on the wrong model (e.g. KB-Whisper on
+    /// English after a mid-recording language switch deferred the reload).
+    func diagnosticEngineContext() -> String {
+        let model = loadedModel?.rawValue ?? "-"
+        return "engine=\(configService.engine.rawValue) model=\(model) lang=\(configService.language.rawValue)"
+    }
+
+    /// Resident memory of this process as "mem=<MB>MB", or "mem=?" if the
+    /// kernel query fails. Logged on every START/RESULT line so a slow climb
+    /// across a day of dictation shows up in the diagnostic log without
+    /// needing the unified log, which does not retain info-level lines.
+    func diagnosticMemoryTag() -> String {
+        guard let mb = memoryFootprintMB() else { return "mem=?" }
+        return "mem=\(Int(mb.rounded()))MB"
+    }
+
     private func memoryFootprintMB() -> Double? {
         var info = mach_task_basic_info()
         var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
