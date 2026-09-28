@@ -9,8 +9,9 @@ struct ShadowJoinDriver {
     var pollInterval: Duration = .milliseconds(250)
     /// Budget for finding the name field / join button.
     var controlsTimeout: Duration = .seconds(45)
-    /// Budget for the host to let us in.
-    var admissionTimeout: Duration = .seconds(600)
+    /// Backstop only. The view model's admission watch is the real deadline (it offers
+    /// "keep waiting or switch"); a driver failure here would discard the recorded Me track.
+    var admissionTimeout: Duration = .seconds(12 * 3600)
 
     private struct Config: Encodable {
         let name: String

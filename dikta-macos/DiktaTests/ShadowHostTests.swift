@@ -235,4 +235,13 @@ final class ShadowHostTests: XCTestCase {
         guard case .pageWarning(let m) = events.first else { return XCTFail("no warning") }
         XCTAssertTrue(m.hasPrefix("SHADOW_DOM"))
     }
+
+    func testSpeakerPoller_repeatedEvaluateErrorsReportHostLost() async {
+        struct Gone: Error {}
+        let poller = ShadowSpeakerPoller(evaluate: { _ in throw Gone() },
+                                         pollInterval: .milliseconds(1), lostAfterFailures: 3)
+        var events: [ShadowEvent] = []
+        await poller.run(selectors: ShadowPlatform.meetSelectors) { events.append($0) }
+        XCTAssertEqual(events, [.state(.failed(.launchFailed("browser connection lost")))])
+    }
 }

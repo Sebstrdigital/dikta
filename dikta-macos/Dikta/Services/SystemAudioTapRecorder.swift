@@ -415,7 +415,8 @@ final class SystemAudioTapRecorder: SystemAudioCapturing, @unchecked Sendable {
     /// so far on any failure.
     private func performBlockingSetupAndStart() throws {
         let tapDescription: CATapDescription
-        switch TapTarget.resolve(targetPIDs: targetPIDs, using: processLister) {
+        let tapTarget = TapTarget.resolve(targetPIDs: targetPIDs, using: processLister)
+        switch tapTarget {
         case .processes(let objects):
             tapDescription = CATapDescription(stereoMixdownOfProcesses: objects)
         case .global(let fallbackReason):
@@ -434,7 +435,14 @@ final class SystemAudioTapRecorder: SystemAudioCapturing, @unchecked Sendable {
         tapDescription.name = "Dikta System Audio Tap"
         tapDescription.uuid = UUID()
         tapDescription.isPrivate = true
-        tapDescription.muteBehavior = .unmuted
+        // The targeted (shadow participant) tap must silence the shadow's
+        // playback so the user, already in the meeting, does not hear it twice
+        // or feed it back through the mic. The global tap must never mute.
+        if case .processes = tapTarget {
+            tapDescription.muteBehavior = .mutedWhenTapped
+        } else {
+            tapDescription.muteBehavior = .unmuted
+        }
 
         var newTapID = AudioObjectID(kAudioObjectUnknown)
         let createTapStatus = AudioHardwareCreateProcessTap(tapDescription, &newTapID)

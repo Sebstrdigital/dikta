@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import AppKit
 
 enum ChromiumLocator {
     /// Order matters: first installed browser wins.
@@ -137,6 +138,7 @@ final class ChromeShadowHost: ShadowHost {
     private var connection: CDPConnection?
     private var joinTask: Task<Void, Never>?
     private var finished = false
+    private var terminateObserver: NSObjectProtocol?
 
     nonisolated static var defaultProfileDir: URL {
         URL(fileURLWithPath: AppPaths.appSupport).appendingPathComponent("ShadowProfile")
@@ -198,6 +200,13 @@ final class ChromeShadowHost: ShadowHost {
             report(.failed(.launchFailed(error.localizedDescription))); return
         }
         process = proc
+        // Quit must not orphan the browser: it would keep the guest in the meeting and hold the profile lock.
+        terminateObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                if let p = self?.process, p.isRunning { p.terminate() }
+            }
+        }
 
         let template = driverTemplate ?? ShadowJoinDriver(evaluate: { _ in "" })
         joinTask = Task { [weak self] in
@@ -237,6 +246,8 @@ final class ChromeShadowHost: ShadowHost {
         connection = nil
         if let process, process.isRunning { process.terminate() }
         process = nil
+        if let terminateObserver { NotificationCenter.default.removeObserver(terminateObserver) }
+        terminateObserver = nil
         if !finished { emit(.state(.left)) }
         finished = true
         continuation.finish()

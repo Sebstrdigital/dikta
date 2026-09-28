@@ -6,6 +6,8 @@ struct ShadowSpeakerPoller {
     /// Evaluates a JS expression in the page and returns its string result.
     let evaluate: (String) async throws -> String
     var pollInterval: Duration = .milliseconds(250)
+    /// Consecutive evaluate errors that mean the browser or page is gone, not a hiccup.
+    var lostAfterFailures = 8
 
     /// What one poll saw.
     struct Snapshot: Equatable {
@@ -81,14 +83,28 @@ struct ShadowSpeakerPoller {
     }
 
     /// Runs until the task is cancelled. An unrecognised DOM logs one SHADOW_DOM warning
-    /// and polling carries on; it never ends the run.
+    /// and polling carries on. Repeated evaluate errors (closed window, crashed browser or
+    /// web content process) emit `.failed` once and end the run.
     func run(selectors: ShadowSelectors, emit: (ShadowEvent) -> Void) async {
         let script = Self.script(selectors: selectors)
         var tracker = Tracker()
         var warned = false
+        var failures = 0
         while !Task.isCancelled {
-            let raw = try? await evaluate(script)
-            if let snap = raw.flatMap(Self.parse) {
+            let raw: String
+            do {
+                raw = try await evaluate(script)
+                failures = 0
+            } catch {
+                failures += 1
+                if failures >= lostAfterFailures, !Task.isCancelled {
+                    emit(.state(.failed(.launchFailed("browser connection lost"))))
+                    return
+                }
+                try? await Task.sleep(for: pollInterval)
+                continue
+            }
+            if let snap = Self.parse(raw) {
                 tracker.ingest(snap).forEach(emit)
             } else if !warned {
                 warned = true
