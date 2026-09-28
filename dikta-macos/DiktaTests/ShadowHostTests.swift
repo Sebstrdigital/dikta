@@ -144,4 +144,80 @@ final class ShadowHostTests: XCTestCase {
         XCTAssertEqual(states, [.joining, .waitingForAdmission, .admitted])
         XCTAssertEqual(pids.count, 1)
     }
+
+    // MARK: - Speaker capture
+
+    func testSpeakerTracker_diffsSnapshots() {
+        var t = ShadowSpeakerPoller.Tracker()
+        XCTAssertEqual(t.ingest(.init(participants: ["Anna", "Bo"], speaker: "Anna")),
+                       [.participantJoined("Anna"), .participantJoined("Bo"), .activeSpeaker("Anna")])
+        XCTAssertEqual(t.ingest(.init(participants: ["Anna", "Bo"], speaker: "Anna")), [])
+        XCTAssertEqual(t.ingest(.init(participants: ["Anna"], speaker: nil)),
+                       [.activeSpeaker(nil), .participantLeft("Bo")])
+    }
+
+    func testTimelineRecorder_appendsJSONLines() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("speakers-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let rec = SpeakerTimelineRecorder(fileURL: url)
+        rec.record(.participantJoined("Anna"))
+        rec.record(.activeSpeaker("Anna"))
+        rec.record(.pageWarning("ignored"))
+        rec.record(.activeSpeaker(nil))
+        // Readable before close: nothing is buffered in the process.
+        let lines = try String(contentsOf: url, encoding: .utf8).split(separator: "\n").map(String.init)
+        rec.close()
+        XCTAssertEqual(lines.count, 3)
+        let objs = try lines.map { try JSONSerialization.jsonObject(with: Data($0.utf8)) as! [String: Any] }
+        XCTAssertEqual(objs.map { $0["kind"] as? String }, ["joined", "activeSpeaker", "activeSpeaker"])
+        XCTAssertEqual(objs[0]["name"] as? String, "Anna")
+        XCTAssertTrue(objs[2]["name"] is NSNull)
+        XCTAssertNotNil(objs[0]["t"] as? Double)
+    }
+
+    /// Runs the fixture's scripted sequence and returns the recorded timeline.
+    private func recordFixtureTimeline(interval: Duration) async throws -> [[String: Any]] {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("speakers-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let driver = ShadowJoinDriver(evaluate: { _ in "" }, pollInterval: interval,
+                                      controlsTimeout: .seconds(20), admissionTimeout: .seconds(20))
+        let host = WKWebViewShadowHost(profiles: Self.fixtureProfiles, driver: driver, processLister: { [] })
+        let rec = SpeakerTimelineRecorder(fileURL: url)
+        let consumer = Task { await rec.consume(host.events) }
+        await host.join(url: Self.fixtureURL, displayName: "Dikta · notes (Test)")
+        try await Task.sleep(for: .seconds(11))
+        await host.leave()
+        await consumer.value
+        return try String(contentsOf: url, encoding: .utf8).split(separator: "\n")
+            .map { try JSONSerialization.jsonObject(with: Data($0.utf8)) as! [String: Any] }
+    }
+
+    func testWKWebViewHost_recordsScriptedSpeakerTimeline() async throws {
+        let interval = 0.25
+        let lines = try await recordFixtureTimeline(interval: .milliseconds(250))
+        let speaker = lines.filter { $0["kind"] as? String == "activeSpeaker" }
+        XCTAssertEqual(speaker.map { $0["name"] as? String }, ["Anna", "Bo", "Anna", nil])
+        let t = speaker.map { $0["t"] as! Double }
+        // Script: Anna at 0, Bo at 3, Anna at 5, none at 8 (relative to the first change).
+        for (got, want) in zip(t, [0.0, 3.0, 5.0, 8.0]) {
+            XCTAssertEqual(got - t[0], want, accuracy: interval + 0.1)
+        }
+        XCTAssertEqual(lines.filter { $0["kind"] as? String == "joined" }.compactMap { $0["name"] as? String }, ["Anna", "Bo"])
+        XCTAssertEqual(lines.filter { $0["kind"] as? String == "left" }.compactMap { $0["name"] as? String }, ["Bo"])
+    }
+
+    func testSpeakerPoller_unrecognisedDOMWarnsOnceAndKeepsPolling() async {
+        var polls = 0
+        let poller = ShadowSpeakerPoller(evaluate: { _ in polls += 1; return "{\"ok\":false}" },
+                                         pollInterval: .milliseconds(10))
+        var events: [ShadowEvent] = []
+        let task = Task { await poller.run(selectors: ShadowPlatform.meetSelectors) { events.append($0) } }
+        try? await Task.sleep(for: .milliseconds(200))
+        task.cancel()
+        await task.value
+        XCTAssertGreaterThan(polls, 3)
+        XCTAssertEqual(events.count, 1)
+        guard case .pageWarning(let m) = events.first else { return XCTFail("no warning") }
+        XCTAssertTrue(m.hasPrefix("SHADOW_DOM"))
+    }
 }

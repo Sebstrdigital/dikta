@@ -14,6 +14,13 @@ struct ShadowSelectors: Equatable, Codable {
     var deniedTexts: [String]
     /// Buttons that dismiss the "allow mic and camera?" prompt without allowing.
     var dismissMediaTexts: [String]
+    /// CSS selectors for one participant tile each, in-call.
+    var participantCSS: [String]
+    /// CSS selectors, relative to a tile, for the element holding the participant's name.
+    /// Falls back to the tile's own text when none match.
+    var participantNameCSS: [String]
+    /// CSS selector that marks a tile as the active speaker: the tile itself or a descendant matches.
+    var activeSpeakerCSS: [String]
 }
 
 enum MeetingPlatform: String, Equatable {
@@ -36,7 +43,10 @@ enum ShadowPlatform {
         lobbyTexts: ["asking to be let in", "someone will let you in soon"],
         admittedCSS: ["button[aria-label*=\"Leave call\" i]"],
         deniedTexts: ["you can't join this video call", "denied your request"],
-        dismissMediaTexts: ["continue without microphone and camera"]
+        dismissMediaTexts: ["continue without microphone and camera"],
+        participantCSS: ["[data-participant-id]"],
+        participantNameCSS: ["[data-self-name]"],
+        activeSpeakerCSS: ["[data-speaking=\"true\"]"]
     )
 
     /// The single platform table. Only Meet has selectors; Teams and Zoom are placeholders.

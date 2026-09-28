@@ -114,9 +114,14 @@ final class WKWebViewShadowHost: NSObject, ShadowHost, WKUIDelegate, WKNavigatio
             controlsTimeout: driver.controlsTimeout,
             admissionTimeout: driver.admissionTimeout)
         joinTask = Task { [weak self] in
+            var admitted = false
             await driver.run(name: displayName, selectors: selectors) { state in
+                if state == .admitted { admitted = true }
                 self?.report(state)
             }
+            guard admitted, !Task.isCancelled else { return }
+            let poller = ShadowSpeakerPoller(evaluate: driver.evaluate, pollInterval: driver.pollInterval)
+            await poller.run(selectors: selectors) { self?.emit($0) }
         }
     }
 

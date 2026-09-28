@@ -214,8 +214,15 @@ final class ChromeShadowHost: ShadowHost {
                     pollInterval: template.pollInterval,
                     controlsTimeout: template.controlsTimeout,
                     admissionTimeout: template.admissionTimeout)
+                var admitted = false
                 await driver.run(name: displayName, selectors: selectors) { state in
+                    if state == .admitted { admitted = true }
                     Task { @MainActor in self?.report(state) }
+                }
+                guard admitted, !Task.isCancelled else { return }
+                let poller = ShadowSpeakerPoller(evaluate: driver.evaluate, pollInterval: driver.pollInterval)
+                await poller.run(selectors: selectors) { event in
+                    Task { @MainActor in self?.emit(event) }
                 }
             } catch {
                 await self?.report(.failed(.launchFailed("devtools: \(error.localizedDescription)")))
