@@ -65,6 +65,37 @@ final class MenuBarViewModelSetEngineTests: XCTestCase {
         )
     }
 
+    // MARK: - Diagnostic context tag
+
+    /// The START/RESULT diagnostic lines carry which engine, model and
+    /// language handled a take, so a long-session quality report can be
+    /// checked against the log instead of guessed at. The tag must follow the
+    /// engine switch: after moving to Parakeet, `model=-` (no Whisper model).
+    func test_diagnosticEngineContext_reflectsEngineModelAndLanguage() async {
+        let whisperEngine = FakeTranscriptionEngine()
+        let parakeetEngine = FakeTranscriptionEngine()
+        let viewModel = makeViewModel(engine: whisperEngine) { kind, _ in
+            kind == .whisper ? whisperEngine : parakeetEngine
+        }
+        await waitUntil { viewModel.appState == .idle }
+
+        let before = viewModel.diagnosticEngineContext()
+        XCTAssertTrue(before.hasPrefix("engine=whisper model="), before)
+        XCTAssertTrue(before.contains(" lang=\(configService.language.rawValue)"), before)
+        XCTAssertFalse(before.contains("model=-"), "Whisper must report its loaded model: \(before)")
+
+        guard let task = viewModel.setEngine(.parakeetRedux) else {
+            return XCTFail("expected setEngine to start a switch")
+        }
+        await task.value
+
+        let after = viewModel.diagnosticEngineContext()
+        XCTAssertTrue(after.hasPrefix("engine=parakeet-redux model=- "), after)
+
+        let mem = viewModel.diagnosticMemoryTag()
+        XCTAssertTrue(mem.hasPrefix("mem=") && mem.hasSuffix("MB"), mem)
+    }
+
     // MARK: - setEngine: success
 
     func test_setEngine_success_persistsAndSwapsEngine() async {

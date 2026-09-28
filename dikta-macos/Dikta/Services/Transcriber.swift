@@ -56,6 +56,15 @@ final class Transcriber: ObservableObject, TranscriptionEngine {
             throw TranscriberError.reloadInProgress
         }
 
+        // Ask WhisperKit to release its Core ML models explicitly before we
+        // drop the reference. Dropping the instance alone leaves the compiled
+        // MLModels (and their ANE/GPU resources) to whatever ARC and Core ML
+        // decide, and a language-driven reload happens on every sv<->en
+        // switch — a suspected cause of memory growing over a long session
+        // until the app is restarted (debug-active.md, session B).
+        if let old = whisperKit {
+            await old.unloadModels()
+        }
         whisperKit = nil
         isReady = false
         self.model = model
