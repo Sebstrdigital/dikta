@@ -14,10 +14,11 @@ All notable changes to Dikta will be documented in this file.
   between WhisperKit (unchanged default) and three FluidAudio-backed Parakeet variants: Redux
   (~480 MB), v3 (~600 MB, marked Recommended), and Ultra (~1200 MB). Switching engines takes effect
   immediately, with a free-disk-space check before each new variant downloads; if a switch fails to
-  load, the previously active engine is kept rather than leaving dictation stuck. Swedish still
-  forces KB-Whisper Small regardless of the selected engine — every Parakeet variant benchmarked
-  roughly 3x worse than KB-Whisper on Swedish WER (see `docs/review-2026-09/parakeet-bench.md`), so
-  that existing auto-select rule is unchanged.
+  load, the previously active engine is kept rather than leaving dictation stuck. Under the Whisper
+  engine, Svenska still auto-selects KB-Whisper Small — every Parakeet variant benchmarked roughly
+  3x worse than KB-Whisper on Swedish WER (see `docs/review-2026-09/parakeet-bench.md`), so that
+  rule is unchanged. An explicitly chosen Parakeet engine applies to every language, including
+  Svenska; language switches no longer trigger a model reload while Parakeet is active.
 - FLEURS sv+en benchmark of Parakeet Redux/v3/Ultra against Whisper Turbo and KB-Whisper, run via
   `DiktaBench --engine parakeet` (`dikta-macos/bench/`); results and methodology in
   `docs/review-2026-09/parakeet-bench.md`.
