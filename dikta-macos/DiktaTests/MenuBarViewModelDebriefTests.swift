@@ -150,6 +150,7 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
         recorder: FakeAudioRecorder? = nil,
         audioFileLoader: (@Sendable (URL) throws -> [Float])? = nil,
         systemAudioCaptureFactory: (() -> any SystemAudioCapturing)? = nil,
+        shadow: ShadowDependencies? = nil,
         debriefStore: DebriefStore? = nil
     ) -> (MenuBarViewModel, FakeTranscriptionEngine) {
         let engine = FakeTranscriptionEngine()
@@ -163,6 +164,7 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
             audioFileLoader: audioFileLoader,
             muterRegistry: muterRegistry,
             systemAudioCaptureFactory: systemAudioCaptureFactory,
+            shadow: shadow,
             audioRecorder: recorder ?? FakeAudioRecorder(),
             audioFeedback: FakeAudioFeedback()
         )
@@ -1110,5 +1112,216 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
             "the mic-debrief AUDIO line must read all three counters, and processAudio must not also run"
         )
         XCTAssertEqual(summarizer.summarizeCallCount, 1, "the live debrief must still have finished")
+    }
+
+    // MARK: - Shadow participant (experimental source)
+
+    private let meetURL = URL(string: "https://meet.google.com/abc-defg-hij")!
+
+    /// What a shadow test observed the view model ask its seams for.
+    private final class ShadowProbe {
+        var flag = true
+        var promptResult: URL?
+        var clipboard: String?
+        var promptCalls: [(prefill: URL?, name: String, showNotice: Bool)] = []
+        var hostKinds: [ShadowHostKind] = []
+        var capturePIDs: [Set<pid_t>] = []
+    }
+
+    private func makeShadowViewModel(
+        probe: ShadowProbe,
+        host: FakeShadowHost,
+        capture: FakeSystemAudioCapture,
+        summarizer: DebriefSummarizer,
+        muterRegistry: (any MuterRegistering)? = nil
+    ) -> (MenuBarViewModel, FakeTranscriptionEngine) {
+        configService.debriefModeEnabled = true
+        configService.debriefSource = .joinMeetingAsParticipant
+        let deps = ShadowDependencies(
+            isEnabled: { probe.flag },
+            hostFactory: { kind in probe.hostKinds.append(kind); return host },
+            captureFactory: { pids in probe.capturePIDs.append(pids); return capture },
+            promptForMeeting: { prefill, name, notice in
+                probe.promptCalls.append((prefill, name, notice))
+                return probe.promptResult
+            },
+            clipboardText: { probe.clipboard }
+        )
+        return makeViewModel(summarizer: summarizer, transcript: "", muterRegistry: muterRegistry, shadow: deps)
+    }
+
+    func test_shadowSource_flagOff_hidesCaseAndIgnoresSavedSource() {
+        let probe = ShadowProbe()
+        probe.flag = false
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeShadowViewModel(probe: probe, host: FakeShadowHost(), capture: FakeSystemAudioCapture(), summarizer: summarizer)
+
+        XCTAssertEqual(viewModel.availableDebriefSources, [.microphone, .microphoneAndSystemAudio])
+        XCTAssertFalse(viewModel.isShadowParticipantAvailable)
+        XCTAssertFalse(viewModel.isShadowMode, "a saved shadow source must not act with the flag off")
+
+        probe.flag = true
+        XCTAssertEqual(viewModel.availableDebriefSources, [.microphone, .microphoneAndSystemAudio, .joinMeetingAsParticipant])
+        XCTAssertTrue(viewModel.isShadowMode)
+    }
+
+    func test_shadowFlag_readsEnvironmentAndDefaults() {
+        let defaults = UserDefaults(suiteName: "shadow-flag-\(UUID().uuidString)")!
+        XCTAssertFalse(ShadowParticipantFlag.isEnabled(environment: [:], defaults: defaults))
+        XCTAssertTrue(ShadowParticipantFlag.isEnabled(environment: ["DIKTA_EXPERIMENTAL_SHADOW": "1"], defaults: defaults))
+        XCTAssertFalse(ShadowParticipantFlag.isEnabled(environment: ["DIKTA_EXPERIMENTAL_SHADOW": "0"], defaults: defaults))
+        defaults.set(true, forKey: "experimentalShadowParticipant")
+        XCTAssertTrue(ShadowParticipantFlag.isEnabled(environment: [:], defaults: defaults))
+    }
+
+    func test_appConfig_shadowKeys_defaultWhenMissingAndRoundTrip() throws {
+        let encoded = try JSONEncoder().encode(AppConfig.default)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        json.removeValue(forKey: "shadow_host")
+        json.removeValue(forKey: "shadow_display_name")
+        json.removeValue(forKey: "shadow_notice_shown")
+        let old = try JSONDecoder().decode(AppConfig.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertEqual(old.shadowHost, .wkWebView)
+        XCTAssertEqual(old.shadowDisplayName, AppConfig.defaultShadowDisplayName)
+        XCTAssertTrue(old.shadowDisplayName.hasPrefix("Dikta · notes ("))
+        XCTAssertFalse(old.shadowNoticeShown)
+
+        var config = AppConfig.default
+        config.shadowHost = .chrome
+        config.shadowDisplayName = "Notes for Sam"
+        let back = try JSONDecoder().decode(AppConfig.self, from: JSONEncoder().encode(config))
+        XCTAssertEqual(back.shadowHost, .chrome)
+        XCTAssertEqual(back.shadowDisplayName, "Notes for Sam")
+    }
+
+    func test_shadowMeetingURL_parsesOnlyKnownPlatforms() {
+        XCTAssertEqual(ShadowPlatform.meetingURL(from: " https://meet.google.com/abc-defg-hij \n"), meetURL)
+        XCTAssertNotNil(ShadowPlatform.meetingURL(from: "https://teams.microsoft.com/l/meetup-join/x"))
+        XCTAssertNotNil(ShadowPlatform.meetingURL(from: "https://us02web.zoom.us/j/123?pwd=a"))
+        XCTAssertNil(ShadowPlatform.meetingURL(from: "https://example.com/meet"))
+        XCTAssertNil(ShadowPlatform.meetingURL(from: "meet.google.com/abc"))
+        XCTAssertNil(ShadowPlatform.meetingURL(from: nil))
+    }
+
+    func test_shadowStartStop_joinsTapsHostProcessesSkipsMutingAndDebriefs() async throws {
+        let probe = ShadowProbe()
+        probe.promptResult = meetURL
+        probe.clipboard = "https://meet.google.com/zzz-zzzz-zzz"
+        let host = FakeShadowHost()
+        host.audioProcessIDs = [4242, 4243]
+        let capture = FakeSystemAudioCapture()
+        let muter = FakeMuterRegistry()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, engine) = makeShadowViewModel(probe: probe, host: host, capture: capture, summarizer: summarizer, muterRegistry: muter)
+        engine.segmentsToReturn = [TranscriptSegment(start: 0, end: 1, text: "We agreed on the plan.")]
+
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await waitUntil(timeout: 5) { host.joinedURL != nil }
+
+        XCTAssertEqual(probe.promptCalls.count, 1)
+        XCTAssertEqual(probe.promptCalls.first?.prefill?.absoluteString, "https://meet.google.com/zzz-zzzz-zzz", "clipboard link pre-fills the sheet")
+        XCTAssertEqual(probe.promptCalls.first?.showNotice, true, "first run shows the consent notice")
+        XCTAssertEqual(probe.promptCalls.first?.name, configService.shadowDisplayName)
+        XCTAssertEqual(probe.hostKinds, [.wkWebView])
+        XCTAssertEqual(host.joinedURL, meetURL)
+        XCTAssertEqual(host.joinedName, configService.shadowDisplayName)
+        XCTAssertTrue(configService.shadowNoticeShown)
+        XCTAssertEqual(viewModel.appState, .recording, "the hotkey must be able to stop the join")
+        XCTAssertEqual(capture.startCallCount, 0, "no tap before the host admits us")
+
+        host.send(.state(.joining))
+        host.send(.state(.waitingForAdmission))
+        host.send(.state(.admitted))
+        await waitUntil(timeout: 5) { viewModel.silentSystemAudioWarningCount == 0 && capture.isRunning && viewModel.audioRecorder.recording }
+
+        XCTAssertEqual(probe.capturePIDs, [[4242, 4243]])
+        XCTAssertEqual(capture.startCallCount, 1)
+        XCTAssertEqual(muter.muteAllCallCount, 0, "the shadow source must not mute other apps")
+
+        host.send(.participantJoined("Sam"))
+        host.send(.activeSpeaker("Sam"))
+        capture.feed([Float](repeating: 0.2, count: 16_000))
+        viewModel.audioRecorder.onLiveSamples?([Float](repeating: 0.2, count: 16_000))
+
+        viewModel.hotkeyPressed(mode: .pushToTalk)
+        await yieldForStartRecordingTask()
+        XCTAssertEqual(viewModel.appState, .recording, "push-to-talk is ignored while the session runs")
+
+        viewModel.stopRecording()
+        await waitUntil(timeout: 10) { viewModel.appState == .idle && summarizer.summarizeCallCount > 0 }
+
+        XCTAssertEqual(host.leaveCallCount, 1)
+        XCTAssertEqual(capture.stopCallCount, 1)
+        XCTAssertEqual(summarizer.summarizeCallCount, 1)
+        XCTAssertEqual(clipboard.pastedMultiline.count, 1)
+        XCTAssertEqual(muter.muteAllCallCount, 0)
+        let folder = try XCTUnwrap(sessionFolders.first)
+        let speakers = try String(contentsOf: folder.appendingPathComponent("speakers.jsonl"), encoding: .utf8)
+        XCTAssertTrue(speakers.contains("\"joined\""))
+        XCTAssertTrue(speakers.contains("\"Sam\""))
+    }
+
+    func test_shadowStop_beforeAdmission_leavesAndRecordsNothing() async {
+        let probe = ShadowProbe()
+        probe.promptResult = meetURL
+        let host = FakeShadowHost()
+        let capture = FakeSystemAudioCapture()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeShadowViewModel(probe: probe, host: host, capture: capture, summarizer: summarizer)
+
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await waitUntil(timeout: 5) { host.joinedURL != nil }
+        host.send(.state(.waitingForAdmission))
+        await yieldForStartRecordingTask()
+        XCTAssertEqual(viewModel.appState, .recording)
+
+        viewModel.stopRecording()
+        await waitUntil(timeout: 5) { viewModel.appState == .idle }
+
+        XCTAssertEqual(viewModel.appState, .idle)
+        XCTAssertEqual(host.leaveCallCount, 1)
+        XCTAssertEqual(capture.startCallCount, 0)
+        XCTAssertEqual(summarizer.summarizeCallCount, 0)
+        XCTAssertTrue(sessionFolders.isEmpty, "nothing was recorded, so no session folder")
+        XCTAssertTrue(clipboard.pastedMultiline.isEmpty)
+    }
+
+    func test_shadowJoinDenied_returnsToIdleWithoutRecording() async {
+        let probe = ShadowProbe()
+        probe.promptResult = meetURL
+        let host = FakeShadowHost()
+        let capture = FakeSystemAudioCapture()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeShadowViewModel(probe: probe, host: host, capture: capture, summarizer: summarizer)
+
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await waitUntil(timeout: 5) { host.joinedURL != nil }
+        host.send(.state(.failed(.denied)))
+        await waitUntil(timeout: 5) { viewModel.appState == .idle && host.leaveCallCount == 1 }
+
+        XCTAssertEqual(viewModel.appState, .idle)
+        XCTAssertEqual(host.leaveCallCount, 1)
+        XCTAssertEqual(capture.startCallCount, 0)
+        XCTAssertTrue(sessionFolders.isEmpty)
+    }
+
+    func test_shadowPrompt_cancelled_startsNothing() async {
+        let probe = ShadowProbe()
+        probe.promptResult = nil
+        let host = FakeShadowHost()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeShadowViewModel(probe: probe, host: host, capture: FakeSystemAudioCapture(), summarizer: summarizer)
+
+        await waitUntil { viewModel.appState == .idle }
+        viewModel.startRecording()
+        await yieldForStartRecordingTask()
+
+        XCTAssertEqual(probe.promptCalls.count, 1)
+        XCTAssertNil(host.joinedURL)
+        XCTAssertEqual(viewModel.appState, .idle)
+        XCTAssertFalse(configService.shadowNoticeShown, "a cancelled sheet does not count as consent given")
     }
 }

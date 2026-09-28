@@ -206,6 +206,33 @@ One `DEBRIEF_LIVE` diagnostic line is logged per chunk (index, audio seconds, pe
 time, silence-vs-hard cut, padding, errors) and one at finish (chunk count, single-pass vs
 rolling, and seconds from stop to summary — the feature's headline metric).
 
+## Shadow Participant (experimental)
+
+A third Debrief source, `DebriefSource.joinMeetingAsParticipant`: Dikta joins a Meet/Teams/Zoom link as a
+guest, records the call, and leaves when the hotkey stops it. Off by default; the source only appears in
+Debrief → Source (plus the `Shadow host` and `Notetaker name` items) when `DIKTA_EXPERIMENTAL_SHADOW=1` or the
+UserDefaults key `experimentalShadowParticipant` is true (`ShadowParticipantFlag`). With the flag off the menu
+is the v1.5 menu, and a saved `debrief_source` of this case is ignored (`MenuBarViewModel.isShadowMode`).
+
+Config: `shadow_host` (`wkWebView` | `chrome`, default `wkWebView`), `shadow_display_name` (default
+`Dikta · notes (<macOS full name>)`), `shadow_notice_shown` (one-time consent notice). All decode with defaults.
+
+Pieces (`Dikta/Services/Shadow/`):
+- `ShadowHost` — browser-backed guest (`WKWebViewShadowHost` off-screen web view, `ChromeShadowHost` installed
+  Chromium over CDP). Reports `ShadowEvent`s (join state, active speaker, roster) and `audioProcessIDs`.
+- `ShadowPlatform` / `ShadowJoinDriver` — URL table, selectors, join flow. Only Meet has selectors.
+- `ShadowSpeakerPoller` + `SpeakerTimelineRecorder` — active speaker to `speakers.jsonl` in the session folder;
+  `SpeakerAttributor` names the Them track from it (Debrief/).
+- `ShadowDependencies` — the seams `MenuBarViewModel` uses (flag, host factory, tap factory, meeting sheet,
+  clipboard); tests replace all of them.
+
+Flow (`MenuBarViewModel.startShadowRecording` / `stopShadowRecording`): hotkey → meeting sheet (clipboard
+pre-fill, consent notice with the notetaker name on first use) → host joins, `appState = .recording` at once so
+the hotkey can cancel a join → on `.admitted`: session folder, two writers, live session, tap targeted at
+`host.audioProcessIDs`, then the mic → stop: host leaves, tap and mic stop, writers close, `runLiveDebrief`
+exactly as a call recording. `muteAll()` is never called; push-to-talk is ignored. Stopping before admission or a
+`.failed` state returns to idle with no session folder and no debrief.
+
 ## macOS Permissions
 
 - **Microphone** — for recording (entitlement: `com.apple.security.device.audio-input`)

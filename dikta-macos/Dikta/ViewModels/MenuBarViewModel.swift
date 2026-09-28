@@ -62,6 +62,8 @@ final class MenuBarViewModel: ObservableObject {
     /// Builds the system-audio capture used by a call recording. Injected so
     /// tests substitute `FakeSystemAudioCapture` for the real CoreAudio tap.
     private let systemAudioCaptureFactory: () -> any SystemAudioCapturing
+    /// Seams of the experimental shadow participant source (host, tap, sheet).
+    private let shadow: ShadowDependencies
     private let audioFeedback: any AudioFeedbackPlaying
     private let clipboardManager: ClipboardManager
     private let hotkeyManager: HotkeyManager
@@ -140,6 +142,8 @@ final class MenuBarViewModel: ObservableObject {
     ///     process tap); tests inject `FakeSystemAudioCapture` so no tap is ever
     ///     opened and no permission prompt can appear. Called once per call
     ///     recording, so each session gets a fresh capture.
+    ///   - shadow: Host, tap, meeting sheet and flag for the experimental
+    ///     "Join meeting as participant" source. Tests inject fakes for all of them.
     ///   - audioRecorder: Microphone capture. Defaults to a real
     ///     `AudioRecorder`; tests inject `FakeAudioRecorder` so no
     ///     `AVAudioEngine` is built and no `AVCaptureDevice.requestAccess`
@@ -158,6 +162,7 @@ final class MenuBarViewModel: ObservableObject {
         audioFileLoader: (@Sendable (URL) throws -> [Float])? = nil,
         muterRegistry: (any MuterRegistering)? = nil,
         systemAudioCaptureFactory: (() -> any SystemAudioCapturing)? = nil,
+        shadow: ShadowDependencies? = nil,
         audioRecorder: (any AudioRecording)? = nil,
         audioFeedback: (any AudioFeedbackPlaying)? = nil
     ) {
@@ -192,6 +197,7 @@ final class MenuBarViewModel: ObservableObject {
         self.transcriber = engine ?? resolvedEngineFactory(startupKind, startupModel)
         self.audioRecorder = audioRecorder ?? AudioRecorder()
         self.systemAudioCaptureFactory = systemAudioCaptureFactory ?? { SystemAudioTapRecorder() }
+        self.shadow = shadow ?? .live
         self.audioFeedback = audioFeedback ?? Self.makeDefaultAudioFeedback()
         let resolvedClipboardManager = clipboardManager ?? ClipboardManager()
         self.clipboardManager = resolvedClipboardManager
@@ -330,6 +336,10 @@ final class MenuBarViewModel: ObservableObject {
 
         // A call debrief captures two tracks straight to disk and has its own
         // start sequence; everything below is the single-track mic path.
+        if isShadowMode {
+            startShadowRecording()
+            return
+        }
         if isCallRecordingMode {
             startCallRecording()
             return
@@ -426,6 +436,11 @@ final class MenuBarViewModel: ObservableObject {
     /// Stop recording and process
     func stopRecording() {
         guard appState == .recording else { return }
+
+        if let run = activeShadowRun {
+            stopShadowRecording(run)
+            return
+        }
 
         if let session = activeCallSession {
             stopCallRecording(session)
@@ -648,6 +663,24 @@ final class MenuBarViewModel: ObservableObject {
     /// don't need to reach through to the config store just to check it.
     var debriefSource: DebriefSource {
         configService.debriefSource
+    }
+
+    /// Sources the Source menu offers. The experimental one only shows with the flag on,
+    /// so with it off the menu is exactly what v1.5 had.
+    var availableDebriefSources: [DebriefSource] {
+        DebriefSource.allCases.filter { $0 != .joinMeetingAsParticipant || shadow.isEnabled() }
+    }
+
+    var isShadowParticipantAvailable: Bool { shadow.isEnabled() }
+
+    func setShadowHost(_ kind: ShadowHostKind) {
+        configService.shadowHost = kind
+    }
+
+    /// An empty name restores the default.
+    func setShadowDisplayName(_ name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        configService.shadowDisplayName = trimmed.isEmpty ? AppConfig.defaultShadowDisplayName : trimmed
     }
 
     func setDebriefSource(_ source: DebriefSource) {
@@ -1053,6 +1086,219 @@ final class MenuBarViewModel: ObservableObject {
         Task {
             await runLiveDebrief(live)
         }
+    }
+
+    // MARK: - Shadow participant (experimental debrief source)
+
+    /// True when the next/current recording joins a meeting as a guest. Requires the
+    /// experimental flag: with it off a saved `.joinMeetingAsParticipant` does nothing
+    /// and the recording is a plain mic debrief.
+    var isShadowMode: Bool {
+        configService.debriefModeEnabled
+            && configService.debriefSource == .joinMeetingAsParticipant
+            && shadow.isEnabled()
+    }
+
+    /// One join, from the host being built until the debrief has been handed off.
+    private final class ShadowRun {
+        let host: any ShadowHost
+        var task: Task<Void, Never>?
+        /// Non-nil once the host admitted us and capture is running.
+        var session: CallRecordingSession?
+        var recorder: SpeakerTimelineRecorder?
+        var stopping = false
+
+        init(host: any ShadowHost) { self.host = host }
+    }
+
+    private var activeShadowRun: ShadowRun?
+
+    /// True from the hotkey press until the run exists: the meeting sheet is modal-async,
+    /// so `appState` is still `.idle` while it is up.
+    private var isStartingShadow = false
+
+    private func startShadowRecording() {
+        guard !isStartingShadow else { return }
+        isStartingShadow = true
+
+        let overrides = recorderOverrides(debriefEnabled: true, callRecording: true)
+        audioRecorder.silenceAutoStopEnabled = overrides.silenceAutoStop
+        audioRecorder.maxBufferSamples = overrides.maxBufferSamples
+        audioRecorder.accumulateInMemory = overrides.accumulateInMemory
+        audioRecorder.onSilenceAutoStop = nil
+
+        Task {
+            defer { isStartingShadow = false }
+
+            // No muteAll: the meeting is the recording target, same as a call recording.
+            activeMuteTokens = []
+
+            let showNotice = !configService.shadowNoticeShown
+            let displayName = configService.shadowDisplayName
+            let prefill = ShadowPlatform.meetingURL(from: shadow.clipboardText())
+            guard let url = await shadow.promptForMeeting(prefill, displayName, showNotice) else {
+                activeRecordingMode = nil
+                return
+            }
+            if showNotice { configService.shadowNoticeShown = true }
+
+            let run = ShadowRun(host: shadow.hostFactory(configService.shadowHost))
+            activeShadowRun = run
+            // Recording from the user's point of view: the hotkey now stops the join,
+            // whether or not we have been admitted yet.
+            appState = .recording
+            DiagnosticLogger.shared.log("SHADOW_START | host=\(configService.shadowHost.rawValue)")
+            run.task = Task { [weak self] in await self?.consumeShadowEvents(run) }
+            await run.host.join(url: url, displayName: displayName)
+        }
+    }
+
+    private func consumeShadowEvents(_ run: ShadowRun) async {
+        for await event in run.host.events {
+            switch event {
+            case .state(.admitted):
+                if run.session == nil, !run.stopping { await beginShadowCapture(run) }
+            case .state(.failed(let failure)):
+                guard run.session == nil, !run.stopping else { continue }
+                abortShadow(run, message: Self.shadowFailureMessage(for: failure))
+                return
+            default:
+                run.recorder?.record(event)
+            }
+        }
+    }
+
+    /// Admitted: session folder, both tracks, then the tap on the host's processes, then
+    /// the microphone. Same order and reasoning as `startCallRecording`.
+    private func beginShadowCapture(_ run: ShadowRun) async {
+        let session: CallRecordingSession
+        do {
+            let paths = try debriefStore.createSession()
+            let pipeline = makeDebriefPipeline()
+            session = CallRecordingSession(
+                paths: paths,
+                me: try debriefStore.makeStreamingWriter(for: .me, in: paths),
+                them: try debriefStore.makeStreamingWriter(for: .them, in: paths),
+                capture: shadow.captureFactory(Set(run.host.audioProcessIDs)),
+                live: try pipeline.startLiveSession(
+                    tracks: [.me, .them],
+                    language: configService.language.whisperCode,
+                    micSensitivity: configService.micSensitivity,
+                    paths: paths
+                )
+            )
+        } catch {
+            DiagnosticLogger.shared.log("SHADOW_START_FAILED | session | \(error.localizedDescription)")
+            abortShadow(run, message: ("Could Not Start Recording", error.localizedDescription))
+            return
+        }
+
+        session.capture.onSamples = { [weak session] samples in session?.appendThem(samples) }
+        silentSystemAudioWarningCount = 0
+        session.onSilentSystemAudio = { [weak self] in
+            Task { @MainActor in self?.reportSilentSystemAudio() }
+        }
+        audioRecorder.onLiveSamples = { [weak session] samples in session?.appendMe(samples) }
+
+        do {
+            try await session.capture.start()
+        } catch {
+            audioRecorder.onLiveSamples = nil
+            session.capture.onSamples = nil
+            session.capture.stop()
+            session.closeWriters()
+            DiagnosticLogger.shared.log("SHADOW_START_FAILED | systemAudio | \(error.localizedDescription)")
+            abortShadow(run, message: Self.systemAudioFailureMessage(for: error))
+            return
+        }
+
+        // t = 0 of speakers.jsonl is the moment the tap started, matching the track clocks.
+        let recorder = SpeakerTimelineRecorder(fileURL: session.paths.speakers)
+
+        do {
+            try await audioRecorder.startRecording(micSensitivity: configService.micSensitivity)
+        } catch {
+            session.capture.stop()
+            session.capture.onSamples = nil
+            _ = audioRecorder.stopRecording()
+            audioRecorder.onLiveSamples = nil
+            session.closeWriters()
+            recorder.close()
+            DiagnosticLogger.shared.log("SHADOW_START_FAILED | mic | \(error.localizedDescription)")
+            abortShadow(run, message: ("Error", "Failed to start recording: \(error.localizedDescription)"))
+            return
+        }
+
+        run.session = session
+        run.recorder = recorder
+        activeCallSession = session
+        recordingStartDate = Date()
+        audioFeedback.beepOn()
+        DiagnosticLogger.shared.log(
+            "SHADOW_ADMITTED | rate=\(audioRecorder.inputSampleRate)Hz | folder=\(session.paths.folder.lastPathComponent)"
+        )
+    }
+
+    /// A join that never became a recording: nothing to debrief, back to idle.
+    private func abortShadow(_ run: ShadowRun, message: (title: String, body: String)) {
+        activeShadowRun = nil
+        activeRecordingMode = nil
+        recordingStartDate = nil
+        appState = .idle
+        Task { await run.host.leave() }
+        sendNotification(title: message.title, body: message.body)
+    }
+
+    /// Leaves the meeting (closing the browser surface), stops both producers, closes the
+    /// writers and finishes the debrief like a call recording. Stopped before admission,
+    /// there is nothing recorded and nothing to debrief.
+    private func stopShadowRecording(_ run: ShadowRun) {
+        run.stopping = true
+        activeShadowRun = nil
+        activeRecordingMode = nil
+        audioRecorder.onSilenceAutoStop = nil
+        appState = .processing
+
+        Task {
+            await run.host.leave()
+            // Ends when `leave()` finishes the event stream; also lets an in-flight
+            // `beginShadowCapture` complete so its session is torn down below.
+            await run.task?.value
+
+            guard let session = run.session else {
+                appState = .idle
+                DiagnosticLogger.shared.log("SHADOW_STOP | not_admitted")
+                sendNotification(title: "Meeting Not Joined", body: "Left before the host let Dikta in. Nothing was recorded.")
+                return
+            }
+
+            activeCallSession = nil
+            session.capture.stop()
+            session.capture.onSamples = nil
+            _ = audioRecorder.stopRecording()
+            audioRecorder.onLiveSamples = nil
+            session.closeWriters()
+            run.recorder?.close()
+            unmuteMicTargets()
+            recordingStartDate = nil
+            DiagnosticLogger.shared.log("SHADOW_STOP | admitted")
+            await runLiveDebrief(session.live)
+        }
+    }
+
+    nonisolated static func shadowFailureMessage(for failure: ShadowFailure) -> (title: String, body: String) {
+        let body: String
+        switch failure {
+        case .noBrowser: body = "No Chrome, Edge or Brave was found. Pick the built-in web view in Debrief → Shadow host."
+        case .unsupportedPlatform: body = "That link is not a Meet, Teams or Zoom meeting."
+        case .platformNotImplemented(let name): body = "Joining \(name) meetings is not supported yet."
+        case .pageLoadFailed(let reason): body = "The meeting page did not load: \(reason)"
+        case .launchFailed(let reason): body = "Could not start the browser: \(reason)"
+        case .joinControlsNotFound: body = "Could not find the join controls on the meeting page."
+        case .admissionTimedOut: body = "Nobody let Dikta in before the wait ran out."
+        case .denied: body = "The host declined the request to join."
+        }
+        return ("Could Not Join Meeting", body)
     }
 
     /// How long the Them track may stay at exact digital zero before the user
@@ -1956,7 +2202,7 @@ extension MenuBarViewModel: HotkeyManagerDelegate {
                 // A call recording is toggle-only (decision 10: "stop only").
                 // Push-to-talk must not start one — its release would end the
                 // recording the moment the user let go of the key, mid-call.
-                if mode == .pushToTalk && isCallRecordingMode { return }
+                if mode == .pushToTalk && (isCallRecordingMode || isShadowMode) { return }
                 // Start recording and track which mode initiated it
                 activeRecordingMode = mode
                 startRecording()
@@ -1974,7 +2220,7 @@ extension MenuBarViewModel: HotkeyManagerDelegate {
             // call recording is running: push-to-talk is ignored there
             // entirely (decision 10), including a key that was already down
             // when the call recording started.
-            if mode == .pushToTalk && activeRecordingMode == .pushToTalk && activeCallSession == nil {
+            if mode == .pushToTalk && activeRecordingMode == .pushToTalk && activeCallSession == nil && activeShadowRun == nil && !isStartingShadow {
                 stopRecording()
             }
         }

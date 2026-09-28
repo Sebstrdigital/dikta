@@ -75,6 +75,15 @@ enum ShadowPlatform {
         table.first { $0.matches(url) }
     }
 
+    /// The meeting URL in `text` (trimmed) when it is an http(s) link to a known platform.
+    static func meetingURL(from text: String?, in table: [ShadowPlatformProfile] = table) -> URL? {
+        guard let text = text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty,
+              let url = URL(string: text),
+              let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http",
+              profile(for: url, in: table) != nil else { return nil }
+        return url
+    }
+
     /// `https://x.zoom.us/j/123?pwd=a` becomes `https://x.zoom.us/wc/join/123?pwd=a`.
     static func zoomWebClientURL(_ url: URL) -> URL {
         guard url.path.hasPrefix("/j/"),
