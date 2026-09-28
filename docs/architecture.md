@@ -17,6 +17,9 @@ Hotkey → Recording → WhisperKit STT → Auto-paste + History
 - **Services/**
   - `HotkeyManager.swift` — CGEventTap-based global hotkey detection (flagsChanged + keyDown/keyUp)
   - `ConfigService.swift` — Singleton config manager, persists to `~/Library/Application Support/Dikta/config.json`
+  - `TranscriptionEngine.swift` — Protocol both STT backends conform to (see Transcription Engine below)
+  - `Transcriber.swift` — WhisperKit-backed `TranscriptionEngine`
+  - `ParakeetEngine.swift` — FluidAudio-backed `TranscriptionEngine`, one of the three Parakeet variants
   - `UpdateChecker.swift` — Checks GitHub releases for newer versions
   - `TextToSpeechService.swift` — Kokoro TTS integration via local Python server
   - `TextSelectionService.swift` — Gets selected text via Accessibility API
@@ -81,7 +84,9 @@ Dikta
 │   │   └── Heuristic
 │   └── Open Dikta folder
 ├── Advanced >
-│   ├── Whisper Model: Small / Medium (KB-Whisper Small hidden — auto-selected for Svenska, see below)
+│   ├── Engine: Whisper / Parakeet Redux / Parakeet v3 (Recommended) / Parakeet Ultra
+│   ├── Whisper Model: Small / Medium (KB-Whisper Small hidden — auto-selected for Svenska, see below;
+│   │   disabled while a Parakeet engine is active — see Transcription Engine below)
 │   └── Voice: (Kokoro voices)
 ├── About
 └── Quit
@@ -99,6 +104,53 @@ while Svenska is active updates the preference but keeps KB-Whisper loaded, and 
 submenu shows a disabled row explaining this. Switching away from Svenska reloads back
 to the preference automatically. KB-Whisper Small is never offered as a manual choice
 (`WhisperModel.isUserSelectable == false`).
+
+## Transcription Engine
+
+Dictation transcribes through one of two backends, both conforming to the `TranscriptionEngine`
+protocol (`Services/TranscriptionEngine.swift`) so `MenuBarViewModel` depends on that abstraction
+rather than on either backend directly:
+
+- **`Transcriber`** — WhisperKit-backed. The only kind before this feature, and the only one the
+  Whisper Model submenu applies to.
+- **`ParakeetEngine`** — FluidAudio-backed. One instance transcribes one fixed variant; switching
+  variants means swapping which `ParakeetEngine` instance is active, not reloading one instance.
+  `ParakeetEngine` never talks to FluidAudio's `AsrModels`/`AsrManager` directly — it goes through
+  its own `ParakeetBackend` seam, so tests substitute `FakeParakeetBackend` and never download or
+  load a real model under XCTest.
+
+**Kinds** (`Models/TranscriptionEngineKind.swift`, `TranscriptionEngineKind: String, CaseIterable`):
+`.whisper` (default), `.parakeetRedux` (`"parakeet-redux"`), `.parakeetV3` (`"parakeet-v3"`),
+`.parakeetUltra` (`"parakeet-ultra"`). `usesWhisperModelSubmenu` is `true` only for `.whisper` — the
+Whisper Model submenu is disabled while any Parakeet kind is active, since each Parakeet variant is
+its own fixed model with no size choice.
+
+**Factory.** `MenuBarViewModel` holds one `engineFactory: (TranscriptionEngineKind, WhisperModel) ->
+any TranscriptionEngine` — the single seam both the startup engine and every later
+`setEngine(_:)` call go through. Production builds resolve it to `Transcriber(model:)` for
+`.whisper` and `ParakeetEngine(kind:)` for the three Parakeet kinds; tests inject a fake factory so
+no real model ever loads under XCTest. `setEngine(_:)` builds the new engine, loads it, and only
+persists the switch and drops the old engine once the new one reports `isReady`; on failure the
+previous (already-loaded) engine is restored and the kind is not persisted — never falls back to a
+different kind than the one that was already working. Switching away from Parakeet back to Whisper
+while Svenska is the active language re-applies the existing KB-Whisper auto-select rule (see above);
+none of the three Parakeet variants beat KB-Whisper on Swedish (see
+`docs/review-2026-09/parakeet-bench.md`), so that rule is unchanged by this feature.
+
+**Config key.** Persisted as `engine` in `AppConfig`/`config.json`, decoded from
+`TranscriptionEngineKind.rawValue` (e.g. `"parakeet-v3"`). A config saved without an `engine` key, or
+with a raw value this build doesn't recognize, falls back to `.whisper` rather than failing to
+decode.
+
+**Model cache location.** FluidAudio downloads and caches Parakeet models under
+`~/Library/Application Support/FluidAudio/Models/<repo>/` — a sibling of Dikta's own
+`~/Library/Application Support/Dikta/config.json`, on the same volume WhisperKit's models and the
+free-disk-space check (`Transcriber.defaultFreeDiskSpace`) already use, so both engines agree on
+what "enough free space" means.
+
+**macOS 15 floor.** Adding the FluidAudio dependency raised the deployment target from 14.2 to 15.0
+(`Package.swift` `platforms`, and `MACOSX_DEPLOYMENT_TARGET` in `Dikta.xcodeproj/project.pbxproj`) —
+FluidAudio requires it. This is a floor for the whole app, not only the Parakeet engine.
 
 ## Debrief
 
@@ -158,7 +210,7 @@ rolling, and seconds from stop to summary — the feature's headline metric).
 
 - **Microphone** — for recording (entitlement: `com.apple.security.device.audio-input`)
 - **Accessibility** — for global hotkeys and auto-paste
-- **System Audio Recording Only** — for the debrief "Microphone + system audio" source (CoreAudio process tap, deployment target 14.2+). This is an audio-only TCC prompt; it lands under Privacy & Security → "System Audio Recording Only", separate from Screen Recording. macOS shows **no** recording indicator while a tap runs — Dikta's icon/sounds and the one-time in-app consent notice are the only signal the user gets, so the user is responsible for telling call participants. The app is not sandboxed (hardened runtime only), so this requires no entitlement changes.
+- **System Audio Recording Only** — for the debrief "Microphone + system audio" source (CoreAudio process tap, deployment target 14.2+). This is an audio-only TCC prompt; it lands under Privacy & Security → "System Audio Recording Only", separate from Screen Recording. macOS shows **no** recording indicator while a tap runs — Dikta's icon/sounds and the one-time in-app consent notice are the only signal the user gets, so the user is responsible for telling call participants. If the permission is missing, the tap still starts and delivers exact zeros, so `MenuBarViewModel` watches the Them track and warns once (`silentSystemAudioMessage`) after `silentSystemAudioWarningSeconds` of digital silence; any non-zero sample switches the watchdog off for the rest of the call. The app is not sandboxed (hardened runtime only), so this requires no entitlement changes.
 
 ## Text-to-Speech
 

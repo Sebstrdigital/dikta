@@ -51,6 +51,7 @@ private final class NoOpTranscriptionEngine: TranscriptionEngine {
 
     func load() async {}
     func reload(model: WhisperModel) async throws {}
+    func unload() async {}
     func transcribe(_ audioSamples: [Float], language: String?, micSensitivity: MicSensitivity) async throws -> String { "" }
     func transcribeSegments(_ samples: [Float], language: String?, micSensitivity: MicSensitivity, promptText: String?) async throws -> [TranscriptSegment] { [] }
 }

@@ -48,7 +48,11 @@ final class SentenceEmbeddingService {
         defer { lock.unlock() }
         if let m = model { return m }
 
-        guard let modelURL = Bundle.main.url(forResource: "MiniLML12v2", withExtension: "mlpackage") else {
+        // Xcode compiles the source `MiniLML12v2.mlpackage` into the bundle as
+        // `MiniLML12v2.mlmodelc`, so that is the extension to look up. Asking
+        // for `.mlpackage` returned nil in every built app since v1.2, and
+        // every caller silently fell back to Jaccard word overlap.
+        guard let modelURL = Bundle.main.url(forResource: "MiniLML12v2", withExtension: "mlmodelc") else {
             throw EmbeddingError.modelNotFound
         }
         let config = MLModelConfiguration()

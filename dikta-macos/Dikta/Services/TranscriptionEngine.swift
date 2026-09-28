@@ -28,6 +28,13 @@ protocol TranscriptionEngine: AnyObject {
     /// the failure as well.
     func reload(model: WhisperModel) async throws
 
+    /// Release any loaded model resources. Called on the previously active
+    /// engine when `MenuBarViewModel.setEngine` swaps it for a different
+    /// `TranscriptionEngineKind`, so the old engine's compiled models don't
+    /// linger in memory (Core ML/ANE resources, FluidAudio's `AsrManager`)
+    /// alongside the new engine's.
+    func unload() async
+
     /// Transcribe audio samples using the currently loaded model.
     func transcribe(_ audioSamples: [Float], language: String?, micSensitivity: MicSensitivity) async throws -> String
 

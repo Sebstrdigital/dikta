@@ -43,6 +43,11 @@ struct AppConfig: Codable {
     /// Whether the one-time "Recording call audio" consent notice has been
     /// shown. Set the first time `.microphoneAndSystemAudio` is selected.
     var callRecordingNoticeShown: Bool
+    /// Which speech-to-text engine transcribes dictation. Defaults to
+    /// `.whisper`, which also absorbs any config saved without this key (pre
+    /// this feature) or with a raw value this build doesn't recognize yet —
+    /// see `init(from:)`.
+    var engine: TranscriptionEngineKind
 
     struct HotkeyConfigs: Codable {
         var toggle: HotkeyConfig
@@ -96,6 +101,7 @@ struct AppConfig: Codable {
         case ollamaModel = "ollama_model"
         case debriefSource = "debrief_source"
         case callRecordingNoticeShown = "call_recording_notice_shown"
+        case engine
     }
 
     static let defaultCustomPrompt = "Clean up this dictation. Fix grammar, punctuation, and remove filler words. Output only the cleaned text."
@@ -125,14 +131,15 @@ struct AppConfig: Codable {
         debriefEngine: .auto,
         ollamaModel: defaultOllamaModel,
         debriefSource: .microphone,
-        callRecordingNoticeShown: false
+        callRecordingNoticeShown: false,
+        engine: .whisper
     )
 
     /// Maximum history items to keep
     static let historyLimit = 5
 
     /// Memberwise initializer
-    init(version: Int, hotkeys: HotkeyConfigs, outputMode: OutputMode, history: [HistoryItem], whisperModel: String, llmModel: String, language: Language, customPrompt: String = defaultCustomPrompt, micSensitivity: MicSensitivity = .normal, muteSounds: Bool = false, muteNotifications: Bool = false, diagnosticLogging: Bool = false, enabledLanguages: [Language] = [.english, .swedish, .indonesian], debriefModeEnabled: Bool = false, debriefEngine: DebriefEngineKind = .auto, ollamaModel: String = defaultOllamaModel, debriefSource: DebriefSource = .microphone, callRecordingNoticeShown: Bool = false) {
+    init(version: Int, hotkeys: HotkeyConfigs, outputMode: OutputMode, history: [HistoryItem], whisperModel: String, llmModel: String, language: Language, customPrompt: String = defaultCustomPrompt, micSensitivity: MicSensitivity = .normal, muteSounds: Bool = false, muteNotifications: Bool = false, diagnosticLogging: Bool = false, enabledLanguages: [Language] = [.english, .swedish, .indonesian], debriefModeEnabled: Bool = false, debriefEngine: DebriefEngineKind = .auto, ollamaModel: String = defaultOllamaModel, debriefSource: DebriefSource = .microphone, callRecordingNoticeShown: Bool = false, engine: TranscriptionEngineKind = .whisper) {
         self.version = version
         self.hotkeys = hotkeys
         self.outputMode = outputMode
@@ -151,6 +158,7 @@ struct AppConfig: Codable {
         self.ollamaModel = ollamaModel
         self.debriefSource = debriefSource
         self.callRecordingNoticeShown = callRecordingNoticeShown
+        self.engine = engine
     }
 
     /// Handle missing fields from old configs (v2 configs with active_mode are handled gracefully —
@@ -191,5 +199,14 @@ struct AppConfig: Codable {
         ollamaModel = try container.decodeIfPresent(String.self, forKey: .ollamaModel) ?? Self.defaultOllamaModel
         debriefSource = try container.decodeIfPresent(DebriefSource.self, forKey: .debriefSource) ?? .microphone
         callRecordingNoticeShown = try container.decodeIfPresent(Bool.self, forKey: .callRecordingNoticeShown) ?? false
+        // Decode the raw string ourselves rather than TranscriptionEngineKind directly:
+        // the synthesized RawRepresentable decoding throws on an unrecognized raw value,
+        // but an unknown engine (e.g. saved by a newer build) should fall back to
+        // .whisper, not fail the whole config load.
+        if let rawEngine = try container.decodeIfPresent(String.self, forKey: .engine) {
+            engine = TranscriptionEngineKind(rawValue: rawEngine) ?? .whisper
+        } else {
+            engine = .whisper
+        }
     }
 }

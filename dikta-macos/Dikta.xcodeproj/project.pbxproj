@@ -48,6 +48,8 @@
 		100000000000000000000104 /* TranscriberPostProcessingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000104 /* TranscriberPostProcessingTests.swift */; };
 		100000000000000000000105 /* FakeTranscriptionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000105 /* FakeTranscriptionEngine.swift */; };
 		100000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */; };
+		100000000000000000000129 /* MenuBarViewModelSetEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000129 /* MenuBarViewModelSetEngineTests.swift */; };
+		100000000000000000000130 /* ConfigServiceAtomicWriteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000130 /* ConfigServiceAtomicWriteTests.swift */; };
 		100000000000000000000107 /* MenuBarViewModelLanguageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000107 /* MenuBarViewModelLanguageTests.swift */; };
 		100000000000000000000108 /* TTSStaleServerPIDTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000108 /* TTSStaleServerPIDTests.swift */; };
 
@@ -69,6 +71,10 @@
 		100000000000000000000121 /* DebriefPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000121 /* DebriefPipelineTests.swift */; };
 		100000000000000000000122 /* MenuBarViewModelDebriefTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000122 /* MenuBarViewModelDebriefTests.swift */; };
 		100000000000000000000124 /* DebriefRealTranscriptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000124 /* DebriefRealTranscriptTests.swift */; };
+		100000000000000000000125 /* TranscriptionEngineKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000125 /* TranscriptionEngineKind.swift */; };
+		100000000000000000000126 /* ParakeetEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000126 /* ParakeetEngine.swift */; };
+		100000000000000000000127 /* FakeParakeetBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000127 /* FakeParakeetBackend.swift */; };
+		100000000000000000000128 /* ParakeetEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000128 /* ParakeetEngineTests.swift */; };
 		CA11DEB10000000900000001 /* DebriefLiveSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000900000002 /* DebriefLiveSession.swift */; };
 		CA11DEB10000000900000003 /* DebriefLiveSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000900000004 /* DebriefLiveSessionTests.swift */; };
 		CA11DEB10000000600000003 /* TwoTrackMerger.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000600000004 /* TwoTrackMerger.swift */; };
@@ -80,6 +86,7 @@
 		CA11DEB10000000A00000008 /* FakeAudioFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000A00000007 /* FakeAudioFeedback.swift */; };
 		CA11DEB10000000A00000006 /* FakeAudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000A00000005 /* FakeAudioRecorder.swift */; };
 		CA11DEB10000000100000006 /* SystemAudioTapRecorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000100000005 /* SystemAudioTapRecorderTests.swift */; };
+		CA11DEB10000000B00000002 /* SentenceEmbeddingServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000B00000001 /* SentenceEmbeddingServiceTests.swift */; };
 		CA11DEB10000000700000002 /* ChunkedTranscriptionSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000700000001 /* ChunkedTranscriptionSession.swift */; };
 		CA11DEB10000000700000004 /* ChunkedTranscriptionSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000700000003 /* ChunkedTranscriptionSessionTests.swift */; };
 		CA11DEB10000000800000002 /* DebriefState.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000800000001 /* DebriefState.swift */; };
@@ -202,6 +209,7 @@
 		CA11DEB10000000A00000007 /* FakeAudioFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeAudioFeedback.swift; sourceTree = "<group>"; };
 		CA11DEB10000000A00000005 /* FakeAudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeAudioRecorder.swift; sourceTree = "<group>"; };
 		CA11DEB10000000100000005 /* SystemAudioTapRecorderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAudioTapRecorderTests.swift; sourceTree = "<group>"; };
+		CA11DEB10000000B00000001 /* SentenceEmbeddingServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentenceEmbeddingServiceTests.swift; sourceTree = "<group>"; };
 		200000000000000000000092 /* MiniLML12v2.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper.mlpackage; path = MiniLML12v2.mlpackage; sourceTree = "<group>"; };
 		200000000000000000000093 /* minilm-vocab.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "minilm-vocab.txt"; sourceTree = "<group>"; };
 		200000000000000000000094 /* EmbeddingParagraphSplitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmbeddingParagraphSplitter.swift; sourceTree = "<group>"; };
@@ -214,6 +222,8 @@
 		200000000000000000000104 /* TranscriberPostProcessingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriberPostProcessingTests.swift; sourceTree = "<group>"; };
 		200000000000000000000105 /* FakeTranscriptionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeTranscriptionEngine.swift; sourceTree = "<group>"; };
 		200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelSetWhisperModelTests.swift; sourceTree = "<group>"; };
+		200000000000000000000129 /* MenuBarViewModelSetEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelSetEngineTests.swift; sourceTree = "<group>"; };
+		200000000000000000000130 /* ConfigServiceAtomicWriteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigServiceAtomicWriteTests.swift; sourceTree = "<group>"; };
 		200000000000000000000107 /* MenuBarViewModelLanguageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelLanguageTests.swift; sourceTree = "<group>"; };
 		200000000000000000000108 /* TTSStaleServerPIDTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSStaleServerPIDTests.swift; sourceTree = "<group>"; };
 		200000000000000000000109 /* DebriefSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefSummary.swift; sourceTree = "<group>"; };
@@ -237,6 +247,10 @@
 		200000000000000000000121 /* DebriefPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefPipelineTests.swift; sourceTree = "<group>"; };
 		200000000000000000000122 /* MenuBarViewModelDebriefTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelDebriefTests.swift; sourceTree = "<group>"; };
 		200000000000000000000124 /* DebriefRealTranscriptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefRealTranscriptTests.swift; sourceTree = "<group>"; };
+		200000000000000000000125 /* TranscriptionEngineKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionEngineKind.swift; sourceTree = "<group>"; };
+		200000000000000000000126 /* ParakeetEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParakeetEngine.swift; sourceTree = "<group>"; };
+		200000000000000000000127 /* FakeParakeetBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeParakeetBackend.swift; sourceTree = "<group>"; };
+		200000000000000000000128 /* ParakeetEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParakeetEngineTests.swift; sourceTree = "<group>"; };
 		CA11DEB10000000600000006 /* TwoTrackMergerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwoTrackMergerTests.swift; sourceTree = "<group>"; };
 		CA11DEB10000000200000002 /* StreamingWavWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingWavWriter.swift; sourceTree = "<group>"; };
 		CA11DEB10000000200000004 /* StreamingWavWriterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingWavWriterTests.swift; sourceTree = "<group>"; };
@@ -340,7 +354,11 @@
 				200000000000000000000075 /* MicMutingTests.swift */,
 				200000000000000000000104 /* TranscriberPostProcessingTests.swift */,
 				200000000000000000000105 /* FakeTranscriptionEngine.swift */,
+				200000000000000000000127 /* FakeParakeetBackend.swift */,
+				200000000000000000000128 /* ParakeetEngineTests.swift */,
 				200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */,
+				200000000000000000000129 /* MenuBarViewModelSetEngineTests.swift */,
+				200000000000000000000130 /* ConfigServiceAtomicWriteTests.swift */,
 				200000000000000000000107 /* MenuBarViewModelLanguageTests.swift */,
 				200000000000000000000108 /* TTSStaleServerPIDTests.swift */,
 				200000000000000000000114 /* DebriefSummaryTests.swift */,
@@ -358,6 +376,7 @@
 				CA11DEB10000000A00000007 /* FakeAudioFeedback.swift */,
 				CA11DEB10000000A00000005 /* FakeAudioRecorder.swift */,
 				CA11DEB10000000100000005 /* SystemAudioTapRecorderTests.swift */,
+				CA11DEB10000000B00000001 /* SentenceEmbeddingServiceTests.swift */,
 				CA11DEB10000000500000004 /* TranscriptSegmentTests.swift */,
 				CA11DEB10000000700000003 /* ChunkedTranscriptionSessionTests.swift */,
 				CA11DEB10000000800000017 /* DebriefAccumulatorTests.swift */,
@@ -375,6 +394,7 @@
 				200000000000000000000004 /* AppConfig.swift */,
 				200000000000000000000005 /* Language.swift */,
 				200000000000000000000006 /* WhisperModel.swift */,
+				200000000000000000000125 /* TranscriptionEngineKind.swift */,
 				200000000000000000000007 /* AppPaths.swift */,
 				200000000000000000000008 /* MicSensitivity.swift */,
 				200000000000000000000109 /* DebriefSummary.swift */,
@@ -391,6 +411,7 @@
 				200000000000000000000012 /* AudioRecorder.swift */,
 				200000000000000000000013 /* AudioFeedback.swift */,
 				200000000000000000000014 /* Transcriber.swift */,
+				200000000000000000000126 /* ParakeetEngine.swift */,
 				200000000000000000000103 /* TranscriptionEngine.swift */,
 				200000000000000000000016 /* ClipboardManager.swift */,
 				200000000000000000000123 /* TranscriptSanitizer.swift */,
@@ -513,6 +534,7 @@
 			packageProductDependencies = (
 				300000000000000000000001 /* WhisperKit */,
 				300000000000000000000002 /* Sparkle */,
+				300000000000000000000003 /* FluidAudio */,
 			);
 			productName = Dikta;
 			productReference = 400000000000000000000001 /* Dikta.app */;
@@ -563,6 +585,7 @@
 			packageReferences = (
 				A00000000000000000000001 /* XCRemoteSwiftPackageReference "WhisperKit" */,
 				A00000000000000000000002 /* XCRemoteSwiftPackageReference "Sparkle" */,
+				A00000000000000000000003 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 			);
 			productRefGroup = 600000000000000000000099 /* Products */;
 			projectDirPath = "";
@@ -600,7 +623,11 @@
 				100000000000000000000075 /* MicMutingTests.swift in Sources */,
 				100000000000000000000104 /* TranscriberPostProcessingTests.swift in Sources */,
 				100000000000000000000105 /* FakeTranscriptionEngine.swift in Sources */,
+				100000000000000000000127 /* FakeParakeetBackend.swift in Sources */,
+				100000000000000000000128 /* ParakeetEngineTests.swift in Sources */,
 				100000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift in Sources */,
+				100000000000000000000129 /* MenuBarViewModelSetEngineTests.swift in Sources */,
+				100000000000000000000130 /* ConfigServiceAtomicWriteTests.swift in Sources */,
 				100000000000000000000107 /* MenuBarViewModelLanguageTests.swift in Sources */,
 				100000000000000000000108 /* TTSStaleServerPIDTests.swift in Sources */,
 				100000000000000000000114 /* DebriefSummaryTests.swift in Sources */,
@@ -618,6 +645,7 @@
 				CA11DEB10000000A00000008 /* FakeAudioFeedback.swift in Sources */,
 				CA11DEB10000000A00000006 /* FakeAudioRecorder.swift in Sources */,
 				CA11DEB10000000100000006 /* SystemAudioTapRecorderTests.swift in Sources */,
+				CA11DEB10000000B00000002 /* SentenceEmbeddingServiceTests.swift in Sources */,
 				CA11DEB10000000500000003 /* TranscriptSegmentTests.swift in Sources */,
 				CA11DEB10000000700000004 /* ChunkedTranscriptionSessionTests.swift in Sources */,
 				CA11DEB10000000800000018 /* DebriefAccumulatorTests.swift in Sources */,
@@ -637,6 +665,7 @@
 				100000000000000000000012 /* AudioRecorder.swift in Sources */,
 				100000000000000000000013 /* AudioFeedback.swift in Sources */,
 				100000000000000000000014 /* Transcriber.swift in Sources */,
+				100000000000000000000126 /* ParakeetEngine.swift in Sources */,
 				100000000000000000000103 /* TranscriptionEngine.swift in Sources */,
 				100000000000000000000007 /* AppPaths.swift in Sources */,
 				100000000000000000000016 /* ClipboardManager.swift in Sources */,
@@ -647,6 +676,7 @@
 				100000000000000000000041 /* DiktaApp.swift in Sources */,
 				100000000000000000000005 /* Language.swift in Sources */,
 				100000000000000000000006 /* WhisperModel.swift in Sources */,
+				100000000000000000000125 /* TranscriptionEngineKind.swift in Sources */,
 				100000000000000000000008 /* MicSensitivity.swift in Sources */,
 				100000000000000000000018 /* Logger.swift in Sources */,
 				100000000000000000000019 /* TextToSpeechService.swift in Sources */,
@@ -756,7 +786,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.2;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -813,7 +843,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.2;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
@@ -887,7 +917,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.2;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app.DiktaTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -902,7 +932,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.2;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app.DiktaTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -960,6 +990,14 @@
 				minimumVersion = 2.0.0;
 			};
 		};
+		A00000000000000000000003 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.17.3;
+			};
+		};
 	/* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -972,6 +1010,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A00000000000000000000002 /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		300000000000000000000003 /* FluidAudio */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A00000000000000000000003 /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			productName = FluidAudio;
 		};
 	/* End XCSwiftPackageProductDependency section */
 	};

@@ -311,6 +311,20 @@ struct AdvancedMenu: View {
         viewModel.loadedModel?.displayName ?? "Not Loaded"
     }
 
+    /// The Parakeet variant the FLEURS sv+en benchmark recommends — see
+    /// `docs/review-2026-09/parakeet-bench.md`'s "Recommendation" section. A
+    /// fixed pick from that report, not derived from any runtime data;
+    /// update it if a future bench report changes the recommendation.
+    private static let recommendedParakeetKind: TranscriptionEngineKind = .parakeetV3
+
+    private func engineRowLabel(for kind: TranscriptionEngineKind) -> String {
+        let sizeText = "~\(kind.approximateSizeMB) MB"
+        guard kind == Self.recommendedParakeetKind else {
+            return "\(kind.displayName) — \(sizeText)"
+        }
+        return "\(kind.displayName) (Recommended) — \(sizeText)"
+    }
+
     var body: some View {
         Menu("Advanced") {
             Button(action: { viewModel.toggleLaunchAtLogin() }) {
@@ -327,6 +341,24 @@ struct AdvancedMenu: View {
 
             Button("Check for Updates...") {
                 sparkle.checkForUpdates()
+            }
+
+            Divider()
+
+            Menu("Engine: \(viewModel.configService.engine.displayName)") {
+                ForEach(TranscriptionEngineKind.allCases, id: \.self) { kind in
+                    Button(action: {
+                        viewModel.setEngine(kind)
+                    }) {
+                        HStack {
+                            Text(engineRowLabel(for: kind))
+                            if viewModel.configService.engine == kind {
+                                Spacer()
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
             }
 
             Divider()
@@ -354,6 +386,7 @@ struct AdvancedMenu: View {
                     .disabled(true)
                 }
             }
+            .disabled(!viewModel.configService.engine.usesWhisperModelSubmenu)
 
             Button(action: { viewModel.toggleDiagnosticLogging() }) {
                 HStack {

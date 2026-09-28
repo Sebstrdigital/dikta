@@ -22,9 +22,46 @@ cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta -only-t
 ## Config (AppConfig, ConfigService)
 
 **Files**: `dikta-macos/Dikta/Models/AppConfig.swift`, `dikta-macos/Dikta/Services/ConfigService.swift`
-**Tests**: `AppConfigDecodingTests`, `AppConfigEnabledLanguagesDecodingTests`
+**Tests**: `AppConfigDecodingTests`, `AppConfigEnabledLanguagesDecodingTests`, `ConfigServiceAtomicWriteTests`
 
 **Run command**: same as above (all in DiktaTests target)
+
+## Transcription Engine (Whisper + Parakeet)
+
+**Files**: `dikta-macos/Dikta/Models/TranscriptionEngineKind.swift`, `dikta-macos/Dikta/Services/TranscriptionEngine.swift`,
+`dikta-macos/Dikta/Services/Transcriber.swift`, `dikta-macos/Dikta/Services/ParakeetEngine.swift`,
+`dikta-macos/Dikta/ViewModels/MenuBarViewModel.swift` (`setEngine(_:)`, `engineFactory`),
+`dikta-macos/Dikta/Views/MenuBarView.swift` (`Engine:` submenu in `AdvancedMenu`)
+
+**Test files**: `ParakeetEngineTests.swift`, `MenuBarViewModelSetEngineTests.swift`, `FakeParakeetBackend.swift`,
+`FakeTranscriptionEngine.swift`
+
+**Test classes**: `ParakeetEngineTests`, `MenuBarViewModelSetEngineTests`. Config decode/round-trip
+of the `engine` key (missing key, unknown value, known value) lives in the existing
+`AppConfigDecodingTests` (see Config above).
+
+**Run command**: same `DiktaTests` target as above, e.g.
+```bash
+cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta -only-testing:DiktaTests -destination 'platform=macOS' CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" DEVELOPMENT_TEAM=UUM29335B4 2>&1 | grep -E 'Executed.*test|error:|failed'
+```
+To run just these two classes: `-only-testing:DiktaTests/ParakeetEngineTests -only-testing:DiktaTests/MenuBarViewModelSetEngineTests`.
+
+**Rules**:
+1. No test may download or load a real FluidAudio/Parakeet model — `ParakeetEngineTests` injects
+   `FakeParakeetBackend` (never the real `FluidAudioParakeetBackend`), the same way `MenuBarViewModelSetEngineTests`
+   and other ViewModel tests inject `FakeTranscriptionEngine`/a fake `engineFactory` rather than building a real
+   `Transcriber` or `ParakeetEngine`.
+2. `setEngine(_:)` behavior to cover on any change: no-op when the requested kind is already active,
+   the previous engine is restored (and not persisted over) on load failure, and the Swedish
+   KB-Whisper auto-select rule still applies when switching back to `.whisper` from Parakeet.
+
+**Parakeet bench command** (WER/RTF/load-time comparison against Whisper, not part of the
+`DiktaTests` gate — a manual report, see `docs/review-2026-09/parakeet-bench.md`):
+```bash
+cd dikta-macos/bench && ./run.sh parakeet redux parakeet v3 parakeet ultra
+```
+Single variant: `./run.sh parakeet v3` (or `redux`/`ultra`). See `bench/README.md` for scoring a
+single piece by hand and the first-load ANE-compile caveat (a cold Parakeet load can take minutes).
 
 ## Debrief mode (summarizers, audio I/O, pipeline, ViewModel wiring)
 
@@ -108,6 +145,41 @@ for p in $(pgrep -x Dikta); do ps -o command= -p $p | grep -q ApplePersistenceIg
 
 **Known pre-existing failure**: `testSlackMuterReturnsNilWhenSlackNotRunning` (`MicMutingTests.swift`) fails when
 Slack.app is open on the test machine — unrelated to Call Debrief, not a regression.
+
+## Release gate (build-release.sh / CI)
+
+**Files**: `dikta-macos/scripts/build-release.sh`, `.github/workflows/macos-build.yml`
+
+Both the release script and macOS CI enforce that the `DiktaTests` target actually ran before anything ships —
+a chronic failure mode is a green-looking pipeline that shipped a broken or empty test suite (e.g. an
+`-only-testing:` filter that silently matches zero tests, or a build error that never reaches the test phase).
+
+**`scripts/build-release.sh`**: before archiving, runs
+`xcodebuild test -only-testing:DiktaTests ...` (same identity/team as the archive build) into a log, then aborts
+the release with a clear error and the last lines of the log if:
+- the log has no `Executed N tests` line with `N > 0`, or
+- the test run's exit code is non-zero (a real failure).
+
+`--skip-tests` bypasses the gate entirely and prints a loud warning that the DMG is being built on an unverified
+test suite — use only for emergencies, never routinely. `--no-publish` (DMG only, no appcast/release) still runs
+the gate; the two flags combine in either order:
+```bash
+./scripts/build-release.sh --skip-tests
+./scripts/build-release.sh --no-publish --skip-tests
+```
+
+**CI (`macos-build.yml`)**: the `xcodebuild test (ad-hoc signing)` step applies the same log check — it fails the
+job on a non-zero exit *or* on zero executed tests, so a misconfigured scheme/filter can't pass CI by matching
+nothing.
+
+**Known pre-existing gap this gate must not choke on**: `DebriefRealTranscriptTests` skips via `XCTSkip` (not a
+failure) when `~/Documents/Dikta` has no local sessions — the gate counts a skip as part of a passing run, since
+`xcodebuild` reports it separately from failures and it still contributes to `Executed N tests`. On a machine
+that *does* have a local session, but the newest one is too short to yield any decision/action item, one of that
+file's real-transcript assertions can fail for real (an environment condition, not a regression) — see that
+file's own doc comment. That failure is real and the gate is meant to catch it like any other; it is not silenced
+here. If it fires only because of a too-short local recording, re-record a longer local session or use
+`DIKTA_REAL_SESSIONS_DIR` to point at one that isn't, rather than reaching for `--skip-tests`.
 
 ---
 

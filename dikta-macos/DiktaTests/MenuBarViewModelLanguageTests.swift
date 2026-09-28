@@ -48,7 +48,7 @@ final class MenuBarViewModelLanguageTests: XCTestCase {
     /// built by the ViewModel so the test can observe which model `init`
     /// resolved for the active language.
     private func makeViewModel(
-        engineFactory: @escaping (WhisperModel) -> any TranscriptionEngine
+        engineFactory: @escaping (TranscriptionEngineKind, WhisperModel) -> any TranscriptionEngine
     ) -> MenuBarViewModel {
         MenuBarViewModel(
             engineFactory: engineFactory,
@@ -106,7 +106,8 @@ final class MenuBarViewModelLanguageTests: XCTestCase {
         configService.language = .swedish
         var constructedWithModel: WhisperModel?
         let viewModel = makeViewModel(
-            engineFactory: { model in
+            engineFactory: { kind, model in
+                XCTAssertEqual(kind, .whisper)
                 constructedWithModel = model
                 return fake
             }
@@ -127,7 +128,8 @@ final class MenuBarViewModelLanguageTests: XCTestCase {
         configService.language = .english
         var constructedWithModel: WhisperModel?
         let viewModel = makeViewModel(
-            engineFactory: { model in
+            engineFactory: { kind, model in
+                XCTAssertEqual(kind, .whisper)
                 constructedWithModel = model
                 return fake
             }

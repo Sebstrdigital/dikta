@@ -2,7 +2,54 @@
 
 All notable changes to Dikta will be documented in this file.
 
+- 2026-09-28: `build-release.sh` and macOS CI now abort the release/job if `DiktaTests` didn't actually execute (zero matched tests or a non-zero exit) — closing tech debt carried unresolved for 14 sprints.
+- 2026-09-28: `ConfigService.save()` now uses a single atomic-write strategy (temp file + `replaceItemAt`), removing the duplicate approach that had carried as unresolved tech debt for 14 sprints.
 - 2026-04-17: DiagnosticLogger (Windows) now correctly gated behind `[Conditional("DIAGNOSTICS")]` compile flag — release builds produce no log output
+
+## [1.5] - 2026-09-28 — Parakeet
+
+### Features
+- **Parakeet transcription engine** — a new Engine submenu (Advanced menu) switches dictation
+  between WhisperKit (unchanged default) and three FluidAudio-backed Parakeet variants: Redux
+  (~210 MB), v3 (~460 MB, marked Recommended), and Ultra (~600 MB). Switching engines takes effect
+  immediately, with a free-disk-space check before each new variant downloads; if a switch fails to
+  load, the previously active engine is kept rather than leaving dictation stuck. Under the Whisper
+  engine, Svenska still auto-selects KB-Whisper Small — every Parakeet variant benchmarked roughly
+  3x worse than KB-Whisper on Swedish WER (see `docs/review-2026-09/parakeet-bench.md`), so that
+  rule is unchanged. An explicitly chosen Parakeet engine applies to every language, including
+  Svenska; language switches no longer trigger a model reload while Parakeet is active.
+- FLEURS sv+en benchmark of Parakeet Redux/v3/Ultra against Whisper Turbo and KB-Whisper, run via
+  `DiktaBench --engine parakeet` (`dikta-macos/bench/`); results and methodology in
+  `docs/review-2026-09/parakeet-bench.md`.
+
+### Fixes
+- **Call Debrief recorded a silent "Them" track.** The built app's Info.plist lacked
+  `NSAudioCaptureUsageDescription`, so macOS never showed the System Audio prompt and the tap
+  delivered digital silence while reporting success. The key is now in the real Info.plist, and a
+  watchdog warns once per call if the system-audio track stays silent for 20 s.
+- **Debrief de-duplication never used the sentence-embedding model.** The MiniLM model is compiled to
+  `.mlmodelc` in the bundle but was looked up as `.mlpackage`, so every call silently fell back to a
+  word-overlap heuristic since v1.2. Paraphrased decisions and action items now collapse properly.
+- **Whisper model reloads release the previous model.** Each language-driven reload (Svenska ↔ other)
+  now unloads the outgoing WhisperKit models explicitly instead of leaving them to be collected.
+- **Diagnostic log lines carry engine, model, language and memory.** Every `START` / `RESULT` line
+  now shows which engine and model handled the take and the app's resident memory, so a report of
+  quality drifting over a long session can be checked against the log instead of guessed at.
+
+### Platform
+- **macOS deployment target raised from 14.2 to 15.0** — Parakeet Redux's 2-bit Core ML weights need
+  macOS 15 (FluidAudio itself runs on 14). This is a floor for the whole app, not only that engine.
+- Swift package manifest moves to tools-version 6.0 for the FluidAudio dependency while pinning
+  Swift 5 language mode, matching the Xcode project, so `swift build` / `swift test` keep working.
+
+### Internal (tech debt)
+- **ConfigService now has one atomic-write strategy.** Config saves go through a single
+  write-to-temp-file-then-`replaceItemAt` path (POSIX rename), replacing whatever mixed approach
+  existed before, so a save is never left truncated if the app dies mid-write.
+- **build-release.sh and macOS CI now gate on the unit tests actually having run.** Both abort the
+  release/job if the test log has no `Executed N tests` line with `N > 0` (e.g. a build error before
+  tests ran, or a silently-empty `-only-testing:` filter) or if the run failed — closing a
+  green-looking-pipeline gap where a broken or empty test suite could still ship.
 
 ## [1.3] - 2026-09-16 — Svenska & Turbo
 

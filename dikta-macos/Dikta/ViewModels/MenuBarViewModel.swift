@@ -44,7 +44,16 @@ final class MenuBarViewModel: ObservableObject {
     // Services
     let configService: ConfigService
     private var cancellables = Set<AnyCancellable>()
-    private let transcriber: any TranscriptionEngine
+    /// The active transcription engine. `var` (not `let`): `setEngine(_:)`
+    /// swaps it for a new instance built by `engineFactory` when the user
+    /// switches engine kind, dropping the strong reference to the old one so
+    /// it deinits ("unloads") once nothing else holds it.
+    private var transcriber: any TranscriptionEngine
+    /// Builds a `TranscriptionEngine` for a given kind/model pair. Used for
+    /// the startup engine (when `engine:` isn't injected) and by every
+    /// `setEngine(_:)` call thereafter — the one seam both paths share; see
+    /// `init`'s `engineFactory:` parameter doc.
+    private let engineFactory: (TranscriptionEngineKind, WhisperModel) -> any TranscriptionEngine
     /// Internal rather than private so tests can drive the recorder's live
     /// sample tap (`onLiveSamples`) directly, which is the only way to feed
     /// the call-recording Me track without a real microphone. Held as the
@@ -107,11 +116,13 @@ final class MenuBarViewModel: ObservableObject {
     /// - Parameters:
     ///   - engine: Transcription engine to use. Defaults to a real WhisperKit-backed
     ///     `Transcriber` built from the saved config; tests can inject a fake instead.
-    ///   - engineFactory: Alternative to `engine` for tests that need to observe which
-    ///     model the engine is constructed with (a plain injected `engine` never sees
-    ///     the startup model — the fake doesn't care what it's "loaded" with). Ignored
-    ///     if `engine` is provided. Production never sets this; it falls through to
-    ///     the real `Transcriber(model:)`.
+    ///   - engineFactory: Builds a `TranscriptionEngine` for a `(TranscriptionEngineKind,
+    ///     WhisperModel)` pair. Used for the startup engine when `engine` isn't provided
+    ///     (letting a test observe which model/kind `init` resolved — a plain injected
+    ///     `engine` never sees the startup model, since the fake doesn't care what it's
+    ///     "loaded" with) and, always, by every later `setEngine(_:)` call. Production
+    ///     never sets this; it falls through to the real `Transcriber(model:)` /
+    ///     `ParakeetEngine(kind:)`.
     ///   - configService: Config store to use. Defaults to `.shared` (the real, persisted
     ///     config); tests can inject an isolated instance instead.
     ///   - debriefSummarizer: Summarizer for debrief mode. Defaults to one built lazily
@@ -139,7 +150,7 @@ final class MenuBarViewModel: ObservableObject {
     ///     `makeDefaultAudioFeedback`); tests inject `FakeAudioFeedback`.
     init(
         engine: (any TranscriptionEngine)? = nil,
-        engineFactory: ((WhisperModel) -> any TranscriptionEngine)? = nil,
+        engineFactory: ((TranscriptionEngineKind, WhisperModel) -> any TranscriptionEngine)? = nil,
         configService: ConfigService? = nil,
         debriefSummarizer: DebriefSummarizer? = nil,
         debriefStore: DebriefStore? = nil,
@@ -157,21 +168,28 @@ final class MenuBarViewModel: ObservableObject {
         self.audioFileLoader = audioFileLoader ?? { try AudioFileLoader().load(url: $0) }
         let preferenceModel = WhisperModel(rawValue: configService.whisperModel) ?? .small
         let startupModel = Self.effectiveModel(for: configService.language, preference: preferenceModel)
-        self.loadedModel = startupModel
-        self.transcriber = engine ?? engineFactory?(startupModel) ?? {
-            // A `MenuBarViewModel` built without an injected engine while XCTest is
-            // linked into this process (a unit test, or `Dikta.app` itself hosting
-            // one — see `DiktaApp`) would fall through to a real `Transcriber` here
-            // and attempt a live WhisperKit model download/network call as a side
-            // effect of the app merely launching. That's silent and harmless on a
-            // machine with the model already cached, but hangs or crashes the test
-            // host on a clean CI runner. Fail loudly instead of downloading.
+        let startupKind = configService.engine
+        self.loadedModel = startupKind.usesWhisperModelSubmenu ? startupModel : nil
+        let resolvedEngineFactory: (TranscriptionEngineKind, WhisperModel) -> any TranscriptionEngine = engineFactory ?? { kind, model in
+            // A `MenuBarViewModel` built without an injected engine/engineFactory while
+            // XCTest is linked into this process (a unit test, or `Dikta.app` itself
+            // hosting one — see `DiktaApp`) would fall through to a real, network-touching
+            // engine here as a side effect of the app merely launching. That's silent and
+            // harmless on a machine with the model already cached, but hangs or crashes
+            // the test host on a clean CI runner. Fail loudly instead of downloading.
             assert(
                 !Self.isRunningUnderXCTestHost,
-                "MenuBarViewModel() constructed under XCTest without engine:/engineFactory: — this would build a real, network-touching Transcriber. Inject a fake engine."
+                "MenuBarViewModel() constructed under XCTest without engine:/engineFactory: — this would build a real, network-touching engine. Inject a fake engine."
             )
-            return Transcriber(model: startupModel)
-        }()
+            switch kind {
+            case .whisper:
+                return Transcriber(model: model)
+            case .parakeetRedux, .parakeetV3, .parakeetUltra:
+                return ParakeetEngine(kind: kind)
+            }
+        }
+        self.engineFactory = resolvedEngineFactory
+        self.transcriber = engine ?? resolvedEngineFactory(startupKind, startupModel)
         self.audioRecorder = audioRecorder ?? AudioRecorder()
         self.systemAudioCaptureFactory = systemAudioCaptureFactory ?? { SystemAudioTapRecorder() }
         self.audioFeedback = audioFeedback ?? Self.makeDefaultAudioFeedback()
@@ -291,7 +309,7 @@ final class MenuBarViewModel: ObservableObject {
             }
 
             let toggleHotkey = configService.getHotkey(for: .toggle).displayString
-            sendNotification(title: "Ready", body: "Whisper model loaded. Use \(toggleHotkey) to record.", isRoutine: true)
+            sendNotification(title: "Ready", body: "\(configService.engine.displayName) loaded. Use \(toggleHotkey) to record.", isRoutine: true)
         } else {
             sendNotification(title: "Error", body: transcriber.errorMessage ?? "Failed to load model")
         }
@@ -388,7 +406,7 @@ final class MenuBarViewModel: ObservableObject {
                 recordingStartDate = Date()
                 appState = .recording
                 audioFeedback.beepOn()
-                DiagnosticLogger.shared.log("START | mic=\(configService.micSensitivity.displayName) | rate=\(audioRecorder.inputSampleRate)Hz")
+                DiagnosticLogger.shared.log("START | mic=\(configService.micSensitivity.displayName) | rate=\(audioRecorder.inputSampleRate)Hz | \(diagnosticEngineContext()) | \(diagnosticMemoryTag())")
             } catch {
                 unmuteMicTargets()
                 // `startRecording()` threw, so no tap was installed and
@@ -519,23 +537,23 @@ final class MenuBarViewModel: ObservableObject {
                 return
             }
 
-            DiagnosticLogger.shared.log("RESULT | pasted | chars=\(text.count)")
+            DiagnosticLogger.shared.log("RESULT | pasted | chars=\(text.count) | \(diagnosticEngineContext()) | \(diagnosticMemoryTag())")
             await outputText(text)
             appState = .idle
 
         } catch is TranscriptionTimeoutError {
-            DiagnosticLogger.shared.log("RESULT | timeout")
+            DiagnosticLogger.shared.log("RESULT | timeout | \(diagnosticEngineContext()) | \(diagnosticMemoryTag())")
             sendNotification(title: "Transcription Timeout", body: "Processing took too long and was cancelled.")
             appState = .idle
         } catch is TranscriberError {
-            DiagnosticLogger.shared.log("RESULT | no_speech (TranscriberError)")
+            DiagnosticLogger.shared.log("RESULT | no_speech (TranscriberError) | \(diagnosticEngineContext())")
             sendNotification(
                 title: "No Speech",
                 body: "No speech detected. Try adjusting Mic Sensitivity in Audio settings."
             )
             appState = .idle
         } catch {
-            DiagnosticLogger.shared.log("RESULT | error | \(error.localizedDescription)")
+            DiagnosticLogger.shared.log("RESULT | error | \(error.localizedDescription) | \(diagnosticEngineContext())")
             sendNotification(title: "Error", body: error.localizedDescription)
             appState = .idle
         }
@@ -802,6 +820,20 @@ final class MenuBarViewModel: ObservableObject {
         private let me: Track
         private let them: Track
 
+        // Them-track silence watchdog. Only ever touched on `them.queue`.
+        // A tap that macOS refused (System Audio Recording permission not
+        // granted) starts without error and delivers nothing but exact
+        // zeros — there is no recording indicator and no failure to catch —
+        // so the only in-call signal is a long run of digital silence.
+        private var themSilentSamples = 0
+        private var themHeardAudio = false
+        private var themSilenceReported = false
+
+        /// Fired at most once per session, from `them.queue`, when
+        /// `MenuBarViewModel.silentSystemAudioWarningSamples` samples have
+        /// arrived on the Them track without a single non-zero value.
+        var onSilentSystemAudio: (() -> Void)?
+
         init(
             paths: DebriefSessionPaths,
             me: StreamingWavWriter,
@@ -824,6 +856,9 @@ final class MenuBarViewModel: ObservableObject {
         private func append(_ samples: [Float], to track: Track) {
             guard !samples.isEmpty else { return }
             track.queue.async {
+                if track === self.them {
+                    self.watchThemForSilence(samples)
+                }
                 // The chunker first, then disk: `append` only hands the buffer
                 // to the chunker's own queue and returns, so transcription is
                 // never delayed by this track's disk write — and a write that
@@ -842,6 +877,22 @@ final class MenuBarViewModel: ObservableObject {
                     AppLogger.audio.error("Call recording: writing \(track.name.rawValue).wav failed: \(error.localizedDescription) — that track stops here")
                 }
             }
+        }
+
+        /// Runs on `them.queue`. Stops looking the moment any non-zero sample
+        /// arrives; until then counts silent samples and reports once past
+        /// the threshold.
+        private func watchThemForSilence(_ samples: [Float]) {
+            guard !themHeardAudio else { return }
+            if samples.contains(where: { $0 != 0 }) {
+                themHeardAudio = true
+                return
+            }
+            themSilentSamples += samples.count
+            guard !themSilenceReported,
+                  themSilentSamples >= MenuBarViewModel.silentSystemAudioWarningSamples else { return }
+            themSilenceReported = true
+            onSilentSystemAudio?()
         }
 
         /// Best-effort close of both writers, leaving valid WAV headers.
@@ -924,6 +975,10 @@ final class MenuBarViewModel: ObservableObject {
             session.capture.onSamples = { [weak session] samples in
                 session?.appendThem(samples)
             }
+            silentSystemAudioWarningCount = 0
+            session.onSilentSystemAudio = { [weak self] in
+                Task { @MainActor in self?.reportSilentSystemAudio() }
+            }
             audioRecorder.onLiveSamples = { [weak session] samples in
                 session?.appendMe(samples)
             }
@@ -998,6 +1053,47 @@ final class MenuBarViewModel: ObservableObject {
         Task {
             await runLiveDebrief(live)
         }
+    }
+
+    /// How long the Them track may stay at exact digital zero before the user
+    /// is told that no system audio is arriving. Seen on 2026-09-22: with the
+    /// permission refused, the tap started normally and delivered zeros for
+    /// the whole call, and the only symptom was a one-sided transcript
+    /// afterwards. Twenty seconds is long enough that a call which simply
+    /// has not connected yet rarely trips it, and short enough to fix the
+    /// permission and restart while the meeting is still on.
+    nonisolated static let silentSystemAudioWarningSeconds: TimeInterval = 20
+
+    nonisolated static var silentSystemAudioWarningSamples: Int {
+        Int(silentSystemAudioWarningSeconds * SystemAudioTapRecorder.targetSampleRate)
+    }
+
+    /// Number of times the silent-system-audio warning fired for the current
+    /// call recording. Reset on every start; at most one per call.
+    private(set) var silentSystemAudioWarningCount = 0
+
+    /// Wording of the silent-system-audio warning. Hedged on purpose: a
+    /// call that has not connected yet is also silent, so the user is told
+    /// what to check rather than that something is definitely broken.
+    nonisolated static var silentSystemAudioMessage: (title: String, body: String) {
+        (
+            "No Call Audio Yet",
+            "Dikta has not received any system audio in the first "
+            + "\(Int(silentSystemAudioWarningSeconds)) seconds. If the other side is talking, allow Dikta under "
+            + "System Settings → Privacy & Security → Screen & System Audio Recording "
+            + "(\"System Audio Recording Only\" on macOS 14), then start the recording again."
+        )
+    }
+
+    private func reportSilentSystemAudio() {
+        guard activeCallSession != nil || isStartingCallRecording else { return }
+        silentSystemAudioWarningCount += 1
+        let message = Self.silentSystemAudioMessage
+        DiagnosticLogger.shared.log(
+            "CALL_SYSTEM_AUDIO_SILENT | seconds=\(Int(Self.silentSystemAudioWarningSeconds)) | no non-zero sample on the Them track yet"
+        )
+        AppLogger.audio.error("Call recording: no system audio received in the first \(Int(Self.silentSystemAudioWarningSeconds)) s — permission missing?")
+        sendNotification(title: message.title, body: message.body)
     }
 
     /// Title/body for a system-audio capture failure. The permission case
@@ -1409,6 +1505,12 @@ final class MenuBarViewModel: ObservableObject {
     /// `$appState` subscription in `init` re-runs this as soon as `appState`
     /// becomes `.idle` again.
     private func reloadForCurrentLanguageIfNeeded() {
+        // Parakeet engines don't track a Whisper model, so a language change
+        // has no reload to trigger — see `TranscriptionEngineKind.usesWhisperModelSubmenu`.
+        guard configService.engine.usesWhisperModelSubmenu else {
+            languageModelReloadPending = false
+            return
+        }
         let target = effectiveModel(for: configService.language)
         guard target != loadedModel else {
             languageModelReloadPending = false
@@ -1474,6 +1576,14 @@ final class MenuBarViewModel: ObservableObject {
     @discardableResult
     func setWhisperModel(_ model: WhisperModel) -> Task<Void, Never>? {
         guard model.rawValue != configService.whisperModel else { return nil }
+
+        // Parakeet engines have no Whisper Model submenu equivalent (see
+        // `TranscriptionEngineKind.usesWhisperModelSubmenu`) — just remember the
+        // preference for whenever Whisper becomes the active engine again.
+        guard configService.engine.usesWhisperModelSubmenu else {
+            configService.whisperModel = model.rawValue
+            return nil
+        }
 
         // While Svenska is active, KB-Whisper stays loaded no matter what the
         // user picks here — just remember the preference for later languages.
@@ -1573,6 +1683,75 @@ final class MenuBarViewModel: ObservableObject {
                 sendNotification(
                     title: "Error",
                     body: transcriber.errorMessage ?? "Failed to load Whisper model"
+                )
+            }
+        }
+    }
+
+    // MARK: - Transcription Engine
+
+    /// Switches the active transcription engine to `kind` — Whisper or one
+    /// of the Parakeet variants (see `TranscriptionEngineKind`). Mirrors
+    /// `setWhisperModel`'s shape: a `.loading` state while the swap is in
+    /// flight, the choice persisted only once the new engine has actually
+    /// loaded, and on failure the previous engine is restored (not
+    /// persisted) rather than leaving the app on a broken one. Unlike
+    /// `setWhisperModel`'s three-step fallback ladder, there's only one
+    /// fallback here: the engine that was already loaded and working — it
+    /// doesn't need reloading, just restoring.
+    ///
+    /// Building a `.whisper` engine uses `effectiveModel(for:)` for the
+    /// current language, not the raw preference — so switching back to
+    /// Whisper while Svenska is active loads KB-Whisper Small, exactly as if
+    /// Svenska had just been selected.
+    ///
+    /// Returns the `Task` doing the work (nil if the switch was skipped —
+    /// already on `kind`, or idle-blocked) so tests can await its completion
+    /// instead of polling `appState`. Production callers can ignore the
+    /// return value.
+    @discardableResult
+    func setEngine(_ kind: TranscriptionEngineKind) -> Task<Void, Never>? {
+        guard kind != configService.engine else { return nil }
+        guard appState == .idle else { return nil }
+
+        let previousEngine = transcriber
+        let previousKind = configService.engine
+        let model = effectiveModel(for: configService.language)
+        let newEngine = engineFactory(kind, model)
+
+        appState = .loading
+        transcriber = newEngine
+
+        return Task { @MainActor in
+            await self.withDownloadProgressPolling {
+                await newEngine.load()
+            }
+
+            if newEngine.isReady {
+                self.configService.engine = kind
+                self.loadedModel = kind.usesWhisperModelSubmenu ? model : nil
+                self.appState = .idle
+                // Release the engine we just switched away from — it's no
+                // longer reachable from `self.transcriber`, but without an
+                // explicit unload its compiled models (WhisperKit's Core ML/
+                // ANE resources, or FluidAudio's AsrManager) would otherwise
+                // linger until ARC gets around to it.
+                await previousEngine.unload()
+                self.sendNotification(
+                    title: "Engine Changed",
+                    body: "Switched to \(kind.displayName).",
+                    isRoutine: true
+                )
+            } else {
+                // The new engine failed to load. Restore the engine that was
+                // working before — it's already loaded, so no need to reload
+                // it — so recording (which requires appState == .idle)
+                // doesn't stay broken until an app restart.
+                self.transcriber = previousEngine
+                self.appState = .idle
+                self.sendNotification(
+                    title: "Error",
+                    body: "Could not switch to \(kind.displayName): \(newEngine.errorMessage ?? "failed to load"). Kept \(previousKind.displayName)."
                 )
             }
         }
@@ -1728,6 +1907,26 @@ final class MenuBarViewModel: ObservableObject {
     func requestNotificationPermissions() async {
         guard canUseNotifications else { return }
         _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
+    }
+
+    /// Compact "which engine and model actually handled this take" tag for the
+    /// diagnostic log. Added while chasing a report that transcription quality
+    /// decays over a long session and recovers after a restart: without the
+    /// loaded model on every START/RESULT line, the log cannot tell a genuine
+    /// decay apart from a take that ran on the wrong model (e.g. KB-Whisper on
+    /// English after a mid-recording language switch deferred the reload).
+    func diagnosticEngineContext() -> String {
+        let model = loadedModel?.rawValue ?? "-"
+        return "engine=\(configService.engine.rawValue) model=\(model) lang=\(configService.language.rawValue)"
+    }
+
+    /// Resident memory of this process as "mem=<MB>MB", or "mem=?" if the
+    /// kernel query fails. Logged on every START/RESULT line so a slow climb
+    /// across a day of dictation shows up in the diagnostic log without
+    /// needing the unified log, which does not retain info-level lines.
+    func diagnosticMemoryTag() -> String {
+        guard let mb = memoryFootprintMB() else { return "mem=?" }
+        return "mem=\(Int(mb.rounded()))MB"
     }
 
     /// Returns the app's memory footprint in MB, or nil if unavailable.
