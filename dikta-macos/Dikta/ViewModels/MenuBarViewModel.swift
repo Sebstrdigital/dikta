@@ -309,7 +309,7 @@ final class MenuBarViewModel: ObservableObject {
             }
 
             let toggleHotkey = configService.getHotkey(for: .toggle).displayString
-            sendNotification(title: "Ready", body: "Whisper model loaded. Use \(toggleHotkey) to record.", isRoutine: true)
+            sendNotification(title: "Ready", body: "\(configService.engine.displayName) loaded. Use \(toggleHotkey) to record.", isRoutine: true)
         } else {
             sendNotification(title: "Error", body: transcriber.errorMessage ?? "Failed to load model")
         }
@@ -1653,6 +1653,12 @@ final class MenuBarViewModel: ObservableObject {
                 self.configService.engine = kind
                 self.loadedModel = kind.usesWhisperModelSubmenu ? model : nil
                 self.appState = .idle
+                // Release the engine we just switched away from — it's no
+                // longer reachable from `self.transcriber`, but without an
+                // explicit unload its compiled models (WhisperKit's Core ML/
+                // ANE resources, or FluidAudio's AsrManager) would otherwise
+                // linger until ARC gets around to it.
+                await previousEngine.unload()
                 self.sendNotification(
                     title: "Engine Changed",
                     body: "Switched to \(kind.displayName).",
@@ -1825,7 +1831,6 @@ final class MenuBarViewModel: ObservableObject {
         _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
     }
 
-    /// Returns the app's memory footprint in MB, or nil if unavailable.
     /// Compact "which engine and model actually handled this take" tag for the
     /// diagnostic log. Added while chasing a report that transcription quality
     /// decays over a long session and recovers after a restart: without the
@@ -1846,6 +1851,7 @@ final class MenuBarViewModel: ObservableObject {
         return "mem=\(Int(mb.rounded()))MB"
     }
 
+    /// Returns the app's memory footprint in MB, or nil if unavailable.
     private func memoryFootprintMB() -> Double? {
         var info = mach_task_basic_info()
         var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4

@@ -23,6 +23,9 @@ protocol ParakeetBackend: AnyObject {
     /// FluidAudio's Parakeet decoder takes no textual prompt, so a real
     /// backend ignores it.
     func transcribe(_ samples: [Float], promptText: String?) async throws -> ParakeetBackendResult
+
+    /// Release the loaded model's resources (see `TranscriptionEngine.unload()`).
+    func unload() async
 }
 
 /// One backend transcription result: joined text plus word-level timings,
@@ -42,13 +45,17 @@ struct ParakeetWordTiming {
 
 /// Real `ParakeetBackend`, backed by FluidAudio's batch `AsrManager`.
 ///
-/// Holds one `AsrManager` + `TdtDecoderState` pair for the lifetime of a
-/// loaded model, reusing the decoder state across `transcribe` calls the way
-/// FluidAudio's streaming paths do — each chunk continues from the previous
-/// chunk's decoder state rather than starting cold.
+/// Holds one `AsrManager` for the lifetime of a loaded model, but builds a
+/// *fresh* `TdtDecoderState` for every `transcribe` call rather than
+/// reusing one across calls. Dictation takes are independent utterances,
+/// not a continuous stream: carrying LSTM h/c and `lastToken` from one take
+/// into the next (as FluidAudio's own streaming paths do, and as
+/// `finalizeLastChunk` does when a state is reused) would leak decoder
+/// context between unrelated takes and skew results away from the
+/// per-clip-fresh-state benchmarks in `bench/DiktaBench/main.swift`.
 final class FluidAudioParakeetBackend: ParakeetBackend {
     private var manager: AsrManager?
-    private var decoderState: TdtDecoderState?
+    private var decoderLayers: Int?
 
     func loadModel(
         kind: TranscriptionEngineKind,
@@ -63,24 +70,30 @@ final class FluidAudioParakeetBackend: ParakeetBackend {
         )
 
         let manager = AsrManager(models: models)
-        let decoderLayers = await manager.decoderLayerCount
         self.manager = manager
-        self.decoderState = TdtDecoderState.make(decoderLayers: decoderLayers)
+        self.decoderLayers = await manager.decoderLayerCount
     }
 
     func transcribe(_ samples: [Float], promptText: String?) async throws -> ParakeetBackendResult {
-        guard let manager, var state = decoderState else {
+        guard let manager, let decoderLayers else {
             throw ParakeetEngineError.modelNotLoaded
         }
 
+        var state = TdtDecoderState.make(decoderLayers: decoderLayers)
         let result = try await manager.transcribe(samples, decoderState: &state)
-        decoderState = state
 
         let words = buildWordTimings(from: result.tokenTimings ?? [])
         return ParakeetBackendResult(
             text: result.text,
             wordTimings: words.map { ParakeetWordTiming(word: $0.word, start: $0.startTime, end: $0.endTime) }
         )
+    }
+
+    /// Release the loaded model's resources (see `TranscriptionEngine.unload()`).
+    func unload() async {
+        await manager?.cleanup()
+        manager = nil
+        decoderLayers = nil
     }
 
     /// Maps a persisted `TranscriptionEngineKind` to the FluidAudio model
@@ -152,6 +165,15 @@ final class ParakeetEngine: ObservableObject, TranscriptionEngine {
     /// untouched, so a caller that always calls `reload(model:)` on a
     /// Whisper-model-menu selection doesn't have to special-case Parakeet.
     func reload(model: WhisperModel) async throws {}
+
+    /// Release the backend's loaded model resources — called when this
+    /// engine is being replaced by another (see `MenuBarViewModel.setEngine`),
+    /// so FluidAudio's compiled Core ML models don't linger in memory
+    /// alongside the new engine's.
+    func unload() async {
+        await backend.unload()
+        isReady = false
+    }
 
     private func loadModel() async {
         isLoading = true

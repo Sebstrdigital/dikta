@@ -376,6 +376,27 @@ echo "    Signature: ${EDDSA_SIG}"
 DMG_SIZE=$(stat -f%z "${RELEASE_DMG}")
 BUILD_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S +0000")
 
+# Minimum macOS version to advertise in the appcast. Read it from the built
+# app's own Info.plist (LSMinimumSystemVersion, which Xcode expands from
+# MACOSX_DEPLOYMENT_TARGET at build time) rather than hardcoding it here —
+# a hardcoded value previously drifted behind a deployment-target bump and
+# would have had Sparkle offer this update to users on an OS the app
+# refuses to launch on. Falls back to grepping MACOSX_DEPLOYMENT_TARGET out
+# of project.pbxproj if the Info.plist key is missing or unexpanded, and
+# refuses to build the appcast if neither source yields a version.
+MIN_SYSTEM_VERSION=$(/usr/libexec/PlistBuddy -c "Print LSMinimumSystemVersion" "${APP_EXPORT}/Contents/Info.plist" 2>/dev/null || echo "")
+if [ -z "${MIN_SYSTEM_VERSION}" ] || [[ "${MIN_SYSTEM_VERSION}" == *'$('* ]]; then
+    echo "WARN: LSMinimumSystemVersion missing or unexpanded in built Info.plist; falling back to MACOSX_DEPLOYMENT_TARGET from project.pbxproj."
+    MIN_SYSTEM_VERSION=$(grep 'MACOSX_DEPLOYMENT_TARGET' "${PBXPROJ}" | head -1 | sed 's/.*= *\(.*\);/\1/')
+fi
+if [ -z "${MIN_SYSTEM_VERSION}" ]; then
+    echo "ERROR: could not determine the minimum macOS version from either the built app's"
+    echo "       Info.plist (LSMinimumSystemVersion) or project.pbxproj (MACOSX_DEPLOYMENT_TARGET)."
+    echo "       Refusing to write an appcast entry with an unknown minimum system version."
+    exit 1
+fi
+echo "==> Appcast minimum system version: ${MIN_SYSTEM_VERSION}"
+
 # Generate/update appcast.xml in docs/
 # Preserves existing <item> entries so users on older versions can still update.
 DOCS_DIR="${PROJECT_DIR}/../docs"
@@ -388,7 +409,7 @@ NEW_ITEM="        <item>
             <pubDate>${BUILD_DATE}</pubDate>
             <sparkle:version>${APP_VERSION}</sparkle:version>
             <sparkle:shortVersionString>${APP_VERSION}</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:minimumSystemVersion>${MIN_SYSTEM_VERSION}</sparkle:minimumSystemVersion>
             <enclosure
                 url=\"${DOWNLOAD_URL}\"
                 sparkle:edSignature=\"${EDDSA_SIG}\"

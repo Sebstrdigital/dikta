@@ -1,9 +1,0 @@
-{
-  "model": "parakeet-ultra",
-  "lang": "en",
-  "n_files": 20,
-  "wer": 0.06451612903225806,
-  "median_rtf": 0.009430484665624168,
-  "model_load_seconds": 0.15939998626708984,
-  "scored_at": "2026-09-28T06:54:17.303503+00:00"
-}

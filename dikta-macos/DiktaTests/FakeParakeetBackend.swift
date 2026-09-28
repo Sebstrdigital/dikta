@@ -27,6 +27,9 @@ final class FakeParakeetBackend: ParakeetBackend {
     /// Number of `transcribe` calls, for tests that assert the backend ran.
     private(set) var transcribeCallCount = 0
 
+    /// Number of `unload` calls, for tests that assert the backend was released.
+    private(set) var unloadCallCount = 0
+
     func loadModel(
         kind: TranscriptionEngineKind,
         encoderComputeUnits: MLComputeUnits?,
@@ -50,6 +53,10 @@ final class FakeParakeetBackend: ParakeetBackend {
         transcribeCallCount += 1
         receivedPromptTexts.append(promptText)
         return resultToReturn
+    }
+
+    func unload() async {
+        unloadCallCount += 1
     }
 }
 

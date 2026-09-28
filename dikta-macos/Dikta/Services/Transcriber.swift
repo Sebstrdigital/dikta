@@ -56,17 +56,7 @@ final class Transcriber: ObservableObject, TranscriptionEngine {
             throw TranscriberError.reloadInProgress
         }
 
-        // Ask WhisperKit to release its Core ML models explicitly before we
-        // drop the reference. Dropping the instance alone leaves the compiled
-        // MLModels (and their ANE/GPU resources) to whatever ARC and Core ML
-        // decide, and a language-driven reload happens on every sv<->en
-        // switch — a suspected cause of memory growing over a long session
-        // until the app is restarted (debug-active.md, session B).
-        if let old = whisperKit {
-            await old.unloadModels()
-        }
-        whisperKit = nil
-        isReady = false
+        await unload()
         self.model = model
 
         await loadModel(model)
@@ -74,6 +64,22 @@ final class Transcriber: ObservableObject, TranscriptionEngine {
         guard isReady else {
             throw TranscriberError.reloadFailed(errorMessage ?? "Failed to load Whisper model")
         }
+    }
+
+    /// Ask WhisperKit to release its Core ML models explicitly rather than
+    /// just dropping the reference. Dropping the instance alone leaves the
+    /// compiled MLModels (and their ANE/GPU resources) to whatever ARC and
+    /// Core ML decide, a suspected cause of memory growing over a long
+    /// session until the app is restarted (debug-active.md, session B).
+    /// Called by `reload(model:)` on every model switch, and by
+    /// `MenuBarViewModel.setEngine` when this engine is being replaced by a
+    /// different `TranscriptionEngine` kind (Parakeet).
+    func unload() async {
+        if let old = whisperKit {
+            await old.unloadModels()
+        }
+        whisperKit = nil
+        isReady = false
     }
 
     /// Load `model`, preferring a bundled copy over downloading one. When a

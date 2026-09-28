@@ -68,6 +68,7 @@ final class MarkerTranscriptionEngine: TranscriptionEngine {
 
     func load() async {}
     func reload(model: WhisperModel) async throws {}
+    func unload() async {}
     func transcribe(_ audioSamples: [Float], language: String?, micSensitivity: MicSensitivity) async throws -> String { "" }
 
     /// `transcribeSegments` call indices that should throw.
@@ -112,6 +113,7 @@ final class ScriptedTranscriptionEngine: TranscriptionEngine {
 
     func load() async {}
     func reload(model: WhisperModel) async throws {}
+    func unload() async {}
     func transcribe(_ audioSamples: [Float], language: String?, micSensitivity: MicSensitivity) async throws -> String { "" }
 
     /// Segments returned per call index, timestamps relative to the samples passed.

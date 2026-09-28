@@ -56,6 +56,9 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     /// Sample count passed to each `transcribeSegments` call, in call order.
     private(set) var receivedSegmentSampleCounts: [Int] = []
 
+    /// Number of `unload` calls, for tests that assert the old engine was released.
+    private(set) var unloadCallCount = 0
+
     func load() async {
         if shouldFailLoad {
             isReady = false
@@ -102,5 +105,9 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
         await beforeSegmentsReturn?(callIndex)
         guard callIndex < segmentsPerCall.count else { return segmentsToReturn }
         return segmentsPerCall[callIndex]
+    }
+
+    func unload() async {
+        unloadCallCount += 1
     }
 }
