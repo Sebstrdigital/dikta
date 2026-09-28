@@ -16,7 +16,18 @@ set -euo pipefail
 #
 # Usage:
 #   ./scripts/build-release.sh
-#   ./scripts/build-release.sh --no-publish   # DMG only, no appcast/release
+#   ./scripts/build-release.sh --no-publish    # DMG only, no appcast/release
+#   ./scripts/build-release.sh --skip-tests    # DANGER: skip the DiktaTests gate
+# Flags can be combined in either order.
+#
+# Test gate: before building anything, this script runs the DiktaTests
+# target and aborts if any test fails, or if the run's log has no
+# "Executed N tests" line with N > 0 (e.g. a misconfigured -only-testing:
+# filter that silently matched nothing — see docs/validation.md). This is
+# the release-time backstop for a chronic failure mode: a green-looking
+# pipeline that shipped with a broken or empty test suite. --skip-tests
+# bypasses the gate and prints a loud warning; it exists for emergencies,
+# not routine use.
 # ============================================================
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -28,6 +39,25 @@ DMG_PATH="${PROJECT_DIR}/build/Dikta.dmg"
 NOTARIZE_PROFILE="DuaTalk-Notarize"
 
 SIGNING_IDENTITY="Developer ID Application: Sebastian Strandberg (UUM29335B4)"
+
+# Parse flags (order-independent, may be combined)
+NO_PUBLISH=0
+SKIP_TESTS=0
+for arg in "$@"; do
+    case "${arg}" in
+        --no-publish)
+            NO_PUBLISH=1
+            ;;
+        --skip-tests)
+            SKIP_TESTS=1
+            ;;
+        *)
+            echo "ERROR: unknown flag '${arg}'"
+            echo "Usage: $0 [--no-publish] [--skip-tests]"
+            exit 1
+            ;;
+    esac
+done
 
 # Use /tmp for export/signing to avoid iCloud re-adding extended attributes
 # (~/Documents is iCloud-synced; macOS re-adds com.apple.FinderInfo xattrs
@@ -50,6 +80,67 @@ if [ "${MARKETING_VER}" != "${BUILD_VER}" ]; then
     exit 1
 fi
 echo "==> Version check OK: ${MARKETING_VER} (build ${BUILD_VER})"
+
+# Step 0: Test gate — refuse to ship a DMG built on an unverified test suite.
+# Aborts if any test fails, or if the log never shows "Executed N tests"
+# with N > 0 (a build error, a crash before tests ran, or a -only-testing:
+# filter that silently matched zero tests all look like this).
+if [ "${SKIP_TESTS}" -eq 1 ]; then
+    echo ""
+    echo "############################################################"
+    echo "  WARNING: --skip-tests given — DiktaTests will NOT run."
+    echo "  This DMG is being built on an UNVERIFIED test suite."
+    echo "############################################################"
+    echo ""
+else
+    echo "==> Running DiktaTests..."
+    TEST_LOG="${WORK_DIR}/dikta-tests.log"
+    set +e
+    xcodebuild test \
+        -project "${PROJECT_DIR}/Dikta.xcodeproj" \
+        -scheme "${SCHEME}" \
+        -only-testing:DiktaTests \
+        -destination 'platform=macOS' \
+        CODE_SIGN_STYLE=Manual \
+        CODE_SIGN_IDENTITY="${SIGNING_IDENTITY}" \
+        DEVELOPMENT_TEAM=UUM29335B4 \
+        > "${TEST_LOG}" 2>&1
+    TEST_EXIT=$?
+    set -e
+
+    EXECUTED_LINE=$(grep -E 'Executed [0-9]+ test' "${TEST_LOG}" | tail -1 || true)
+    EXECUTED_COUNT=$(echo "${EXECUTED_LINE}" | sed -E 's/.*Executed ([0-9]+) test.*/\1/')
+
+    if [ -z "${EXECUTED_LINE}" ] || ! [[ "${EXECUTED_COUNT}" =~ ^[0-9]+$ ]] || [ "${EXECUTED_COUNT}" -eq 0 ]; then
+        echo "ERROR: DiktaTests reported no 'Executed N tests' line with N > 0."
+        echo "       This can mean the build failed before tests ran, the test host crashed,"
+        echo "       or a -only-testing: filter silently matched zero tests (see docs/validation.md)."
+        echo "       Refusing to build a DMG on an unverified test suite."
+        echo "       Full log: ${TEST_LOG}"
+        echo ""
+        echo "--- last 60 lines of test log ---"
+        tail -60 "${TEST_LOG}"
+        echo "----------------------------------"
+        echo ""
+        echo "Re-run with --skip-tests to bypass this gate (not recommended)."
+        exit 1
+    fi
+
+    if [ "${TEST_EXIT}" -ne 0 ]; then
+        echo "ERROR: DiktaTests failed (${EXECUTED_LINE})."
+        echo "       Refusing to build a DMG on a failing test suite."
+        echo "       Full log: ${TEST_LOG}"
+        echo ""
+        echo "--- failures ---"
+        grep -E 'error:|Testing failed' "${TEST_LOG}" | tail -60
+        echo "----------------"
+        echo ""
+        echo "Re-run with --skip-tests to bypass this gate (not recommended)."
+        exit 1
+    fi
+
+    echo "==> DiktaTests passed: ${EXECUTED_LINE}"
+fi
 
 echo "==> Cleaning previous build..."
 rm -rf "${PROJECT_DIR}/build"
@@ -200,7 +291,7 @@ echo "============================================================"
 # --no-publish: stop after the notarized DMG so it can be installed and
 # smoke-tested before the appcast and GitHub release reach users. Re-run
 # without the flag to publish; the build steps are idempotent.
-if [ "${1:-}" = "--no-publish" ]; then
+if [ "${NO_PUBLISH}" -eq 1 ]; then
     echo "==> --no-publish given: skipping appcast + GitHub release."
     echo "    Install and test ${DMG_PATH}, then re-run without --no-publish."
     exit 0

@@ -109,6 +109,41 @@ for p in $(pgrep -x Dikta); do ps -o command= -p $p | grep -q ApplePersistenceIg
 **Known pre-existing failure**: `testSlackMuterReturnsNilWhenSlackNotRunning` (`MicMutingTests.swift`) fails when
 Slack.app is open on the test machine — unrelated to Call Debrief, not a regression.
 
+## Release gate (build-release.sh / CI)
+
+**Files**: `dikta-macos/scripts/build-release.sh`, `.github/workflows/macos-build.yml`
+
+Both the release script and macOS CI enforce that the `DiktaTests` target actually ran before anything ships —
+a chronic failure mode is a green-looking pipeline that shipped a broken or empty test suite (e.g. an
+`-only-testing:` filter that silently matches zero tests, or a build error that never reaches the test phase).
+
+**`scripts/build-release.sh`**: before archiving, runs
+`xcodebuild test -only-testing:DiktaTests ...` (same identity/team as the archive build) into a log, then aborts
+the release with a clear error and the last lines of the log if:
+- the log has no `Executed N tests` line with `N > 0`, or
+- the test run's exit code is non-zero (a real failure).
+
+`--skip-tests` bypasses the gate entirely and prints a loud warning that the DMG is being built on an unverified
+test suite — use only for emergencies, never routinely. `--no-publish` (DMG only, no appcast/release) still runs
+the gate; the two flags combine in either order:
+```bash
+./scripts/build-release.sh --skip-tests
+./scripts/build-release.sh --no-publish --skip-tests
+```
+
+**CI (`macos-build.yml`)**: the `xcodebuild test (ad-hoc signing)` step applies the same log check — it fails the
+job on a non-zero exit *or* on zero executed tests, so a misconfigured scheme/filter can't pass CI by matching
+nothing.
+
+**Known pre-existing gap this gate must not choke on**: `DebriefRealTranscriptTests` skips via `XCTSkip` (not a
+failure) when `~/Documents/Dikta` has no local sessions — the gate counts a skip as part of a passing run, since
+`xcodebuild` reports it separately from failures and it still contributes to `Executed N tests`. On a machine
+that *does* have a local session, but the newest one is too short to yield any decision/action item, one of that
+file's real-transcript assertions can fail for real (an environment condition, not a regression) — see that
+file's own doc comment. That failure is real and the gate is meant to catch it like any other; it is not silenced
+here. If it fires only because of a too-short local recording, re-record a longer local session or use
+`DIKTA_REAL_SESSIONS_DIR` to point at one that isn't, rather than reaching for `--skip-tests`.
+
 ---
 
 *Add new sections here as validation rules are established for other areas.*
