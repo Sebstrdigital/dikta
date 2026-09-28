@@ -24,6 +24,8 @@
     <true/>
     <key>NSAccessibilityUsageDescription</key>
     <string>Dikta needs accessibility access for global hotkeys, text selection, and auto-paste.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Dikta records the call audio you hear so it can write a debrief. Nothing leaves your Mac.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Dikta needs microphone access to record your voice for dictation.</string>
     <key>NSPrincipalClass</key>

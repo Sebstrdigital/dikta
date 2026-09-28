@@ -86,6 +86,7 @@
 		CA11DEB10000000A00000008 /* FakeAudioFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000A00000007 /* FakeAudioFeedback.swift */; };
 		CA11DEB10000000A00000006 /* FakeAudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000A00000005 /* FakeAudioRecorder.swift */; };
 		CA11DEB10000000100000006 /* SystemAudioTapRecorderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000100000005 /* SystemAudioTapRecorderTests.swift */; };
+		CA11DEB10000000B00000002 /* SentenceEmbeddingServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000B00000001 /* SentenceEmbeddingServiceTests.swift */; };
 		CA11DEB10000000700000002 /* ChunkedTranscriptionSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000700000001 /* ChunkedTranscriptionSession.swift */; };
 		CA11DEB10000000700000004 /* ChunkedTranscriptionSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000700000003 /* ChunkedTranscriptionSessionTests.swift */; };
 		CA11DEB10000000800000002 /* DebriefState.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000800000001 /* DebriefState.swift */; };
@@ -208,6 +209,7 @@
 		CA11DEB10000000A00000007 /* FakeAudioFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeAudioFeedback.swift; sourceTree = "<group>"; };
 		CA11DEB10000000A00000005 /* FakeAudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeAudioRecorder.swift; sourceTree = "<group>"; };
 		CA11DEB10000000100000005 /* SystemAudioTapRecorderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAudioTapRecorderTests.swift; sourceTree = "<group>"; };
+		CA11DEB10000000B00000001 /* SentenceEmbeddingServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentenceEmbeddingServiceTests.swift; sourceTree = "<group>"; };
 		200000000000000000000092 /* MiniLML12v2.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper.mlpackage; path = MiniLML12v2.mlpackage; sourceTree = "<group>"; };
 		200000000000000000000093 /* minilm-vocab.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "minilm-vocab.txt"; sourceTree = "<group>"; };
 		200000000000000000000094 /* EmbeddingParagraphSplitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmbeddingParagraphSplitter.swift; sourceTree = "<group>"; };
@@ -374,6 +376,7 @@
 				CA11DEB10000000A00000007 /* FakeAudioFeedback.swift */,
 				CA11DEB10000000A00000005 /* FakeAudioRecorder.swift */,
 				CA11DEB10000000100000005 /* SystemAudioTapRecorderTests.swift */,
+				CA11DEB10000000B00000001 /* SentenceEmbeddingServiceTests.swift */,
 				CA11DEB10000000500000004 /* TranscriptSegmentTests.swift */,
 				CA11DEB10000000700000003 /* ChunkedTranscriptionSessionTests.swift */,
 				CA11DEB10000000800000017 /* DebriefAccumulatorTests.swift */,
@@ -642,6 +645,7 @@
 				CA11DEB10000000A00000008 /* FakeAudioFeedback.swift in Sources */,
 				CA11DEB10000000A00000006 /* FakeAudioRecorder.swift in Sources */,
 				CA11DEB10000000100000006 /* SystemAudioTapRecorderTests.swift in Sources */,
+				CA11DEB10000000B00000002 /* SentenceEmbeddingServiceTests.swift in Sources */,
 				CA11DEB10000000500000003 /* TranscriptSegmentTests.swift in Sources */,
 				CA11DEB10000000700000004 /* ChunkedTranscriptionSessionTests.swift in Sources */,
 				CA11DEB10000000800000018 /* DebriefAccumulatorTests.swift in Sources */,

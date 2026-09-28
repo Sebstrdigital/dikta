@@ -675,6 +675,68 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
         await waitUntil(timeout: 5) { viewModel.appState == .idle }
     }
 
+    // MARK: - Silent system audio watchdog
+
+    /// One second of exact digital zeros, as a refused tap delivers.
+    private var oneSilentSecond: [Float] { silence(seconds: 1) }
+
+    /// Lets the Them track's serial queue drain the buffers just fed before
+    /// a negative assertion is made about them.
+    private func settle() async throws {
+        try await Task.sleep(nanoseconds: 300_000_000)
+    }
+
+    /// A tap macOS refused starts without error and delivers only zeros. The
+    /// user must hear about that during the call, once, not after it.
+    func test_callRecording_systemAudioAllZeros_warnsExactlyOnceAfterThreshold() async throws {
+        let capture = FakeSystemAudioCapture()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeCallViewModel(capture: capture, summarizer: summarizer)
+        await startCallRecording(viewModel)
+
+        let threshold = Int(MenuBarViewModel.silentSystemAudioWarningSeconds)
+        for _ in 0..<(threshold - 1) { capture.feed(oneSilentSecond) }
+        try await settle()
+        XCTAssertEqual(viewModel.silentSystemAudioWarningCount, 0, "must not warn before the threshold")
+
+        capture.feed(oneSilentSecond)
+        await waitUntil(timeout: 5) { viewModel.silentSystemAudioWarningCount == 1 }
+        XCTAssertEqual(viewModel.silentSystemAudioWarningCount, 1)
+
+        for _ in 0..<(threshold * 2) { capture.feed(oneSilentSecond) }
+        try await settle()
+        XCTAssertEqual(viewModel.silentSystemAudioWarningCount, 1, "the warning fires once per call, not once per threshold")
+
+        viewModel.stopRecording()
+        await waitUntil(timeout: 5) { viewModel.appState == .idle }
+    }
+
+    /// Real call audio is never all zeros. Once any sound has arrived the
+    /// watchdog is off for good, however long the other side then stays quiet.
+    func test_callRecording_systemAudioHeardOnce_neverWarnsOnLaterSilence() async throws {
+        let capture = FakeSystemAudioCapture()
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeCallViewModel(capture: capture, summarizer: summarizer)
+        await startCallRecording(viewModel)
+
+        var withAudio = oneSilentSecond
+        withAudio[8_000] = 0.01
+        capture.feed(withAudio)
+        for _ in 0..<(Int(MenuBarViewModel.silentSystemAudioWarningSeconds) * 2) { capture.feed(oneSilentSecond) }
+        try await settle()
+
+        XCTAssertEqual(viewModel.silentSystemAudioWarningCount, 0)
+
+        viewModel.stopRecording()
+        await waitUntil(timeout: 5) { viewModel.appState == .idle }
+    }
+
+    func test_silentSystemAudioMessage_namesTheSettingsPane() {
+        let message = MenuBarViewModel.silentSystemAudioMessage
+        XCTAssertTrue(message.body.contains("Screen & System Audio Recording"))
+        XCTAssertTrue(message.body.contains("\(Int(MenuBarViewModel.silentSystemAudioWarningSeconds)) seconds"))
+    }
+
     func test_runCallDebrief_whileAnotherDebriefHoldsTheClaim_endsIdleAndKeepsTheOtherRun() async throws {
         let sourceURL = try makeSourceWAV(named: "busy")
         let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
