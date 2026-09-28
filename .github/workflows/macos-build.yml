@@ -50,7 +50,12 @@ jobs:
       # App target uses manual Developer ID signing; DiktaTests is automatic. Override both to ad-hoc so the test bundle can load into the host.
       # Gate on the log, not just the exit code: a green exit with zero "Executed N tests" (e.g. a
       # scheme/filter misconfiguration matching nothing) must fail the build the same as a real test failure.
+      # xcodebuild forwards only TEST_RUNNER_-prefixed variables into the test host, so the
+      # runner's own GITHUB_ACTIONS is invisible to XCTest. Re-export it under that prefix for
+      # tests that must skip on the virtual runner (MiniLM returns zero vectors there).
       - name: xcodebuild test (ad-hoc signing)
+        env:
+          TEST_RUNNER_GITHUB_ACTIONS: "1"
         run: |
           set +e
           xcodebuild -project Dikta.xcodeproj -scheme Dikta -destination 'platform=macOS' test CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= CODE_SIGNING_REQUIRED=NO 2>&1 | tee test-output.log
