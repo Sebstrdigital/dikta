@@ -25,9 +25,25 @@ All notable changes to Dikta will be documented in this file.
   `DiktaBench --engine parakeet` (`dikta-macos/bench/`); results and methodology in
   `docs/review-2026-09/parakeet-bench.md`.
 
+### Fixes
+- **Call Debrief recorded a silent "Them" track.** The built app's Info.plist lacked
+  `NSAudioCaptureUsageDescription`, so macOS never showed the System Audio prompt and the tap
+  delivered digital silence while reporting success. The key is now in the real Info.plist, and a
+  watchdog warns once per call if the system-audio track stays silent for 20 s.
+- **Debrief de-duplication never used the sentence-embedding model.** The MiniLM model is compiled to
+  `.mlmodelc` in the bundle but was looked up as `.mlpackage`, so every call silently fell back to a
+  word-overlap heuristic since v1.2. Paraphrased decisions and action items now collapse properly.
+- **Whisper model reloads release the previous model.** Each language-driven reload (Svenska ↔ other)
+  now unloads the outgoing WhisperKit models explicitly instead of leaving them to be collected.
+- **Diagnostic log lines carry engine, model, language and memory.** Every `START` / `RESULT` line
+  now shows which engine and model handled the take and the app's resident memory, so a report of
+  quality drifting over a long session can be checked against the log instead of guessed at.
+
 ### Platform
-- **macOS deployment target raised from 14.2 to 15.0** — required by the new FluidAudio dependency.
-  This is a floor for the whole app, not only the Parakeet engine.
+- **macOS deployment target raised from 14.2 to 15.0** — Parakeet Redux's 2-bit Core ML weights need
+  macOS 15 (FluidAudio itself runs on 14). This is a floor for the whole app, not only that engine.
+- Swift package manifest moves to tools-version 6.0 for the FluidAudio dependency while pinning
+  Swift 5 language mode, matching the Xcode project, so `swift build` / `swift test` keep working.
 
 ### Internal (tech debt)
 - **ConfigService now has one atomic-write strategy.** Config saves go through a single
