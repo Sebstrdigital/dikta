@@ -4,6 +4,40 @@ import CoreAudio
 
 final class SystemAudioTapRecorderTests: XCTestCase {
 
+    // MARK: - Tap target resolution (fake process list)
+
+    private struct FakeProcessLister: AudioProcessListing {
+        var objects: [pid_t: AudioObjectID]
+        func audioProcessObject(forPID pid: pid_t) -> (status: OSStatus, id: AudioObjectID?) {
+            if let id = objects[pid] { return (noErr, id) }
+            return (-1, nil)
+        }
+    }
+
+    func testPIDLookup_knownPIDReturnsObject_unknownReturnsNil() {
+        let lister = FakeProcessLister(objects: [100: 7])
+        XCTAssertEqual(lister.audioProcessObject(forPID: 100).id, 7)
+        XCTAssertNil(lister.audioProcessObject(forPID: 999).id)
+    }
+
+    func testResolve_noTarget_isGlobalWithoutReason() {
+        let lister = FakeProcessLister(objects: [:])
+        XCTAssertEqual(TapTarget.resolve(targetPIDs: nil, using: lister), .global(fallbackReason: nil))
+        XCTAssertEqual(TapTarget.resolve(targetPIDs: [], using: lister), .global(fallbackReason: nil))
+    }
+
+    func testResolve_resolvablePIDs_yieldsProcessObjects() {
+        let lister = FakeProcessLister(objects: [100: 7, 200: 9])
+        XCTAssertEqual(TapTarget.resolve(targetPIDs: [200, 100], using: lister), .processes([7, 9]))
+    }
+
+    func testResolve_unresolvablePID_fallsBackToGlobalWithReason() {
+        let lister = FakeProcessLister(objects: [100: 7])
+        let result = TapTarget.resolve(targetPIDs: [100, 555], using: lister)
+        guard case .global(let reason) = result else { return XCTFail("expected global fallback, got \(result)") }
+        XCTAssertTrue(reason?.contains("555") ?? false, "reason should name the pid: \(String(describing: reason))")
+    }
+
     // MARK: - downmixAndResample (pure conversion path — no real tap)
 
     @available(macOS 14.2, *)

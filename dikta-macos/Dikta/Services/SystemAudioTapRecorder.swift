@@ -55,6 +55,59 @@ enum SystemAudioCaptureError: Error, LocalizedError {
     }
 }
 
+/// PID -> CoreAudio process-object lookup, abstracted so tap-target
+/// resolution can be tested with a fake process list (no real audio needed).
+protocol AudioProcessListing {
+    /// Returns the audio process object for `pid`, or `nil` when the process
+    /// isn't running or has no audio object. `status` is the underlying
+    /// CoreAudio status (for diagnostics).
+    func audioProcessObject(forPID pid: pid_t) -> (status: OSStatus, id: AudioObjectID?)
+}
+
+/// How a tap should be built: from specific processes, or the v1.5 global tap.
+enum TapTarget: Equatable {
+    /// `stereoMixdownOfProcesses` over these audio process objects.
+    case processes([AudioObjectID])
+    /// v1.5 global tap excluding Dikta. `reason` is non-nil when this is a
+    /// fallback from a requested target (it is the diagnostic to log).
+    case global(fallbackReason: String?)
+
+    /// Resolves `targetPIDs` through `lister`. `nil`/empty targets yield the
+    /// plain global tap (no fallback reason). If any target PID cannot be
+    /// resolved, falls back to global with a single reason string.
+    static func resolve(targetPIDs: Set<pid_t>?, using lister: AudioProcessListing) -> TapTarget {
+        guard let targetPIDs, !targetPIDs.isEmpty else { return .global(fallbackReason: nil) }
+        var objects: [AudioObjectID] = []
+        for pid in targetPIDs.sorted() {
+            let (status, id) = lister.audioProcessObject(forPID: pid)
+            guard let id else {
+                return .global(fallbackReason: "target pid \(pid) has no audio process object (status \(status))")
+            }
+            objects.append(id)
+        }
+        return .processes(objects)
+    }
+}
+
+/// Real CoreAudio-backed process lookup.
+struct CoreAudioProcessLister: AudioProcessListing {
+    func audioProcessObject(forPID pid: pid_t) -> (status: OSStatus, id: AudioObjectID?) {
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyTranslatePIDToProcessObject,
+                                                  mScope: kAudioObjectPropertyScopeGlobal,
+                                                  mElement: kAudioObjectPropertyElementMain)
+        var inPID = pid
+        var out = AudioObjectID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioObjectID>.size)
+        let status = withUnsafeMutablePointer(to: &inPID) { qualifier -> OSStatus in
+            AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, UInt32(MemoryLayout<pid_t>.size), qualifier, &size, &out)
+        }
+        guard status == noErr, out != AudioObjectID(kAudioObjectUnknown) else {
+            return (status, nil)
+        }
+        return (status, out)
+    }
+}
+
 /// Downmixes interleaved N-channel Float32 audio to mono and resamples it to
 /// a target rate via a **persistent** `AVAudioConverter`.
 ///
@@ -265,7 +318,14 @@ final class SystemAudioTapRecorder: SystemAudioCapturing, @unchecked Sendable {
     /// `isOnDeliveryQueue`.
     private let deliveryQueueKey = DispatchSpecificKey<Void>()
 
-    init() {
+    /// Optional set of PIDs to tap instead of all system audio. `nil` (the
+    /// default) keeps the v1.5 global tap excluding Dikta.
+    private let targetPIDs: Set<pid_t>?
+    private let processLister: AudioProcessListing
+
+    init(targetPIDs: Set<pid_t>? = nil, processLister: AudioProcessListing = CoreAudioProcessLister()) {
+        self.targetPIDs = targetPIDs
+        self.processLister = processLister
         deliveryQueue.setSpecific(key: deliveryQueueKey, value: ())
     }
 
@@ -339,16 +399,25 @@ final class SystemAudioTapRecorder: SystemAudioCapturing, @unchecked Sendable {
     /// `stateLock` as each piece succeeds, tearing down everything created
     /// so far on any failure.
     private func performBlockingSetupAndStart() throws {
-        // 1. Exclude our own process. Fail closed: if we can't resolve our
-        // own audio process object, never fall back to building a tap with
-        // an empty exclusion list (that would capture Dikta's own audio).
-        let (translateStatus, selfProcessObject) = Self.audioProcessObject(forPID: getpid())
-        guard let selfProcessObject else {
-            AppLogger.audio.error("SystemAudioTapRecorder: translate pid \(getpid()) -> process object failed (\(translateStatus)); refusing to build an unscoped tap")
-            throw SystemAudioCaptureError.unavailable(osStatus: translateStatus, stage: "translatePID")
+        let tapDescription: CATapDescription
+        switch TapTarget.resolve(targetPIDs: targetPIDs, using: processLister) {
+        case .processes(let objects):
+            tapDescription = CATapDescription(stereoMixdownOfProcesses: objects)
+        case .global(let fallbackReason):
+            if let fallbackReason {
+                AppLogger.audio.warning("SystemAudioTapRecorder: targeted tap unavailable, falling back to global tap: \(fallbackReason)")
+            }
+            // Exclude our own process. Fail closed: if we can't resolve our
+            // own audio process object, never fall back to building a tap
+            // with an empty exclusion list (that would capture Dikta's own
+            // audio).
+            let (translateStatus, selfProcessObject) = processLister.audioProcessObject(forPID: getpid())
+            guard let selfProcessObject else {
+                AppLogger.audio.error("SystemAudioTapRecorder: translate pid \(getpid()) -> process object failed (\(translateStatus)); refusing to build an unscoped tap")
+                throw SystemAudioCaptureError.unavailable(osStatus: translateStatus, stage: "translatePID")
+            }
+            tapDescription = CATapDescription(stereoGlobalTapButExcludeProcesses: [selfProcessObject])
         }
-
-        let tapDescription = CATapDescription(stereoGlobalTapButExcludeProcesses: [selfProcessObject])
         tapDescription.name = "Dikta System Audio Tap"
         tapDescription.uuid = UUID()
         tapDescription.isPrivate = true
@@ -677,22 +746,6 @@ final class SystemAudioTapRecorder: SystemAudioCapturing, @unchecked Sendable {
     /// not pids. Returns the raw status alongside the id so callers can
     /// fail closed (and report why) rather than silently building an
     /// unscoped tap.
-    private static func audioProcessObject(forPID pid: pid_t) -> (status: OSStatus, id: AudioObjectID?) {
-        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyTranslatePIDToProcessObject,
-                                                  mScope: kAudioObjectPropertyScopeGlobal,
-                                                  mElement: kAudioObjectPropertyElementMain)
-        var inPID = pid
-        var out = AudioObjectID(kAudioObjectUnknown)
-        var size = UInt32(MemoryLayout<AudioObjectID>.size)
-        let status = withUnsafeMutablePointer(to: &inPID) { qualifier -> OSStatus in
-            AudioObjectGetPropertyData(systemObject(), &address, UInt32(MemoryLayout<pid_t>.size), qualifier, &size, &out)
-        }
-        guard status == noErr, out != AudioObjectID(kAudioObjectUnknown) else {
-            return (status, nil)
-        }
-        return (status, out)
-    }
-
     private static func defaultOutputDevice() -> AudioObjectID {
         var device = AudioObjectID(kAudioObjectUnknown)
         _ = getProperty(systemObject(), kAudioHardwarePropertyDefaultOutputDevice, into: &device)
