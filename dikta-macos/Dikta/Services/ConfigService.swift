@@ -50,7 +50,7 @@ final class ConfigService: ObservableObject {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(config)
-            // Atomic write: write to temp file, then rename to avoid corruption on crash
+            // Sole atomic mechanism: write to a sibling temp file, then swap it in with `replaceItemAt` (POSIX rename) — kept over `Data.write(options: .atomic)` because the rename is what guarantees `configFile` is never left truncated if the app dies mid-save.
             let tempFile = configFile.appendingPathExtension("tmp")
             try data.write(to: tempFile)
             _ = try FileManager.default.replaceItemAt(configFile, withItemAt: tempFile)
