@@ -9,7 +9,21 @@ import XCTest
 /// real two-track call debrief showed the cost as seven "decisions" that were
 /// three paraphrased ideas. These tests run inside the real app bundle (the
 /// test host is Dikta.app), so they catch the lookup breaking again.
+///
+/// They only make sense with that host: under `swift test` there is no app
+/// bundle, `Bundle.main` is the test runner, and `SentenceEmbeddingService`'s
+/// initializer `fatalError`s on the missing vocabulary before any assertion
+/// can run — which took the whole SPM test process down in CI on
+/// 2026-09-28. So the class skips itself when the vocabulary is not in
+/// `Bundle.main` rather than touching the singleton.
 final class SentenceEmbeddingServiceTests: XCTestCase {
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        guard Bundle.main.url(forResource: "minilm-vocab", withExtension: "txt") != nil else {
+            throw XCTSkip("needs the Dikta.app test host: minilm-vocab.txt is not in Bundle.main (e.g. under `swift test`)")
+        }
+    }
+
     func test_loadModel_findsTheCompiledModelInTheAppBundle() {
         XCTAssertNoThrow(try SentenceEmbeddingService.shared.loadModel())
     }
