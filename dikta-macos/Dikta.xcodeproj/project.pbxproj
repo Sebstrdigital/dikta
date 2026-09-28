@@ -49,6 +49,7 @@
 		100000000000000000000105 /* FakeTranscriptionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000105 /* FakeTranscriptionEngine.swift */; };
 		100000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */; };
 		100000000000000000000129 /* MenuBarViewModelSetEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000129 /* MenuBarViewModelSetEngineTests.swift */; };
+		100000000000000000000130 /* ConfigServiceAtomicWriteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000130 /* ConfigServiceAtomicWriteTests.swift */; };
 		100000000000000000000107 /* MenuBarViewModelLanguageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000107 /* MenuBarViewModelLanguageTests.swift */; };
 		100000000000000000000108 /* TTSStaleServerPIDTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000108 /* TTSStaleServerPIDTests.swift */; };
 
@@ -220,6 +221,7 @@
 		200000000000000000000105 /* FakeTranscriptionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeTranscriptionEngine.swift; sourceTree = "<group>"; };
 		200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelSetWhisperModelTests.swift; sourceTree = "<group>"; };
 		200000000000000000000129 /* MenuBarViewModelSetEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelSetEngineTests.swift; sourceTree = "<group>"; };
+		200000000000000000000130 /* ConfigServiceAtomicWriteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigServiceAtomicWriteTests.swift; sourceTree = "<group>"; };
 		200000000000000000000107 /* MenuBarViewModelLanguageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelLanguageTests.swift; sourceTree = "<group>"; };
 		200000000000000000000108 /* TTSStaleServerPIDTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSStaleServerPIDTests.swift; sourceTree = "<group>"; };
 		200000000000000000000109 /* DebriefSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefSummary.swift; sourceTree = "<group>"; };
@@ -354,6 +356,7 @@
 				200000000000000000000128 /* ParakeetEngineTests.swift */,
 				200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */,
 				200000000000000000000129 /* MenuBarViewModelSetEngineTests.swift */,
+				200000000000000000000130 /* ConfigServiceAtomicWriteTests.swift */,
 				200000000000000000000107 /* MenuBarViewModelLanguageTests.swift */,
 				200000000000000000000108 /* TTSStaleServerPIDTests.swift */,
 				200000000000000000000114 /* DebriefSummaryTests.swift */,
@@ -621,6 +624,7 @@
 				100000000000000000000128 /* ParakeetEngineTests.swift in Sources */,
 				100000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift in Sources */,
 				100000000000000000000129 /* MenuBarViewModelSetEngineTests.swift in Sources */,
+				100000000000000000000130 /* ConfigServiceAtomicWriteTests.swift in Sources */,
 				100000000000000000000107 /* MenuBarViewModelLanguageTests.swift in Sources */,
 				100000000000000000000108 /* TTSStaleServerPIDTests.swift in Sources */,
 				100000000000000000000114 /* DebriefSummaryTests.swift in Sources */,
