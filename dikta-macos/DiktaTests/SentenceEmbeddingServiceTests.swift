@@ -28,7 +28,20 @@ final class SentenceEmbeddingServiceTests: XCTestCase {
         XCTAssertNoThrow(try SentenceEmbeddingService.shared.loadModel())
     }
 
+    /// The two similarity tests below need the model to actually compute
+    /// something. On GitHub's virtualised macOS runners the compiled MiniLM
+    /// model loads and runs but returns all-zero vectors (observed
+    /// 2026-09-28: cosine exactly 0.0 for both pairs, while the lookup test
+    /// above passes), so they are skipped there. They run on real hardware,
+    /// which is where the regression they guard was found.
+    private func skipUnlessModelProducesVectors() throws {
+        if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil {
+            throw XCTSkip("MiniLM returns zero vectors on GitHub's virtual macOS runners; run on real hardware")
+        }
+    }
+
     func test_embeddings_paraphrasedDecisionsScoreAsDuplicates() throws {
+        try skipUnlessModelProducesVectors()
         // The exact pair that survived dedupe on 2026-09-22: Jaccard scores
         // them under the 0.75 dedupe threshold, the model must not.
         let a = "Decided to implement a more structured approach to handling releases and updates."
@@ -42,7 +55,8 @@ final class SentenceEmbeddingServiceTests: XCTestCase {
         XCTAssertGreaterThan(cosine, 0.75, "paraphrases that share the same idea must dedupe via embeddings")
     }
 
-    func test_embeddingSimilarity_usesTheModelRatherThanJaccard() {
+    func test_embeddingSimilarity_usesTheModelRatherThanJaccard() throws {
+        try skipUnlessModelProducesVectors()
         let a = "Develop a detailed plan for hiring and onboarding the consultant."
         let b = "Develop a detailed plan for onboarding the consultant."
 
