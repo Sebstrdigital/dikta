@@ -88,10 +88,13 @@ final class WKWebViewShadowHost: NSObject, ShadowHost, WKUIDelegate, WKNavigatio
         let view = WKWebView(frame: NSRect(x: 0, y: 0, width: 1280, height: 800), configuration: config)
         view.uiDelegate = self
         view.navigationDelegate = self
-        // Borderless and far off-screen: never visible, but still "on screen" for WebKit's throttling.
-        let win = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: 1280, height: 800),
+        // Borderless, fully transparent and click-through: never seen, but on screen so the page counts as
+        // visible. Far off-screen the page is "hidden" and WebKit parks getUserMedia without asking the delegate.
+        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 800),
                            styleMask: .borderless, backing: .buffered, defer: false)
         win.isReleasedWhenClosed = false
+        win.alphaValue = 0
+        win.ignoresMouseEvents = true
         win.contentView = view
         win.orderFrontRegardless()
         window = win
@@ -123,6 +126,11 @@ final class WKWebViewShadowHost: NSObject, ShadowHost, WKUIDelegate, WKNavigatio
             let poller = ShadowSpeakerPoller(evaluate: driver.evaluate, pollInterval: driver.pollInterval)
             await poller.run(selectors: selectors) { self?.emit($0) }
         }
+    }
+
+    /// Runs JS in the hosted page; lets tests read what the page observed.
+    func evaluate(_ js: String) async -> String {
+        (try? await webView?.evaluateJavaScript(js) as? String) ?? ""
     }
 
     func leave() async {

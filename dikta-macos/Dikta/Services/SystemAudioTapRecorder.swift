@@ -323,9 +323,16 @@ final class SystemAudioTapRecorder: SystemAudioCapturing, @unchecked Sendable {
     private let targetPIDs: Set<pid_t>?
     private let processLister: AudioProcessListing
 
-    init(targetPIDs: Set<pid_t>? = nil, processLister: AudioProcessListing = CoreAudioProcessLister()) {
+    private let diagnosticSink: (String) -> Void
+
+    init(
+        targetPIDs: Set<pid_t>? = nil,
+        processLister: AudioProcessListing = CoreAudioProcessLister(),
+        diagnosticSink: @escaping (String) -> Void = { DiagnosticLogger.shared.log($0) }
+    ) {
         self.targetPIDs = targetPIDs
         self.processLister = processLister
+        self.diagnosticSink = diagnosticSink
         deliveryQueue.setSpecific(key: deliveryQueueKey, value: ())
     }
 
@@ -393,6 +400,14 @@ final class SystemAudioTapRecorder: SystemAudioCapturing, @unchecked Sendable {
         }
     }
 
+    /// Records why a targeted tap was abandoned: once to the OS log and once
+    /// to the diagnostic log file. No-op when there was no fallback.
+    func reportFallback(_ fallbackReason: String?) {
+        guard let fallbackReason else { return }
+        AppLogger.audio.warning("SystemAudioTapRecorder: targeted tap unavailable, falling back to global tap: \(fallbackReason)")
+        diagnosticSink("DEBRIEF_TAP | fallback_to_global | \(fallbackReason)")
+    }
+
     /// Runs entirely on `Self.setupQueue`. Owns the whole CoreAudio setup
     /// sequence — pid exclusion, tap, format query + resampler, aggregate
     /// device, IO proc, start — and commits instance state under
@@ -404,9 +419,7 @@ final class SystemAudioTapRecorder: SystemAudioCapturing, @unchecked Sendable {
         case .processes(let objects):
             tapDescription = CATapDescription(stereoMixdownOfProcesses: objects)
         case .global(let fallbackReason):
-            if let fallbackReason {
-                AppLogger.audio.warning("SystemAudioTapRecorder: targeted tap unavailable, falling back to global tap: \(fallbackReason)")
-            }
+            reportFallback(fallbackReason)
             // Exclude our own process. Fail closed: if we can't resolve our
             // own audio process object, never fall back to building a tap
             // with an empty exclusion list (that would capture Dikta's own

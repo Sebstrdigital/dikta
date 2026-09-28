@@ -38,6 +38,26 @@ final class SystemAudioTapRecorderTests: XCTestCase {
         XCTAssertTrue(reason?.contains("555") ?? false, "reason should name the pid: \(String(describing: reason))")
     }
 
+    func testFallback_unresolvablePID_writesExactlyOneDiagnosticLine() {
+        var lines: [String] = []
+        let lister = FakeProcessLister(objects: [100: 7])
+        let recorder = SystemAudioTapRecorder(targetPIDs: [555], processLister: lister, diagnosticSink: { lines.append($0) })
+        if case .global(let reason) = TapTarget.resolve(targetPIDs: [555], using: lister) {
+            recorder.reportFallback(reason)
+        } else {
+            XCTFail("expected global fallback")
+        }
+        XCTAssertEqual(lines.count, 1)
+        XCTAssertTrue(lines.first?.contains("555") ?? false, "line should name the pid: \(lines)")
+    }
+
+    func testFallback_noTarget_writesNoDiagnosticLine() {
+        var lines: [String] = []
+        let recorder = SystemAudioTapRecorder(diagnosticSink: { lines.append($0) })
+        recorder.reportFallback(nil)
+        XCTAssertTrue(lines.isEmpty)
+    }
+
     // MARK: - downmixAndResample (pure conversion path — no real tap)
 
     @available(macOS 14.2, *)

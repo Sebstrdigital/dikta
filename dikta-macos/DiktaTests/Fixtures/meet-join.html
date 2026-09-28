@@ -29,6 +29,16 @@
   </div>
 </template>
 <script>
+  // On load, ask for mic and camera like Meet's pre-join does, and report each outcome on
+  // <body data-media-audio / data-media-video> ("pending" until settled, then "denied" or "granted").
+  ['audio', 'video'].forEach(function (kind) {
+    document.body.setAttribute('data-media-' + kind, 'pending');
+    var constraints = {}; constraints[kind] = true;
+    var settle = function (result) { document.body.setAttribute('data-media-' + kind, result); };
+    try {
+      navigator.mediaDevices.getUserMedia(constraints).then(function () { settle('granted'); }, function () { settle('denied'); });
+    } catch (e) { settle('denied'); }
+  });
   var input = document.querySelector('input');
   document.getElementById('ask').addEventListener('click', function () {
     if (!input.value) return;                       // Meet refuses an empty name

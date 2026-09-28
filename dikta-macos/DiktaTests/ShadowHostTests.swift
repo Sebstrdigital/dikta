@@ -105,6 +105,21 @@ final class ShadowHostTests: XCTestCase {
         XCTAssertFalse(host.audioProcessIDs.contains(getpid()))
     }
 
+    /// The fixture asks for mic and camera on load; the host must deny both without a macOS prompt.
+    func testWKWebViewHost_deniesMicAndCamera() async throws {
+        let host = WKWebViewShadowHost(profiles: Self.fixtureProfiles, driver: Self.fastDriver, processLister: { [] })
+        await host.join(url: Self.fixtureURL, displayName: "Dikta · notes (Test)")
+        let js = "document.body.getAttribute('data-media-audio') + ',' + document.body.getAttribute('data-media-video')"
+        var result = ""
+        for _ in 0..<100 {
+            result = await host.evaluate(js)
+            if !result.contains("pending") && !result.contains("null") && result != "" { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        await host.leave()
+        XCTAssertEqual(result, "denied,denied")
+    }
+
     func testWKWebViewHost_unsupportedURLFails() async {
         let host = WKWebViewShadowHost(processLister: { [] })
         await host.join(url: URL(string: "https://example.com/meeting")!, displayName: "x")
