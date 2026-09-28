@@ -6,10 +6,7 @@ All notable changes to Dikta will be documented in this file.
 - 2026-09-28: `ConfigService.save()` now uses a single atomic-write strategy (temp file + `replaceItemAt`), removing the duplicate approach that had carried as unresolved tech debt for 14 sprints.
 - 2026-04-17: DiagnosticLogger (Windows) now correctly gated behind `[Conditional("DIAGNOSTICS")]` compile flag — release builds produce no log output
 
-## [Unreleased] - Dikta v1.5 — Parakeet
-
-**Draft release notes.** Version numbers are not bumped here — bump `MARKETING_VERSION` /
-`CURRENT_PROJECT_VERSION` in `Dikta.xcodeproj/project.pbxproj` at release time, per usual.
+## [1.5] - 2026-09-28 — Parakeet
 
 ### Features
 - **Parakeet transcription engine** — a new Engine submenu (Advanced menu) switches dictation
