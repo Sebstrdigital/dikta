@@ -110,8 +110,7 @@ enum TwoTrackMerger {
         }
     }
 
-    /// Removes the leading `"Me: "`/`"Them: "` (or a participant name, once
-    /// `SpeakerAttributor` has run) label from each paragraph of
+    /// Removes the leading `"Me: "`/`"Them: "` label from each paragraph of
     /// a `render`-produced transcript, keeping the paragraph breaks (blank
     /// lines) intact. Used by `HeuristicDebriefSummarizer`, which has no
     /// notion of speakers and would otherwise bucket the literal label text
@@ -123,12 +122,6 @@ enum TwoTrackMerger {
                     return String(paragraph.dropFirst("Me: ".count))
                 } else if paragraph.hasPrefix("Them: ") {
                     return String(paragraph.dropFirst("Them: ".count))
-                }
-                // A named remote speaker ("Anna: ..."), see `SpeakerAttributor`.
-                if let separator = paragraph.range(of: ": "),
-                   paragraph.distance(from: paragraph.startIndex, to: separator.lowerBound) <= 60,
-                   !paragraph[..<separator.lowerBound].contains(where: \.isNewline) {
-                    return String(paragraph[separator.upperBound...])
                 }
                 return paragraph
             }

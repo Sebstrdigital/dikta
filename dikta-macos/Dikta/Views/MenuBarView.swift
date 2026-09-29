@@ -194,7 +194,7 @@ struct DebriefMenu: View {
             }
 
             Menu("Source") {
-                ForEach(viewModel.availableDebriefSources, id: \.self) { source in
+                ForEach(DebriefSource.allCases, id: \.self) { source in
                     Button(action: { handleSourceSelection(source) }) {
                         HStack {
                             Text(source.displayName)
@@ -203,28 +203,6 @@ struct DebriefMenu: View {
                                 Image(systemName: "checkmark")
                             }
                         }
-                    }
-                }
-            }
-
-            if viewModel.isShadowParticipantAvailable {
-                Menu("Shadow host: \(viewModel.configService.shadowHost.displayName)") {
-                    ForEach(ShadowHostKind.allCases, id: \.self) { kind in
-                        Button(action: { viewModel.setShadowHost(kind) }) {
-                            HStack {
-                                Text(kind.displayName)
-                                if viewModel.configService.shadowHost == kind {
-                                    Spacer()
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Button("Notetaker name: \(viewModel.configService.shadowDisplayName)…") {
-                    if let name = ShadowMeetingSheet.askForDisplayName(current: viewModel.configService.shadowDisplayName) {
-                        viewModel.setShadowDisplayName(name)
                     }
                 }
             }

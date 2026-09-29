@@ -146,29 +146,6 @@ for p in $(pgrep -x Dikta); do ps -o command= -p $p | grep -q ApplePersistenceIg
 **Known pre-existing failure**: `testSlackMuterReturnsNilWhenSlackNotRunning` (`MicMutingTests.swift`) fails when
 Slack.app is open on the test machine — unrelated to Call Debrief, not a regression.
 
-## Shadow Participant (experimental Debrief source)
-
-**Files**: `dikta-macos/Dikta/Services/Shadow/*.swift`, `dikta-macos/Dikta/Services/Debrief/SpeakerAttributor.swift`,
-`dikta-macos/Dikta/Models/AppConfig.swift` (`ShadowHostKind`, `ShadowParticipantFlag`, `shadow_*` keys),
-`dikta-macos/Dikta/ViewModels/MenuBarViewModel.swift` (shadow branch), `dikta-macos/Dikta/Views/MenuBarView.swift` (`DebriefMenu`)
-
-**Test files**: `ShadowHostTests.swift`, `SpeakerAttributorTests.swift`, `MenuBarViewModelDebriefTests.swift`
-(the `test_shadow*` tests), `FakeShadowHost.swift`, `FakeSystemAudioCapture.swift`
-
-**Test classes**: `ShadowHostTests`, `SpeakerAttributorTests`, `MenuBarViewModelDebriefTests`
-
-**Fixture pages**: `dikta-macos/DiktaTests/Fixtures/meet-join.html` (pre-join, lobby, admitted and speaker-tile DOM
-for the join driver and speaker poller).
-
-**Run command**: same `DiktaTests` target, e.g.
-`-only-testing:DiktaTests/ShadowHostTests -only-testing:DiktaTests/SpeakerAttributorTests -only-testing:DiktaTests/MenuBarViewModelDebriefTests`.
-
-**Rules**:
-1. `MenuBarViewModel` shadow tests inject `ShadowDependencies` with `FakeShadowHost` and `FakeSystemAudioCapture`
-   and a fake meeting sheet — no browser, no tap, no modal dialog. Never use `ShadowDependencies.live` in a test.
-2. Cover on any change: flag gate (menu unchanged with flag off), start/stop sequence, `muteAll()` skipped,
-   not-admitted-then-stop and join-failed paths leave no session folder, and config keys decoding with defaults.
-
 ## Release gate (build-release.sh / CI)
 
 **Files**: `dikta-macos/scripts/build-release.sh`, `.github/workflows/macos-build.yml`

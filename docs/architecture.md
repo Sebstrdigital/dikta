@@ -206,51 +206,6 @@ One `DEBRIEF_LIVE` diagnostic line is logged per chunk (index, audio seconds, pe
 time, silence-vs-hard cut, padding, errors) and one at finish (chunk count, single-pass vs
 rolling, and seconds from stop to summary — the feature's headline metric).
 
-## Shadow Participant (experimental)
-
-A third Debrief source, `DebriefSource.joinMeetingAsParticipant`: Dikta joins a Meet/Teams/Zoom link as a
-guest, records the call, and leaves when the hotkey stops it. Off by default; the source only appears in
-Debrief → Source (plus the `Shadow host` and `Notetaker name` items) when `DIKTA_EXPERIMENTAL_SHADOW=1` or the
-UserDefaults key `experimentalShadowParticipant` is true (`ShadowParticipantFlag`). With the flag off the menu
-is the v1.5 menu, and a saved `debrief_source` of this case is ignored (`MenuBarViewModel.isShadowMode`).
-
-Config: `shadow_host` (`wkWebView` | `chrome`, default `wkWebView`), `shadow_display_name` (default
-`Dikta · notes (<macOS full name>)`), `shadow_notice_shown` (one-time consent notice), `shadow_join_timeout_seconds` (default 90). All decode with defaults.
-
-Pieces (`Dikta/Services/Shadow/`):
-- `ShadowHost` — browser-backed guest (`WKWebViewShadowHost` off-screen web view, `ChromeShadowHost` installed
-  Chromium over CDP). Reports `ShadowEvent`s (join state, active speaker, roster) and `audioProcessIDs`:
-  WKWebView → the WebKit GPU process only (the one process with a CoreAudio process object during playback;
-  `_gpuProcessIdentifier` SPI, guarded by `responds(to:)`, unioned with a responsibility scan); Chrome → the
-  launched browser plus all descendants by parent PID (audio plays from a `Google Chrome Helper` child).
-- `ShadowPlatform` / `ShadowJoinDriver` — URL table, selectors, join flow. Only Meet has selectors.
-- `ShadowSpeakerPoller` + `SpeakerTimelineRecorder` — active speaker to `speakers.jsonl` in the session folder;
-  `SpeakerAttributor` names the Them track from it (Debrief/).
-- `ShadowDependencies` — the seams `MenuBarViewModel` uses (flag, host factory, tap factory, meeting sheet,
-  clipboard); tests replace all of them.
-
-Flow (`MenuBarViewModel.startShadowRecording` / `stopShadowRecording`): hotkey → meeting sheet (clipboard
-pre-fill, consent notice with the notetaker name on first use) → `appState = .recording` at once, session folder,
-two writers, live session and the mic start (the Them track stays closed) → host joins → on `.admitted`: up to
-10 s (every 500 ms, `ShadowTapTargetWait`) for at least one `host.audioProcessIDs` PID to get a CoreAudio process
-object (it appears only once the page plays audio; `SHADOW_TAP_TARGET` log line), then the tap targeted at those
-PIDs, Them opens zero-padded to the Me clock → stop: host leaves, tap and mic stop,
-writers close, `runLiveDebrief` exactly as a call recording. `muteAll()` is never called; push-to-talk is ignored.
-Stopping before admission or a `.failed` state returns to idle and deletes the session folder, no debrief.
-
-Tap target (`TapTarget.resolve`): taps the resolvable subset of the PIDs, muted (`.mutedWhenTapped`) so the
-shadow's audio is never heard; skipped PIDs log one `DEBRIEF_TAP | partial_target` line. Only when no PID resolves
-does it fall back to the v1.5 unmuted global tap (`DEBRIEF_TAP | fallback_to_global`). Stopping during the wait
-debriefs the Me track without building a tap.
-
-Failure handling: `shadow_join_timeout_seconds` (default 90) arms a timer at join; when it fires without admission
-`ShadowDependencies.askAdmissionTimeout` asks keep waiting (re-arms) or switch. Switch leaves the meeting and starts
-the all-system-audio tap (`systemAudioCaptureFactory`) in the same session, keeping the Me audio so far. A `.left`/
-`.failed` state or a finished event stream after admission is a host loss: warned once, Me keeps recording,
-`DebriefResult.issues` gets `shadow participant lost at m:ss`. With diagnostic logging on, each state transition
-logs a `SHADOW_JOIN | state=` line and the end of the run a `SHADOW_JOIN | finish` line (host, admitted_after or
-`never`, speaker_events, them_nonsilent).
-
 ## macOS Permissions
 
 - **Microphone** — for recording (entitlement: `com.apple.security.device.audio-input`)
