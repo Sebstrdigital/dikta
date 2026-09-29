@@ -4,6 +4,7 @@ Scope note (2026-09-28): Dikta stays a macOS tool. Linux/Omarchy is covered by V
 
 ## Deferred from v1.5 (2026-09-28)
 
+- [ ] Remove the Whisper engines (WhisperKit, KB-Whisper) in favour of Parakeet — decided 2026-09-29, timing open; wait for Swedish WER evidence from diagnostic logs first.
 - [ ] XCTSkip for `DebriefRealTranscriptTests` when local sessions are too short. Without it the release test gate blocks releases unless `DIKTA_REAL_SESSIONS_DIR` is set.
 - [ ] Startup fallback when a persisted Parakeet engine fails to load (today only live switches fall back).
 - [ ] Merge Parakeet's per-word segments before Me/Them interleaving in Call Debrief.

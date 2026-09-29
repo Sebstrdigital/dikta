@@ -5,7 +5,16 @@ All notable changes to Dikta will be documented in this file.
 - 2026-09-28: `build-release.sh` and macOS CI now abort the release/job if `DiktaTests` didn't actually execute (zero matched tests or a non-zero exit) — closing tech debt carried unresolved for 14 sprints.
 - 2026-09-28: `ConfigService.save()` now uses a single atomic-write strategy (temp file + `replaceItemAt`), removing the duplicate approach that had carried as unresolved tech debt for 14 sprints.
 - 2026-04-17: DiagnosticLogger (Windows) now correctly gated behind `[Conditional("DIAGNOSTICS")]` compile flag — release builds produce no log output
-- 2026-09-29: Shadow Participant (guest notetaker joining Google Meet, per-process tap, speaker names) was built (PR #24) and removed the same day. Meeting platforms ship their own notetakers and Slack huddles cannot be joined; Debrief keeps the Microphone and Microphone + system audio sources only.
+
+## [1.5.1] - 2026-09-29 — Cleanup
+
+### Changed
+
+- Removed the experimental Shadow Participant debrief source (built and merged as PR #24, reverted in PR #25 the same day). Meeting platforms ship their own notetakers and Slack huddles cannot be joined by a guest, so Dikta does not pursue it. Debrief keeps the Microphone and Microphone + system audio sources.
+
+### Notes
+
+- Whisper engines stay in this release; removing them in favour of Parakeet is planned for a later version once Swedish accuracy is confirmed from diagnostic-log evidence.
 
 ## [1.5] - 2026-09-28 — Parakeet
 
