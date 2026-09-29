@@ -97,3 +97,49 @@
 - This sprint's own story durations: small 350.7s avg (US-001 409s, US-002 341s, US-005 302s); medium 616.6s avg (US-003 476s, US-004 836s, US-006 505s, US-009 243s, US-010 1023s); large 739s avg (US-007 728s, US-008 750s); BUG-001 12s
 - Phase overhead: 7032s (from US-010's end at 1790580050 to retro start — covers BUG-001's fix, 3 verification cycles, review gate cycle 1 block + fix commit `37155f2`, and gate cycle 2)
 - Timing stats: small updated (avg 236s, n=34); medium updated (avg 354s, n=20); large updated (avg 674s, n=5); overhead updated (avg 2025s, n=6)
+
+---
+
+## Retro: 2026-09-29 — dikta/takt/shadow-participant
+
+### What Went Well
+- All 6 stories (US-001..US-006) passed first attempt; the tap-target seam (US-001) and shared ShadowJoinDriver (US-002) let both WKWebView and Chrome hosts produce identical state sequences (workbook US-002).
+- Real-browser tests (headless Chrome and WKWebView against a fixture) ran inside the suite, and BUG-002 found via them that an off-screen window parks getUserMedia (workbook BUG-002).
+- Every fix worker validated with a targeted suite plus the full DiktaTests run; the same single unrelated failure was consistently identified (US-001..US-006, MF-1, MF-4).
+
+### What Didn't Go Well
+- Gate cycle 2 BLOCKED on MF-1: shadow tap PIDs never resolved to CoreAudio process objects, so the tap silently became a global unmuted one. Unit tests used fake process listers, so nothing exercised the real lookup; only a live spike and a heavy worker fixed it (commit 54a328c).
+- MF-2 (targeted tap muting) has no test seam: CATapDescription is built inline, so muteBehavior is unasserted (workbook MF-2).
+- US-002/US-003 shipped Meet selectors and speaker/participant CSS as unverified placeholders; Chrome audioProcessIDs is the launched PID only although Chrome audio comes from helper processes.
+- Review took 3 gate cycles plus 2 verify-cycle bug fixes before PASS (13 suggestions remain).
+
+### Patterns Observed
+- Live-system behaviour (CoreAudio process objects, real Meet DOM, Chrome helper PIDs) was faked in tests and surfaced only at review or manual check; same class as the earlier Parakeet retro finding that fantasy inputs hide defects.
+- DebriefRealTranscriptTests.test_heuristic_onRealTranscripts fails in every workbook; environmental (needs local real sessions), already in TODO as the XCTSkip item.
+- Fixture fidelity issues (hidden Leave button matched admittedCSS, US-003) again show test fixtures drifting from real DOM behaviour.
+
+### Tooling issues
+- Run report `.takt/run-report.json` was absent, so verify/gate/fix/merge phase timing and overhead could not be computed. The gate-cycle-3 fix ran outside the workflow, so its worker has no workbook (MF-1 workbook records the earlier 12h backstop change only).
+- Stories have no `attempts` field in sprint.json; retries counted as 1 per the retro rule.
+
+### Project follow-ups
+- Verify Meet join selectors, participant and active-speaker CSS against a live Google Meet call.
+- Check Chrome host audio tap: Chrome audio comes from helper processes, but audioProcessIDs returns only the launched PID.
+- Verify WKWebView host audio PID lookup (libproc plus responsibility PID filter) against real audio.
+- Add a seam so a test can assert CATapDescription muteBehavior (.mutedWhenTapped for targeted, .unmuted for global).
+- After the 10 s wait the shadow commits to the unmuted global tap for the whole call: keep polling in the background until a PID resolves, then build the targeted tap.
+- Re-target the tap when the tapped process restarts (Chromium audio service, WebKit GPU process); currently Them goes silent.
+- Add a timeout to CDP send/evaluate in ChromeShadowHost.
+- TwoTrackMerger.isLabeledTranscript only recognises Me:/Them:, so a transcript of only named lines is treated as unlabeled and heuristic summaries keep "Name: " prefixes.
+- Remove the orphaned doc comment above defaultOutputDevice() in SystemAudioTapRecorder.swift.
+- Exercise the Chrome host speaker-poller path in a test (only the WKWebView path is covered).
+
+### Metrics
+- Stories: 6/6 passed, 0 blocked; retried on heavy: 0 (blocked after retry: 0)
+- Total workbooks: 12 (6 stories, 2 BUG, 4 MF)
+- Avg story duration: n/a (small), 260s (medium, n=4), 288s (large, n=2)
+- Verify: n/a (run report missing)
+- Gate: 3 cycles, duration n/a
+- Fix workers: 6 workbooks (BUG-001, BUG-002, MF-1..MF-4) plus 1 outside-workflow heavy fix (54a328c), duration n/a
+- Merge/commit agents: n/a
+- Unattributed overhead: n/a

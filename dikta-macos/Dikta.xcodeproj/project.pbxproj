@@ -7,6 +7,17 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CA11DEB1000000C000010002 /* ShadowHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB1000000C000010001 /* ShadowHost.swift */; };
+		CA11DEB1000000C000020002 /* ShadowPlatform.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB1000000C000020001 /* ShadowPlatform.swift */; };
+		CA11DEB1000000C000030002 /* ShadowJoinDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB1000000C000030001 /* ShadowJoinDriver.swift */; };
+		CA11DEB1000000C000040002 /* WKWebViewShadowHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB1000000C000040001 /* WKWebViewShadowHost.swift */; };
+		CA11DEB1000000C000050002 /* ChromeShadowHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB1000000C000050001 /* ChromeShadowHost.swift */; };
+		CA11DEB1000000C000060002 /* FakeShadowHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB1000000C000060001 /* FakeShadowHost.swift */; };
+		CA11DEB1000000C000080002 /* ShadowSpeakerPoller.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB1000000C000080001 /* ShadowSpeakerPoller.swift */; };
+		CA11DEB1000000C0000A0002 /* ShadowDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB1000000C0000A0001 /* ShadowDependencies.swift */; };
+		CA11DEB1000000C000070002 /* ShadowHostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB1000000C000070001 /* ShadowHostTests.swift */; };
+		CA11DEB1000000D000010002 /* SpeakerAttributor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB1000000D000010001 /* SpeakerAttributor.swift */; };
+		CA11DEB1000000D000020002 /* SpeakerAttributorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB1000000D000020001 /* SpeakerAttributorTests.swift */; };
 		/* Models */
 		100000000000000000000001 /* OutputMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000001 /* OutputMode.swift */; };
 		100000000000000000000002 /* HotkeyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000002 /* HotkeyConfig.swift */; };
@@ -142,6 +153,17 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		CA11DEB1000000C000010001 /* ShadowHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowHost.swift; sourceTree = "<group>"; };
+		CA11DEB1000000C000020001 /* ShadowPlatform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowPlatform.swift; sourceTree = "<group>"; };
+		CA11DEB1000000C000030001 /* ShadowJoinDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowJoinDriver.swift; sourceTree = "<group>"; };
+		CA11DEB1000000C000040001 /* WKWebViewShadowHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WKWebViewShadowHost.swift; sourceTree = "<group>"; };
+		CA11DEB1000000C000050001 /* ChromeShadowHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeShadowHost.swift; sourceTree = "<group>"; };
+		CA11DEB1000000C000060001 /* FakeShadowHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeShadowHost.swift; sourceTree = "<group>"; };
+		CA11DEB1000000C000080001 /* ShadowSpeakerPoller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowSpeakerPoller.swift; sourceTree = "<group>"; };
+		CA11DEB1000000C0000A0001 /* ShadowDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowDependencies.swift; sourceTree = "<group>"; };
+		CA11DEB1000000C000070001 /* ShadowHostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShadowHostTests.swift; sourceTree = "<group>"; };
+		CA11DEB1000000D000010001 /* SpeakerAttributor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerAttributor.swift; sourceTree = "<group>"; };
+		CA11DEB1000000D000020001 /* SpeakerAttributorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerAttributorTests.swift; sourceTree = "<group>"; };
 		/* Models */
 		200000000000000000000001 /* OutputMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputMode.swift; sourceTree = "<group>"; };
 		200000000000000000000002 /* HotkeyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyConfig.swift; sourceTree = "<group>"; };
@@ -381,6 +403,9 @@
 				CA11DEB10000000700000003 /* ChunkedTranscriptionSessionTests.swift */,
 				CA11DEB10000000800000017 /* DebriefAccumulatorTests.swift */,
 				CA11DEB10000000800000019 /* RollingDebriefSummarizerTests.swift */,
+				CA11DEB1000000C000060001 /* FakeShadowHost.swift */,
+				CA11DEB1000000C000070001 /* ShadowHostTests.swift */,
+				CA11DEB1000000D000020001 /* SpeakerAttributorTests.swift */,
 			);
 			path = DiktaTests;
 			sourceTree = "<group>";
@@ -427,8 +452,23 @@
 				CA11DEB10000000A00000003 /* AudioFeedbackPlaying.swift */,
 				CA11DEB10000000A00000001 /* AudioRecording.swift */,
 				600000000000000000000011 /* Debrief */,
+				CA11DEB1000000C00000FF01 /* Shadow */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		};
+		CA11DEB1000000C00000FF01 /* Shadow */ = {
+			isa = PBXGroup;
+			children = (
+				CA11DEB1000000C000010001 /* ShadowHost.swift */,
+				CA11DEB1000000C000020001 /* ShadowPlatform.swift */,
+				CA11DEB1000000C000030001 /* ShadowJoinDriver.swift */,
+				CA11DEB1000000C000040001 /* WKWebViewShadowHost.swift */,
+				CA11DEB1000000C000050001 /* ChromeShadowHost.swift */,
+				CA11DEB1000000C000080001 /* ShadowSpeakerPoller.swift */,
+				CA11DEB1000000C0000A0001 /* ShadowDependencies.swift */,
+			);
+			path = Shadow;
 			sourceTree = "<group>";
 		};
 		600000000000000000000011 /* Debrief */ = {
@@ -443,6 +483,7 @@
 				200000000000000000000119 /* DebriefPipeline.swift */,
 				CA11DEB10000000900000002 /* DebriefLiveSession.swift */,
 				CA11DEB10000000600000004 /* TwoTrackMerger.swift */,
+				CA11DEB1000000D000010001 /* SpeakerAttributor.swift */,
 				CA11DEB10000000200000002 /* StreamingWavWriter.swift */,
 				CA11DEB10000000700000001 /* ChunkedTranscriptionSession.swift */,
 				CA11DEB10000000800000001 /* DebriefState.swift */,
@@ -650,6 +691,9 @@
 				CA11DEB10000000700000004 /* ChunkedTranscriptionSessionTests.swift in Sources */,
 				CA11DEB10000000800000018 /* DebriefAccumulatorTests.swift in Sources */,
 				CA11DEB10000000800000020 /* RollingDebriefSummarizerTests.swift in Sources */,
+				CA11DEB1000000C000060002 /* FakeShadowHost.swift in Sources */,
+				CA11DEB1000000C000070002 /* ShadowHostTests.swift in Sources */,
+				CA11DEB1000000D000020002 /* SpeakerAttributorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -674,6 +718,13 @@
 				100000000000000000000021 /* MenuBarViewModel.swift in Sources */,
 				100000000000000000000031 /* MenuBarView.swift in Sources */,
 				100000000000000000000041 /* DiktaApp.swift in Sources */,
+				CA11DEB1000000C000010002 /* ShadowHost.swift in Sources */,
+				CA11DEB1000000C000020002 /* ShadowPlatform.swift in Sources */,
+				CA11DEB1000000C000030002 /* ShadowJoinDriver.swift in Sources */,
+				CA11DEB1000000C000080002 /* ShadowSpeakerPoller.swift in Sources */,
+				CA11DEB1000000C0000A0002 /* ShadowDependencies.swift in Sources */,
+				CA11DEB1000000C000040002 /* WKWebViewShadowHost.swift in Sources */,
+				CA11DEB1000000C000050002 /* ChromeShadowHost.swift in Sources */,
 				100000000000000000000005 /* Language.swift in Sources */,
 				100000000000000000000006 /* WhisperModel.swift in Sources */,
 				100000000000000000000125 /* TranscriptionEngineKind.swift in Sources */,
@@ -713,6 +764,7 @@
 				CA11DEB10000000600000001 /* LabeledSegment.swift in Sources */,
 				CA11DEB10000000900000001 /* DebriefLiveSession.swift in Sources */,
 				CA11DEB10000000600000003 /* TwoTrackMerger.swift in Sources */,
+				CA11DEB1000000D000010002 /* SpeakerAttributor.swift in Sources */,
 				CA11DEB10000000200000001 /* StreamingWavWriter.swift in Sources */,
 				CA11DEB10000000100000002 /* SystemAudioTapRecorder.swift in Sources */,
 				CA11DEB10000000A00000004 /* AudioFeedbackPlaying.swift in Sources */,

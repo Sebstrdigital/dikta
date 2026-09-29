@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Meet fixture</title>
+<style>.hidden { display: none; }</style>
+</head>
+<body>
+<!-- Reproduces the Meet guest pre-join DOM: name field, ask-to-join, lobby, in-call. Invented content only. -->
+<div id="prejoin">
+  <h1>What's your name?</h1>
+  <input type="text" aria-label="Your name" placeholder="Your name" value="">
+  <button id="ask" type="button"><span>Ask to join</span></button>
+</div>
+<div id="lobby" class="hidden">
+  <h1>Asking to be let in...</h1>
+  <p>Someone will let you in soon</p>
+</div>
+<!-- The in-call DOM only exists once admitted, like Meet's; a hidden Leave button would read as admitted. -->
+<template id="incall-tpl">
+  <div id="incall">
+    <p id="who"></p>
+    <!-- Participant tiles; the script below moves the speaking flag. Invented names. -->
+    <div id="tiles">
+      <div data-participant-id="p1"><span data-self-name>Anna</span></div>
+      <div data-participant-id="p2"><span data-self-name>Bo</span></div>
+    </div>
+    <button type="button" aria-label="Leave call">Leave</button>
+  </div>
+</template>
+<script>
+  // On load, ask for mic and camera like Meet's pre-join does, and report each outcome on
+  // <body data-media-audio / data-media-video> ("pending" until settled, then "denied" or "granted").
+  ['audio', 'video'].forEach(function (kind) {
+    document.body.setAttribute('data-media-' + kind, 'pending');
+    var constraints = {}; constraints[kind] = true;
+    var settle = function (result) { document.body.setAttribute('data-media-' + kind, result); };
+    try {
+      navigator.mediaDevices.getUserMedia(constraints).then(function () { settle('granted'); }, function () { settle('denied'); });
+    } catch (e) { settle('denied'); }
+  });
+  var input = document.querySelector('input');
+  document.getElementById('ask').addEventListener('click', function () {
+    if (!input.value) return;                       // Meet refuses an empty name
+    var who = input.value;
+    document.getElementById('prejoin').classList.add('hidden');
+    document.getElementById('lobby').classList.remove('hidden');
+    setTimeout(function () {                        // "Odalys Brandt" lets us in
+      document.getElementById('lobby').classList.add('hidden');
+      document.body.appendChild(document.getElementById('incall-tpl').content.cloneNode(true));
+      document.getElementById('who').textContent = who;
+      runSpeakerScript();
+    }, 400);
+  });
+  // Anna 0-3 s, Bo 3-5 s, Anna 5-8 s, then silence and Bo leaves. Times count from admission.
+  function speak(id) {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-participant-id]'), function (t) {
+      if (t.getAttribute('data-participant-id') === id) t.setAttribute('data-speaking', 'true');
+      else t.removeAttribute('data-speaking');
+    });
+  }
+  function runSpeakerScript() {
+    speak('p1');
+    setTimeout(function () { speak('p2'); }, 3000);
+    setTimeout(function () { speak('p1'); }, 5000);
+    setTimeout(function () {
+      speak('none');
+      var bo = document.querySelector('[data-participant-id="p2"]');
+      bo.parentNode.removeChild(bo);
+    }, 8000);
+  }
+</script>
+</body>
+</html>
