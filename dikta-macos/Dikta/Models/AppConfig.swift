@@ -6,45 +6,12 @@ import Foundation
 enum DebriefSource: String, Codable, CaseIterable {
     case microphone
     case microphoneAndSystemAudio
-    /// Experimental: joins a meeting link as a guest and records that call.
-    /// Only offered while the experimental flag is on — see
-    /// `ShadowParticipantFlag`. The raw value is still decodable with the flag
-    /// off; the view model just never acts on it then.
-    case joinMeetingAsParticipant
 
     var displayName: String {
         switch self {
         case .microphone: return "Microphone"
         case .microphoneAndSystemAudio: return "Microphone + system audio"
-        case .joinMeetingAsParticipant: return "Join meeting as participant (experimental)"
         }
-    }
-}
-
-/// Which browser surface the shadow participant joins through.
-enum ShadowHostKind: String, Codable, CaseIterable {
-    case wkWebView
-    case chrome
-
-    var displayName: String {
-        switch self {
-        case .wkWebView: return "Built-in web view"
-        case .chrome: return "Installed Chrome"
-        }
-    }
-}
-
-/// The experimental gate for the shadow participant: environment
-/// `DIKTA_EXPERIMENTAL_SHADOW=1` or UserDefaults `experimentalShadowParticipant`.
-enum ShadowParticipantFlag {
-    static let environmentKey = "DIKTA_EXPERIMENTAL_SHADOW"
-    static let defaultsKey = "experimentalShadowParticipant"
-
-    static func isEnabled(
-        environment: [String: String] = ProcessInfo.processInfo.environment,
-        defaults: UserDefaults = .standard
-    ) -> Bool {
-        environment[environmentKey] == "1" || defaults.bool(forKey: defaultsKey)
     }
 }
 
@@ -81,15 +48,6 @@ struct AppConfig: Codable {
     /// this feature) or with a raw value this build doesn't recognize yet —
     /// see `init(from:)`.
     var engine: TranscriptionEngineKind
-    /// Browser surface the shadow participant joins through.
-    var shadowHost: ShadowHostKind
-    /// Name the shadow participant shows in the meeting's lobby and roster.
-    var shadowDisplayName: String
-    /// Whether the one-time shadow participant consent notice has been shown.
-    var shadowNoticeShown: Bool
-    /// How long the shadow participant may wait to be admitted before the user is
-    /// asked whether to keep waiting or switch to Microphone + system audio.
-    var shadowJoinTimeoutSeconds: TimeInterval
 
     struct HotkeyConfigs: Codable {
         var toggle: HotkeyConfig
@@ -144,21 +102,11 @@ struct AppConfig: Codable {
         case debriefSource = "debrief_source"
         case callRecordingNoticeShown = "call_recording_notice_shown"
         case engine
-        case shadowHost = "shadow_host"
-        case shadowDisplayName = "shadow_display_name"
-        case shadowNoticeShown = "shadow_notice_shown"
-        case shadowJoinTimeoutSeconds = "shadow_join_timeout_seconds"
     }
-
-    static let defaultShadowJoinTimeoutSeconds: TimeInterval = 90
 
     static let defaultCustomPrompt = "Clean up this dictation. Fix grammar, punctuation, and remove filler words. Output only the cleaned text."
 
     static let defaultOllamaModel = "qwen3:4b"
-
-    static var defaultShadowDisplayName: String {
-        "Dikta · notes (\(NSFullUserName()))"
-    }
 
     /// Default configuration
     static let `default` = AppConfig(
@@ -184,18 +132,14 @@ struct AppConfig: Codable {
         ollamaModel: defaultOllamaModel,
         debriefSource: .microphone,
         callRecordingNoticeShown: false,
-        engine: .whisper,
-        shadowHost: .wkWebView,
-        shadowDisplayName: defaultShadowDisplayName,
-        shadowNoticeShown: false,
-        shadowJoinTimeoutSeconds: defaultShadowJoinTimeoutSeconds
+        engine: .whisper
     )
 
     /// Maximum history items to keep
     static let historyLimit = 5
 
     /// Memberwise initializer
-    init(version: Int, hotkeys: HotkeyConfigs, outputMode: OutputMode, history: [HistoryItem], whisperModel: String, llmModel: String, language: Language, customPrompt: String = defaultCustomPrompt, micSensitivity: MicSensitivity = .normal, muteSounds: Bool = false, muteNotifications: Bool = false, diagnosticLogging: Bool = false, enabledLanguages: [Language] = [.english, .swedish, .indonesian], debriefModeEnabled: Bool = false, debriefEngine: DebriefEngineKind = .auto, ollamaModel: String = defaultOllamaModel, debriefSource: DebriefSource = .microphone, callRecordingNoticeShown: Bool = false, engine: TranscriptionEngineKind = .whisper, shadowHost: ShadowHostKind = .wkWebView, shadowDisplayName: String = AppConfig.defaultShadowDisplayName, shadowNoticeShown: Bool = false, shadowJoinTimeoutSeconds: TimeInterval = AppConfig.defaultShadowJoinTimeoutSeconds) {
+    init(version: Int, hotkeys: HotkeyConfigs, outputMode: OutputMode, history: [HistoryItem], whisperModel: String, llmModel: String, language: Language, customPrompt: String = defaultCustomPrompt, micSensitivity: MicSensitivity = .normal, muteSounds: Bool = false, muteNotifications: Bool = false, diagnosticLogging: Bool = false, enabledLanguages: [Language] = [.english, .swedish, .indonesian], debriefModeEnabled: Bool = false, debriefEngine: DebriefEngineKind = .auto, ollamaModel: String = defaultOllamaModel, debriefSource: DebriefSource = .microphone, callRecordingNoticeShown: Bool = false, engine: TranscriptionEngineKind = .whisper) {
         self.version = version
         self.hotkeys = hotkeys
         self.outputMode = outputMode
@@ -215,10 +159,6 @@ struct AppConfig: Codable {
         self.debriefSource = debriefSource
         self.callRecordingNoticeShown = callRecordingNoticeShown
         self.engine = engine
-        self.shadowHost = shadowHost
-        self.shadowDisplayName = shadowDisplayName
-        self.shadowNoticeShown = shadowNoticeShown
-        self.shadowJoinTimeoutSeconds = shadowJoinTimeoutSeconds
     }
 
     /// Handle missing fields from old configs (v2 configs with active_mode are handled gracefully —
@@ -268,15 +208,5 @@ struct AppConfig: Codable {
         } else {
             engine = .whisper
         }
-        // Same tolerance as `engine`: an unknown host kind must not fail the load.
-        if let rawHost = try container.decodeIfPresent(String.self, forKey: .shadowHost) {
-            shadowHost = ShadowHostKind(rawValue: rawHost) ?? .wkWebView
-        } else {
-            shadowHost = .wkWebView
-        }
-        shadowDisplayName = try container.decodeIfPresent(String.self, forKey: .shadowDisplayName) ?? Self.defaultShadowDisplayName
-        shadowNoticeShown = try container.decodeIfPresent(Bool.self, forKey: .shadowNoticeShown) ?? false
-        let timeout = try container.decodeIfPresent(TimeInterval.self, forKey: .shadowJoinTimeoutSeconds) ?? Self.defaultShadowJoinTimeoutSeconds
-        shadowJoinTimeoutSeconds = timeout > 0 ? timeout : Self.defaultShadowJoinTimeoutSeconds
     }
 }

@@ -18,8 +18,6 @@ struct DebriefSessionPaths {
     var audio: URL { folder.appendingPathComponent("audio.wav") }
     var transcript: URL { folder.appendingPathComponent("transcript.txt") }
     var summary: URL { folder.appendingPathComponent("summary.txt") }
-    /// Who was speaking when, one JSON line per change, streamed during a shadow join.
-    var speakers: URL { folder.appendingPathComponent("speakers.jsonl") }
 
     /// Per-track streaming WAV file (`me.wav` / `them.wav`) written
     /// continuously to disk during capture — see decision 7 (continuous

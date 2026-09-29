@@ -279,42 +279,6 @@ final class ConfigService: ObservableObject {
         }
     }
 
-    var shadowHost: ShadowHostKind {
-        get { config.shadowHost }
-        set {
-            config.shadowHost = newValue
-            objectWillChange.send()
-            save()
-        }
-    }
-
-    var shadowDisplayName: String {
-        get { config.shadowDisplayName }
-        set {
-            config.shadowDisplayName = newValue
-            objectWillChange.send()
-            save()
-        }
-    }
-
-    var shadowNoticeShown: Bool {
-        get { config.shadowNoticeShown }
-        set {
-            config.shadowNoticeShown = newValue
-            objectWillChange.send()
-            save()
-        }
-    }
-
-    var shadowJoinTimeoutSeconds: TimeInterval {
-        get { config.shadowJoinTimeoutSeconds }
-        set {
-            config.shadowJoinTimeoutSeconds = newValue
-            objectWillChange.send()
-            save()
-        }
-    }
-
     var ollamaModel: String {
         get { config.ollamaModel }
         set {
