@@ -42,8 +42,8 @@ Before and after ANY code change, run the relevant test suite defined in **[docs
 - **[Validation](docs/validation.md)** — Mandatory test runs per code area
 
 ## jCodeMunch
-indexed_commit: 7ad2a43
-indexed_at: 2026-09-16
+indexed_commit: 43b1a70
+indexed_at: 2026-10-02
 
 # context-mode — MANDATORY routing rules
 

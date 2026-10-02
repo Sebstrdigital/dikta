@@ -79,6 +79,7 @@
 		CA11DEB10000000900000003 /* DebriefLiveSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000900000004 /* DebriefLiveSessionTests.swift */; };
 		CA11DEB10000000600000003 /* TwoTrackMerger.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000600000004 /* TwoTrackMerger.swift */; };
 		CA11DEB10000000600000005 /* TwoTrackMergerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000600000006 /* TwoTrackMergerTests.swift */; };
+		C1B0A4D00000000000000001 /* ClipboardManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1B0A4D00000000000000002 /* ClipboardManagerTests.swift */; };
 		CA11DEB10000000200000001 /* StreamingWavWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000200000002 /* StreamingWavWriter.swift */; };
 		CA11DEB10000000200000003 /* StreamingWavWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000200000004 /* StreamingWavWriterTests.swift */; };
 		CA11DEB10000000100000004 /* FakeSystemAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000100000003 /* FakeSystemAudioCapture.swift */; };
@@ -252,6 +253,7 @@
 		200000000000000000000127 /* FakeParakeetBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeParakeetBackend.swift; sourceTree = "<group>"; };
 		200000000000000000000128 /* ParakeetEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParakeetEngineTests.swift; sourceTree = "<group>"; };
 		CA11DEB10000000600000006 /* TwoTrackMergerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwoTrackMergerTests.swift; sourceTree = "<group>"; };
+		C1B0A4D00000000000000002 /* ClipboardManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManagerTests.swift; sourceTree = "<group>"; };
 		CA11DEB10000000200000002 /* StreamingWavWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingWavWriter.swift; sourceTree = "<group>"; };
 		CA11DEB10000000200000004 /* StreamingWavWriterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingWavWriterTests.swift; sourceTree = "<group>"; };
 		CA11DEB10000000700000001 /* ChunkedTranscriptionSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChunkedTranscriptionSession.swift; sourceTree = "<group>"; };
@@ -370,6 +372,7 @@
 				200000000000000000000124 /* DebriefRealTranscriptTests.swift */,
 				CA11DEB10000000900000004 /* DebriefLiveSessionTests.swift */,
 				CA11DEB10000000600000006 /* TwoTrackMergerTests.swift */,
+				C1B0A4D00000000000000002 /* ClipboardManagerTests.swift */,
 				CA11DEB10000000200000004 /* StreamingWavWriterTests.swift */,
 				CA11DEB10000000100000003 /* FakeSystemAudioCapture.swift */,
 				CA11DEB10000000A00000009 /* CallDebriefRealSessionTests.swift */,
@@ -639,6 +642,7 @@
 				100000000000000000000124 /* DebriefRealTranscriptTests.swift in Sources */,
 				CA11DEB10000000900000003 /* DebriefLiveSessionTests.swift in Sources */,
 				CA11DEB10000000600000005 /* TwoTrackMergerTests.swift in Sources */,
+				C1B0A4D00000000000000001 /* ClipboardManagerTests.swift in Sources */,
 				CA11DEB10000000200000003 /* StreamingWavWriterTests.swift in Sources */,
 				CA11DEB10000000100000004 /* FakeSystemAudioCapture.swift in Sources */,
 				CA11DEB10000000A00000010 /* CallDebriefRealSessionTests.swift in Sources */,
@@ -860,7 +864,7 @@
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1.5.1;
+				CURRENT_PROJECT_VERSION = 1.5.2;
 				DEVELOPMENT_TEAM = UUM29335B4;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -873,7 +877,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.5.1;
+				MARKETING_VERSION = 1.5.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app;
 				PRODUCT_NAME = Dikta;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -890,7 +894,7 @@
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1.5.1;
+				CURRENT_PROJECT_VERSION = 1.5.2;
 				DEVELOPMENT_TEAM = UUM29335B4;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -903,7 +907,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.5.1;
+				MARKETING_VERSION = 1.5.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app;
 				PRODUCT_NAME = Dikta;
 				SWIFT_EMIT_LOC_STRINGS = YES;
