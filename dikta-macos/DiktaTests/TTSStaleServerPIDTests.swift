@@ -382,3 +382,82 @@ final class TTSStaleServerPIDTests: XCTestCase {
         XCTAssertTrue(TextToSpeechService.listeningServerPIDs(onPort: 0).isEmpty)
     }
 }
+
+/// Offline installer regressions: no pip, Kokoro import, model or network.
+final class TTSSetupCommandTests: XCTestCase {
+    func testVerboseChildCannotDeadlockAndReturnsDiagnosticTail() async throws {
+        let output = try await TTSSetupCommands.run("/usr/bin/python3", arguments: [
+            "-c", "import sys; sys.stdout.write('o'*1048576); sys.stderr.write('e'*1048576 + 'DIAGNOSTIC'); sys.stderr.flush()"
+        ], timeout: 10)
+        XCTAssertTrue(output.hasSuffix("DIAGNOSTIC"))
+        XCTAssertLessThanOrEqual(output.utf8.count, 8192)
+    }
+
+    func testFailureIncludesExitStatusAndStderr() async {
+        do {
+            _ = try await TTSSetupCommands.run("/bin/sh", arguments: ["-c", "echo useful-diagnostic >&2; exit 7"], timeout: 5)
+            XCTFail("Expected installer failure")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("Exit code 7"))
+            XCTAssertTrue(error.localizedDescription.contains("useful-diagnostic"))
+            XCTAssertTrue(error.localizedDescription.contains("Log:"))
+        }
+    }
+
+    func testSilentChildTimesOutEvenWhenItIgnoresTermination() async {
+        let started = Date()
+        do {
+            _ = try await TTSSetupCommands.run("/usr/bin/python3", arguments: [
+                "-c", "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"
+            ], timeout: 0.5)
+            XCTFail("Expected timeout")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("Timed out"))
+            XCTAssertLessThan(Date().timeIntervalSince(started), 5)
+        }
+    }
+
+    func testMissingExecutableFailsPromptly() async {
+        do {
+            _ = try await TTSSetupCommands.run("/nonexistent/dikta-python", arguments: [], timeout: 1)
+            XCTFail("Expected launch failure")
+        } catch {
+            XCTAssertFalse(error.localizedDescription.isEmpty)
+        }
+    }
+
+    func testPythonSelectionSkipsIncompatibleAndMissingCandidates() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        func fake(_ name: String, _ version: String) throws -> String {
+            let url = dir.appendingPathComponent(name)
+            try "#!/bin/sh\necho \(version)\n".write(to: url, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+            return url.path
+        }
+        let old = try fake("old", "3.9")
+        let future = try fake("future", "3.14")
+        let good = try fake("good", "3.11")
+        let selected = try await TTSSetupCommands.findPython(candidates: ["/nonexistent/python", old, future, good])
+        XCTAssertEqual(selected, good)
+        do {
+            _ = try await TTSSetupCommands.findPython(candidates: [old, future])
+            XCTFail("Expected actionable prerequisite failure")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("Python 3.11"))
+        }
+    }
+
+    func testExistingVenvIsPreservedRatherThanReusedOrDeleted() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let venv = dir.appendingPathComponent("venv")
+        try FileManager.default.createDirectory(at: venv, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try Data("seed".utf8).write(to: venv.appendingPathComponent("marker"))
+        let backup = try XCTUnwrap(TTSSetupCommands.preserveVenv(at: venv.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: venv.path))
+        XCTAssertEqual(try String(contentsOfFile: backup + "/marker", encoding: .utf8), "seed")
+        XCTAssertNil(try TTSSetupCommands.preserveVenv(at: venv.path))
+    }
+}

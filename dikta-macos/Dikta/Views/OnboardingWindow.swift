@@ -143,80 +143,27 @@ final class TTSSetupManager: ObservableObject {
             try fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
         }
 
+        // Select a verified interpreter before touching an existing installation.
+        let pythonPath = try await TTSSetupCommands.findPython()
+
         // Copy kokoro_server.py from bundle
         if let bundledScript = Bundle.main.path(forResource: "kokoro_server", ofType: "py") {
             let dest = Self.serverScript
-            if fm.fileExists(atPath: dest) {
-                try fm.removeItem(atPath: dest)
-            }
-            try fm.copyItem(atPath: bundledScript, toPath: dest)
+            try Data(contentsOf: URL(fileURLWithPath: bundledScript))
+                .write(to: URL(fileURLWithPath: dest), options: .atomic)
         }
 
-        // Find python3
-        let pythonPath = try findPython()
-
-        // Create venv
+        // Never reuse an incomplete or incompatible venv, and never delete it.
         let venvPath = dir + "/venv"
-        if !fm.fileExists(atPath: venvPath) {
-            status = .installing(step: "Preparing...")
-            try await runProcess(pythonPath, arguments: ["-m", "venv", venvPath])
-        }
+        try TTSSetupCommands.preserveVenv(at: venvPath)
+        status = .installing(step: "Preparing...")
+        _ = try await TTSSetupCommands.run(pythonPath, arguments: ["-m", "venv", venvPath], timeout: 60)
 
-        // Install packages (this can take several minutes)
         status = .installing(step: "Downloading voice engine...")
-        let pip = venvPath + "/bin/pip"
-        try await runProcess(pip, arguments: ["install", "kokoro", "soundfile", "numpy"])
-    }
-
-    private func findPython() throws -> String {
-        // Check common locations
-        let candidates = [
-            "/usr/bin/python3",
-            "/usr/local/bin/python3",
-            "/opt/homebrew/bin/python3",
-            "/opt/homebrew/bin/python3.11",
-            "/opt/homebrew/bin/python3.12",
-            "/opt/homebrew/bin/python3.13",
-        ]
-
-        for path in candidates {
-            if FileManager.default.fileExists(atPath: path) {
-                return path
-            }
-        }
-
-        throw SetupError.pythonNotFound
-    }
-
-    private func runProcess(_ path: String, arguments: [String]) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: path)
-            process.arguments = arguments
-            process.standardOutput = FileHandle.nullDevice
-            let stderrPipe = Pipe()
-            process.standardError = stderrPipe
-
-            process.terminationHandler = { proc in
-                if proc.terminationStatus == 0 {
-                    continuation.resume()
-                } else {
-                    var errorMsg = "Exit code \(proc.terminationStatus)"
-                    let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                    if let stderr = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-                       !stderr.isEmpty {
-                        errorMsg = String(stderr.suffix(200))
-                    }
-                    continuation.resume(throwing: SetupError.commandFailed(errorMsg))
-                }
-            }
-
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(throwing: error)
-            }
-        }
+        let python = venvPath + "/bin/python3"
+        _ = try await TTSSetupCommands.run(python, arguments: ["-m", "pip", "install", "--upgrade", "pip", "--timeout", "30", "--retries", "2"])
+        _ = try await TTSSetupCommands.run(python, arguments: ["-m", "pip", "install", "--timeout", "30", "--retries", "2", "kokoro", "soundfile", "numpy"])
+        _ = try await TTSSetupCommands.run(python, arguments: ["-c", "import kokoro, soundfile, numpy"], timeout: 60)
     }
 
     private func waitForServer(timeout: Int) async -> Bool {
@@ -247,9 +194,84 @@ final class TTSSetupManager: ObservableObject {
         var errorDescription: String? {
             switch self {
             case .pythonNotFound:
-                return "Python 3 not found. Install from python.org or via Homebrew."
+                return "Python 3.11 is required for Kokoro. Install Python 3.11 from python.org or Homebrew, then retry."
             case .commandFailed(let msg):
                 return msg
+            }
+        }
+    }
+}
+
+/// Installer commands run off the cooperative pool with file-backed output:
+/// a verbose pip child cannot fill a pipe while we wait for it to terminate.
+/// Logs are retained locally so failures have diagnostics beyond the About row.
+enum TTSSetupCommands {
+    static func findPython(candidates: [String] = [
+        "/opt/homebrew/bin/python3.11", "/usr/local/bin/python3.11",
+        "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3",
+        "/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"
+    ]) async throws -> String {
+        for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
+            if let version = try? await run(path, arguments: ["-c", "import sys; print('%d.%d' % sys.version_info[:2])"], timeout: 5),
+               version.trimmingCharacters(in: .whitespacesAndNewlines) == "3.11" {
+                return path
+            }
+        }
+        throw TTSSetupManager.SetupError.pythonNotFound
+    }
+
+    @discardableResult
+    static func preserveVenv(at path: String) throws -> String? {
+        guard FileManager.default.fileExists(atPath: path) else { return nil }
+        let backup = path + ".backup-" + UUID().uuidString
+        try FileManager.default.moveItem(atPath: path, toPath: backup)
+        return backup
+    }
+
+    static func run(_ path: String, arguments: [String], timeout: TimeInterval = 600) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let log = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("dikta-tts-setup-\(UUID().uuidString).log")
+                    guard FileManager.default.createFile(atPath: log.path, contents: nil) else {
+                        throw TTSSetupManager.SetupError.commandFailed("Cannot create installer log.")
+                    }
+                    let output = try FileHandle(forWritingTo: log)
+                    defer { try? output.close() }
+                    let process = Process()
+                    process.executableURL = URL(fileURLWithPath: path)
+                    process.arguments = arguments
+                    process.standardOutput = output
+                    process.standardError = output
+                    try process.run()
+                    let deadline = ProcessInfo.processInfo.systemUptime + timeout
+                    while process.isRunning && ProcessInfo.processInfo.systemUptime < deadline {
+                        Thread.sleep(forTimeInterval: 0.05)
+                    }
+                    let timedOut = process.isRunning
+                    if timedOut {
+                        process.terminate()
+                        let grace = ProcessInfo.processInfo.systemUptime + 2
+                        while process.isRunning && ProcessInfo.processInfo.systemUptime < grace {
+                            Thread.sleep(forTimeInterval: 0.05)
+                        }
+                        if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+                    }
+                    process.waitUntilExit()
+                    let input = try FileHandle(forReadingFrom: log)
+                    defer { try? input.close() }
+                    let end = try input.seekToEnd()
+                    try input.seek(toOffset: end > 8192 ? end - 8192 : 0)
+                    let text = String(decoding: try input.readToEnd() ?? Data(), as: UTF8.self)
+                    if timedOut || process.terminationStatus != 0 {
+                        let reason = timedOut ? "Timed out after \(Int(timeout))s" : "Exit code \(process.terminationStatus)"
+                        throw TTSSetupManager.SetupError.commandFailed("\(reason): \(text.suffix(1000))\nLog: \(log.path)")
+                    }
+                    continuation.resume(returning: text)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
             }
         }
     }
@@ -504,7 +526,8 @@ struct OnboardingView: View {
                 Text(msg)
                     .font(.caption2)
                     .foregroundColor(.red)
-                    .lineLimit(1)
+                    .lineLimit(3)
+                    .help(msg)
             }
         }
     }

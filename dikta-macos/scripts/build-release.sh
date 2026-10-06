@@ -99,6 +99,8 @@ else
     xcodebuild test \
         -project "${PROJECT_DIR}/Dikta.xcodeproj" \
         -scheme "${SCHEME}" \
+        -configuration Release \
+        ENABLE_TESTABILITY=YES \
         -only-testing:DiktaTests \
         -destination 'platform=macOS' \
         CODE_SIGN_STYLE=Manual \

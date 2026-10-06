@@ -41,7 +41,7 @@ final class TextToSpeechService: NSObject {
     private static let serverPort = 59123
     private static let pingTimeout: TimeInterval = 1.0
     private static let speakTimeout: TimeInterval = 120.0
-    private static let serverStartupAttempts = 120
+    private static let serverStartupAttempts = 240
     private static let serverStartupInterval: UInt64 = 500_000_000 // 500ms
 
     private var audioPlayer: AVAudioPlayer?
@@ -49,6 +49,7 @@ final class TextToSpeechService: NSObject {
     private let serverURL: String
     var voice: KokoroVoice = .af_heart
     private var serverProcess: Process?
+    @MainActor private var startupTask: Task<Void, Never>?
 
     enum TTSError: LocalizedError {
         case serverNotRunning
@@ -244,24 +245,36 @@ final class TextToSpeechService: NSObject {
     }
 
     /// Ensure the TTS server is running
+    @MainActor
     private func ensureServerRunning() async {
-        if await checkAvailable() {
+        // The app is also the XCTest host. Installing TTS locally must not
+        // make unit tests launch Python, download models or load Kokoro.
+        guard !MenuBarViewModel.isRunningUnderXCTestHost else { return }
+
+        // Setup notification, startup and Read Aloud can overlap. They must
+        // share one launch, not terminate each other's loading server.
+        if let startupTask {
+            await startupTask.value
             return
         }
-
-        // Start the server
-        await startServer()
-
-        // Wait for it to be ready (up to 60 seconds for model loading)
-        for _ in 0..<Self.serverStartupAttempts {
-            try? await Task.sleep(nanoseconds: Self.serverStartupInterval)
-            if await checkAvailable() {
-                return
+        let task = Task { @MainActor in
+            if await checkAvailable() { return }
+            await startServer()
+            for _ in 0..<Self.serverStartupAttempts {
+                if serverProcess?.isRunning != true { return }
+                try? await Task.sleep(nanoseconds: Self.serverStartupInterval)
+                if await checkAvailable() { return }
             }
+            AppLogger.tts.error("Kokoro startup timed out; see kokoro-server.log in Dikta Application Support")
+            terminateServer()
         }
+        startupTask = task
+        await task.value
+        startupTask = nil
     }
 
     /// Start the Kokoro server
+    @MainActor
     private func startServer() async {
         let serverScript = AppPaths.kokoroServerScript
         let pythonPath = AppPaths.venvPython
@@ -272,6 +285,18 @@ final class TextToSpeechService: NSObject {
             return
         }
 
+        if serverProcess?.isRunning == true { return }
+
+        // Refresh the installed script on every launch so fixes survive restart.
+        if let bundledScript = Bundle.main.url(forResource: "kokoro_server", withExtension: "py") {
+            do {
+                try Data(contentsOf: bundledScript).write(to: URL(fileURLWithPath: serverScript), options: .atomic)
+            } catch {
+                AppLogger.tts.error("Cannot update Kokoro script: \(error.localizedDescription)")
+                return
+            }
+        }
+
         // Only now that TTS is known to be installed: clear a server left
         // behind by a previous crash. A user who never installed TTS has no
         // Kokoro server to clean up, so this must not run `lsof`/`ps` or go
@@ -280,11 +305,18 @@ final class TextToSpeechService: NSObject {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: pythonPath)
-        process.arguments = [serverScript]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
+        process.arguments = ["-u", serverScript]
 
         do {
+            let logURL = URL(fileURLWithPath: AppPaths.appSupport).appendingPathComponent("kokoro-server.log")
+            if !FileManager.default.fileExists(atPath: logURL.path) {
+                FileManager.default.createFile(atPath: logURL.path, contents: nil)
+            }
+            let log = try FileHandle(forWritingTo: logURL)
+            try log.seekToEnd()
+            defer { try? log.close() }
+            process.standardOutput = log
+            process.standardError = log
             try process.run()
             serverProcess = process
             AppLogger.tts.info("Started Kokoro server")
@@ -361,7 +393,7 @@ final class TextToSpeechService: NSObject {
     private func playAudio(url: URL) async throws {
         do {
             audioPlayer = try AVAudioPlayer(contentsOf: url)
-            audioPlayer?.play()
+            guard audioPlayer?.play() == true else { throw TTSError.playbackFailed }
 
             // Wait for playback to complete
             while audioPlayer?.isPlaying == true {

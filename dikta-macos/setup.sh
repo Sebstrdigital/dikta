@@ -1,69 +1,48 @@
 #!/bin/bash
-# Dikta Setup Script
-# Sets up Kokoro TTS for text-to-speech functionality
-set -e
+# Alternative Kokoro installer; uses the same location and Python as About.
+set -euo pipefail
 
-DIKTA_DIR="$HOME/.dikta"
+DIKTA_DIR="$HOME/Library/Application Support/Dikta"
 VENV_DIR="$DIKTA_DIR/venv"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-echo "=== Dikta Setup ==="
-echo ""
-
-# 1. Check for Homebrew
-if ! command -v brew &> /dev/null; then
-    echo "Homebrew not found. Installing..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-    # Add to PATH for this session
-    if [[ -f /opt/homebrew/bin/brew ]]; then
-        eval "$(/opt/homebrew/bin/brew shellenv)"
-    fi
-fi
-
-# 2. Check for Python 3.11
 PYTHON_PATH=""
-if command -v /opt/homebrew/bin/python3.11 &> /dev/null; then
-    PYTHON_PATH="/opt/homebrew/bin/python3.11"
-elif command -v /usr/local/bin/python3.11 &> /dev/null; then
-    PYTHON_PATH="/usr/local/bin/python3.11"
-elif command -v python3.11 &> /dev/null; then
-    PYTHON_PATH="$(which python3.11)"
-fi
-
+for candidate in /opt/homebrew/bin/python3.11 /usr/local/bin/python3.11 \
+    /Library/Frameworks/Python.framework/Versions/3.11/bin/python3; do
+    if [ -x "$candidate" ] && [ "$("$candidate" -c 'import sys; print("%d.%d" % sys.version_info[:2])')" = "3.11" ]; then
+        PYTHON_PATH="$candidate"
+        break
+    fi
+done
 if [ -z "$PYTHON_PATH" ]; then
-    echo "Python 3.11 not found. Installing via Homebrew..."
-    brew install python@3.11
-    PYTHON_PATH="/opt/homebrew/bin/python3.11"
+    echo "Python 3.11 is required for Kokoro. Install it from python.org or Homebrew, then retry." >&2
+    exit 1
 fi
 
 echo "Using Python: $PYTHON_PATH"
-
-# 3. Create dikta directory
-echo "Creating ~/.dikta directory..."
 mkdir -p "$DIKTA_DIR"
-
-# 4. Create virtual environment if it doesn't exist
-if [ ! -d "$VENV_DIR" ]; then
-    echo "Creating virtual environment..."
-    "$PYTHON_PATH" -m venv "$VENV_DIR"
+if [ -e "$VENV_DIR" ]; then
+    BACKUP="$VENV_DIR.backup-$(uuidgen)"
+    mv "$VENV_DIR" "$BACKUP"
+    echo "Preserved existing environment: $BACKUP"
 fi
 
-# 5. Install dependencies
-echo "Installing Kokoro TTS (this may take a minute)..."
-"$VENV_DIR/bin/pip" install --upgrade pip --quiet
-"$VENV_DIR/bin/pip" install kokoro soundfile numpy --quiet
+# Bound each installer child; diagnostics remain visible rather than hidden.
+"$PYTHON_PATH" - "$VENV_DIR" <<'PY'
+import subprocess
+import sys
 
-# 6. Copy server script
-echo "Copying server script..."
-cp "$SCRIPT_DIR/kokoro_server.py" "$DIKTA_DIR/"
-
-echo ""
-echo "=== Setup Complete ==="
-echo ""
-echo "Next steps:"
-echo "  1. Build the app:  swift build"
-echo "  2. Run the app:    .build/debug/Dikta"
-echo ""
-echo "The Whisper model (~150MB) will download automatically on first dictation."
-echo ""
+venv = sys.argv[1]
+commands = [
+    ([sys.executable, '-m', 'venv', venv], 60),
+    ([venv + '/bin/python3', '-m', 'pip', 'install', '--upgrade', 'pip', '--timeout', '30', '--retries', '2'], 600),
+    ([venv + '/bin/python3', '-m', 'pip', 'install', '--timeout', '30', '--retries', '2', 'kokoro', 'soundfile', 'numpy'], 600),
+    ([venv + '/bin/python3', '-c', 'import kokoro, soundfile, numpy'], 60),
+]
+for command, timeout in commands:
+    try:
+        subprocess.run(command, check=True, timeout=timeout)
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as error:
+        sys.exit('Kokoro setup failed: ' + str(error))
+PY
+cp "$SCRIPT_DIR/kokoro_server.py" "$DIKTA_DIR/kokoro_server.py"
+echo "Setup complete. Open Dikta and check About for voice engine readiness."

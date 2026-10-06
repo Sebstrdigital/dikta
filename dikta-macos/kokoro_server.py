@@ -80,8 +80,14 @@ class TTSHandler(http.server.BaseHTTPRequestHandler):
             self.send_error(404)
 
 
+class TTSServer(socketserver.TCPServer):
+    # Restart immediately after Dikta quits, even while old connections remain
+    # in TIME_WAIT. This does not allow two live listeners on the same port.
+    allow_reuse_address = True
+
+
 if __name__ == '__main__':
-    with socketserver.TCPServer(('127.0.0.1', PORT), TTSHandler) as httpd:
+    with TTSServer(('127.0.0.1', PORT), TTSHandler) as httpd:
         print(f"Kokoro TTS server running on http://127.0.0.1:{PORT}")
         print("Endpoints: POST /speak, GET /ping")
         try:
