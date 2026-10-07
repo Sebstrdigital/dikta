@@ -6,6 +6,19 @@
         <link>https://sebstrdigital.github.io/dikta/appcast.xml</link>
         <description>Dikta app updates</description>
         <language>en</language>
+        <item>
+            <title>Dikta v1.5.3 — Read Aloud Polish</title>
+            <pubDate>Wed, 07 Oct 2026 03:39:33 +0000</pubDate>
+            <sparkle:version>1.5.3</sparkle:version>
+            <sparkle:shortVersionString>1.5.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/Sebstrdigital/dikta/releases/download/v1.5.3/Dikta-1.5.3.dmg"
+                sparkle:edSignature="yO6zjVMpGuAjWspUWD1ukAZ5kZe8E95VBl2MerQ842w0W9NvXlIQ6dHqwxy9eOyJR1IR3YNvw8ErNIe47ve/Cw=="
+                length="504014172"
+                type="application/octet-stream"
+            />
+        </item>
                                                         <item>
             <title>Dikta 1.5.2</title>
             <pubDate>Fri, 02 Oct 2026 01:36:47 +0000</pubDate>
