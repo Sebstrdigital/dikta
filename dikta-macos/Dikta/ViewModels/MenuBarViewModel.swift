@@ -65,8 +65,12 @@ final class MenuBarViewModel: ObservableObject {
     private let audioFeedback: any AudioFeedbackPlaying
     private let clipboardManager: ClipboardManager
     private let hotkeyManager: HotkeyManager
-    private let ttsService: TextToSpeechService
-    private let textSelectionService: TextSelectionService
+    private let ttsService: any TextToSpeechSpeaking
+    private let textSelectionService: any TextSelectionProviding
+    private var readAloudRequest: UUID?
+    private var readAloudAccepted = false
+    private var readAloudTask: Task<Void, Error>?
+    private let readAloudNotification: ((String, String) -> Void)?
     private let muterRegistry: any MuterRegistering
 
     // Debrief services. Injected ones win; otherwise they are built lazily —
@@ -159,7 +163,10 @@ final class MenuBarViewModel: ObservableObject {
         muterRegistry: (any MuterRegistering)? = nil,
         systemAudioCaptureFactory: (() -> any SystemAudioCapturing)? = nil,
         audioRecorder: (any AudioRecording)? = nil,
-        audioFeedback: (any AudioFeedbackPlaying)? = nil
+        audioFeedback: (any AudioFeedbackPlaying)? = nil,
+        ttsService: (any TextToSpeechSpeaking)? = nil,
+        textSelectionService: (any TextSelectionProviding)? = nil,
+        readAloudNotification: ((String, String) -> Void)? = nil
     ) {
         let configService = configService ?? .shared
         self.configService = configService
@@ -196,8 +203,10 @@ final class MenuBarViewModel: ObservableObject {
         let resolvedClipboardManager = clipboardManager ?? ClipboardManager()
         self.clipboardManager = resolvedClipboardManager
         self.hotkeyManager = HotkeyManager()
-        self.ttsService = TextToSpeechService()
-        self.textSelectionService = TextSelectionService(clipboardManager: resolvedClipboardManager)
+        self.ttsService = ttsService ?? (Self.isRunningUnderXCTestHost
+            ? InertTextToSpeechService() : TextToSpeechService())
+        self.textSelectionService = textSelectionService ?? TextSelectionService(clipboardManager: resolvedClipboardManager)
+        self.readAloudNotification = readAloudNotification
         self.muterRegistry = muterRegistry ?? MuterRegistry()
 
         // Sync mute state from config. `self.` is required: the initializer
@@ -1807,47 +1816,85 @@ final class MenuBarViewModel: ObservableObject {
 
     /// Speak selected text using TTS
     func speakSelectedText() async {
-        guard appState == .idle else { return }
+        guard appState == .idle, readAloudRequest == nil, !Task.isCancelled else { return }
+        let id = UUID()
+        readAloudRequest = id
+        defer {
+            if readAloudRequest == id {
+                readAloudRequest = nil
+                readAloudTask = nil
+                if readAloudAccepted, appState == .speaking { appState = .idle }
+                readAloudAccepted = false
+            }
+        }
 
-        // Get selected text via Accessibility API or clipboard fallback
-        guard let text = textSelectionService.getSelectedText()
-              ?? textSelectionService.getSelectedTextViaClipboard() else {
-            sendNotification(title: "No Selection", body: "Please select text first")
+        // AX remains primary; only unsupported selections need the asynchronous copy.
+        var selectedText = textSelectionService.getSelectedText()
+        if selectedText == nil {
+            selectedText = await textSelectionService.getSelectedTextViaClipboard()
+        }
+        guard !Task.isCancelled, readAloudRequest == id, appState == .idle else { return }
+        guard let text = selectedText else {
+            notifyReadAloud("No Selection", "Please select text first")
             return
         }
 
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            sendNotification(title: "Empty Selection", body: "Selected text is empty")
+            notifyReadAloud("Empty Selection", "Selected text is empty")
             return
         }
 
         // Check if TTS server is available
-        if !(await ttsService.checkAvailable()) {
+        let available = await ttsService.checkAvailable()
+        // Both success and failure paths must recheck ownership after the await.
+        guard !Task.isCancelled, readAloudRequest == id, appState == .idle else { return }
+        guard available else {
             if ttsService.isSetUp {
-                sendNotification(title: "TTS Starting Up", body: "Voice engine is loading, please try again shortly.", isRoutine: true)
+                notifyReadAloud("TTS Starting Up", "Voice engine is loading, please try again shortly.", isRoutine: true)
             } else {
-                sendNotification(title: "TTS Not Available", body: "Open Setup to install Text-to-Speech.")
+                notifyReadAloud("TTS Not Available", "Open Setup to install Text-to-Speech.")
             }
             return
         }
 
+        readAloudAccepted = true
         appState = .speaking
-        audioFeedback.beepOn()
-
+        audioFeedback.readAloudStart()
+        let task = Task { @MainActor in try await self.ttsService.speak(text) }
+        readAloudTask = task
         do {
-            try await ttsService.speak(text)
-            audioFeedback.beepOff()
+            try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: { task.cancel() }
+            guard readAloudRequest == id, !Task.isCancelled else { return }
+            audioFeedback.readAloudStop()
         } catch {
-            sendNotification(title: "TTS Error", body: error.localizedDescription)
+            guard readAloudRequest == id, !Task.isCancelled else { return }
+            // Explicit stop invalidates ownership; other intentional cancellation is silent.
+            if !(error is CancellationError), (error as? URLError)?.code != .cancelled {
+                notifyReadAloud("TTS Error", error.localizedDescription)
+            }
         }
-
-        appState = .idle
     }
 
-    /// Stop current TTS playback
+    /// Stop an accepted request (including generation), or invalidate a selection wait.
     func stopSpeaking() {
-        ttsService.stop()
-        appState = .idle
+        guard readAloudRequest != nil else { return }
+        let accepted = readAloudAccepted
+        readAloudRequest = nil
+        readAloudAccepted = false
+        readAloudTask?.cancel()
+        readAloudTask = nil
+        if accepted {
+            ttsService.stop()
+            audioFeedback.readAloudStop()
+            if appState == .speaking { appState = .idle }
+        }
+    }
+
+    private func notifyReadAloud(_ title: String, _ body: String, isRoutine: Bool = false) {
+        if let readAloudNotification { readAloudNotification(title, body) }
+        else { sendNotification(title: title, body: body, isRoutine: isRoutine) }
     }
 
     private func unmuteMicTargets() {

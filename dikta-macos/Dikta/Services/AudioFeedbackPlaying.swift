@@ -9,7 +9,7 @@ import Foundation
 /// intermittently wedges the whole test host. Tests inject
 /// `FakeAudioFeedback` instead, so no engine is ever built.
 protocol AudioFeedbackPlaying: AnyObject {
-    /// When true, `beepOn`/`beepOff` do nothing. Mirrored from
+    /// When true, all recording and Read Aloud cues do nothing. Mirrored from
     /// `ConfigService.muteSounds`.
     var isMuted: Bool { get set }
 
@@ -18,6 +18,9 @@ protocol AudioFeedbackPlaying: AnyObject {
 
     /// Falling chime when recording stops.
     func beepOff()
+
+    func readAloudStart()
+    func readAloudStop()
 }
 
 /// The real feedback already has every member, so this is a declaration of
@@ -40,4 +43,6 @@ final class SilentAudioFeedback: AudioFeedbackPlaying {
 
     func beepOn() {}
     func beepOff() {}
+    func readAloudStart() {}
+    func readAloudStop() {}
 }

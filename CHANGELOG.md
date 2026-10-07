@@ -6,6 +6,23 @@ All notable changes to Dikta will be documented in this file.
 - 2026-09-28: `ConfigService.save()` now uses a single atomic-write strategy (temp file + `replaceItemAt`), removing the duplicate approach that had carried as unresolved tech debt for 14 sprints.
 - 2026-04-17: DiagnosticLogger (Windows) now correctly gated behind `[Conditional("DIAGNOSTICS")]` compile flag — release builds produce no log output
 
+## [1.5.3] - 2026-10-07 — Read Aloud Polish
+
+### Changed
+
+- Read Aloud now has dedicated start and stop chirps, distinct from recording sounds. Both respect Mute Sounds; recording cues are unchanged.
+- A stop cue plays on natural completion or user stop, without duplicate feedback.
+- When Accessibility cannot read a selection, Read Aloud attempts Cmd+C, waits briefly, and reads usable clipboard text. This improves the fallback for terminal selections.
+
+### Fixed
+
+- Stopping while speech is being generated prevents playback from starting later. Cancelled or stale requests cannot interfere with newer speech or produce cancellation-error notifications.
+
+### Notes
+
+- If copying does not change the clipboard, Read Aloud may read text already on the clipboard, including when nothing is selected. Clipboard contents are not cleared or restored.
+- Requires macOS 15 or later. The macOS app is Developer ID signed and notarized.
+
 ## [1.5.1] - 2026-09-29 — Cleanup
 
 ### Changed

@@ -16,6 +16,11 @@ final class FakeAudioFeedback: AudioFeedbackPlaying {
 
     private(set) var beepOnCount = 0
     private(set) var beepOffCount = 0
+    private(set) var readAloudStartCount = 0
+    private(set) var readAloudStopCount = 0
+
+    func readAloudStart() { readAloudStartCount += 1 }
+    func readAloudStop() { readAloudStopCount += 1 }
 
     func beepOn() {
         beepOnCount += 1

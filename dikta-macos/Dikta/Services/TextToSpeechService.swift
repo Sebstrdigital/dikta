@@ -35,8 +35,18 @@ enum KokoroVoice: String, CaseIterable {
     }
 }
 
+/// Focused player seam; production still uses AVAudioPlayer and file playback.
+@MainActor
+protocol TTSPlayback: AnyObject {
+    var isPlaying: Bool { get }
+    func play() -> Bool
+    func stop()
+}
+
+extension AVAudioPlayer: TTSPlayback {}
+
 /// Service for text-to-speech using Kokoro server (keeps model in memory)
-final class TextToSpeechService: NSObject {
+final class TextToSpeechService: NSObject, TextToSpeechSpeaking {
     private static let serverBaseURL = "http://127.0.0.1:59123"
     private static let serverPort = 59123
     private static let pingTimeout: TimeInterval = 1.0
@@ -44,8 +54,13 @@ final class TextToSpeechService: NSObject {
     private static let serverStartupAttempts = 240
     private static let serverStartupInterval: UInt64 = 500_000_000 // 500ms
 
-    private var audioPlayer: AVAudioPlayer?
-    private var isSpeaking = false
+    @MainActor private var audioPlayer: (any TTSPlayback)?
+    @MainActor private var activeRequest: UUID?
+    @MainActor private var speechTask: Task<Void, Error>?
+    private var injectedAvailability: (() async -> Bool)?
+    private var injectedTransport: ((URLRequest) async throws -> Void)?
+    private var injectedPlayer: ((URL) throws -> any TTSPlayback)?
+    private var injectedPlaybackWait: (() async throws -> Void)?
     private let serverURL: String
     var voice: KokoroVoice = .af_heart
     private var serverProcess: Process?
@@ -93,6 +108,22 @@ final class TextToSpeechService: NSObject {
         Task {
             await ensureServerRunning()
         }
+    }
+
+    /// Offline lifecycle seam: no observers, startup, network or real audio player.
+    @MainActor
+    init(
+        availability: @escaping () async -> Bool,
+        transport: @escaping (URLRequest) async throws -> Void,
+        player: @escaping (URL) throws -> any TTSPlayback,
+        playbackWait: @escaping () async throws -> Void = { try await Task.sleep(nanoseconds: 100_000_000) }
+    ) {
+        serverURL = Self.serverBaseURL
+        injectedAvailability = availability
+        injectedTransport = transport
+        injectedPlayer = player
+        injectedPlaybackWait = playbackWait
+        super.init()
     }
 
     @objc private func handleTTSInstalled() {
@@ -231,6 +262,7 @@ final class TextToSpeechService: NSObject {
 
     /// Check if TTS server is available
     func checkAvailable() async -> Bool {
+        if let injectedAvailability { return await injectedAvailability() }
         guard let url = URL(string: "\(serverURL)/ping") else { return false }
 
         var request = URLRequest(url: url)
@@ -325,84 +357,97 @@ final class TextToSpeechService: NSObject {
         }
     }
 
-    /// Check if currently speaking
-    var speaking: Bool {
-        isSpeaking || (audioPlayer?.isPlaying ?? false)
+    @MainActor var speaking: Bool { activeRequest != nil }
+
+    /// Own the whole request, including availability and synthesis, before suspending.
+    @MainActor
+    func speak(_ text: String) async throws {
+        try Task.checkCancellation()
+        guard activeRequest == nil else { throw TTSError.alreadySpeaking }
+        let id = UUID()
+        activeRequest = id
+        let task = Task { @MainActor in
+            try await self.synthesizeAndPlay(text, id: id)
+        }
+        speechTask = task
+        defer {
+            // A stopped request may finish after a newer one has acquired the service.
+            if activeRequest == id { stop() }
+        }
+        try await withTaskCancellationHandler {
+            try await task.value
+            try Task.checkCancellation()
+        } onCancel: {
+            task.cancel()
+        }
     }
 
-    /// Speak text using Kokoro TTS server
-    func speak(_ text: String) async throws {
-        guard !speaking else {
-            throw TTSError.alreadySpeaking
-        }
+    @MainActor
+    private func requireOwnership(_ id: UUID) throws {
+        try Task.checkCancellation()
+        guard activeRequest == id else { throw CancellationError() }
+    }
 
-        // Ensure server is running
-        if !(await checkAvailable()) {
+    @MainActor
+    private func synthesizeAndPlay(_ text: String, id: UUID) async throws {
+        try requireOwnership(id)
+        let available = await checkAvailable()
+        try requireOwnership(id)
+        if !available {
             await ensureServerRunning()
-            if !(await checkAvailable()) {
-                throw TTSError.serverNotRunning
-            }
+            try requireOwnership(id)
+            let ready = await checkAvailable()
+            try requireOwnership(id)
+            guard ready else { throw TTSError.serverNotRunning }
         }
 
-        isSpeaking = true
-
-        // Create temp file for audio output
-        let tempDir = FileManager.default.temporaryDirectory
-        let audioFile = tempDir.appendingPathComponent("tts_\(UUID().uuidString).wav")
-
-        defer {
-            isSpeaking = false
-            // Clean up temp file
-            try? FileManager.default.removeItem(at: audioFile)
-        }
-
-        // Call the server
+        // Unique resources belong to this request, never to the shared player slot.
+        let audioFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("tts_\(id.uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: audioFile) }
         guard let url = URL(string: "\(serverURL)/speak") else {
             throw TTSError.synthesizeFailed("Invalid URL")
         }
-
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = Self.speakTimeout
-
-        let payload: [String: Any] = [
-            "text": text,
-            "voice": voice.rawValue,
-            "output_path": audioFile.path
-        ]
-        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-
-        let (_, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw TTSError.synthesizeFailed("Server returned error")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "text": text, "voice": voice.rawValue, "output_path": audioFile.path
+        ])
+        if let injectedTransport {
+            try await injectedTransport(request)
+        } else {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            try requireOwnership(id)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+                throw TTSError.synthesizeFailed("Server returned error")
+            }
         }
-
-        // Play the audio file
-        try await playAudio(url: audioFile)
+        // Even a cancellation-ignorant transport cannot start late playback.
+        try requireOwnership(id)
+        let player = try injectedPlayer?(audioFile) ?? AVAudioPlayer(contentsOf: audioFile)
+        audioPlayer = player
+        guard player.play() else { throw TTSError.playbackFailed }
+        while player.isPlaying {
+            if let injectedPlaybackWait {
+                try await injectedPlaybackWait()
+            } else {
+                try await Task.sleep(nanoseconds: 100_000_000)
+            }
+            try requireOwnership(id)
+        }
+        try requireOwnership(id)
     }
 
-    /// Stop current speech
+    /// Invalidate ownership first, then cancel transport/playback and release the guard.
+    @MainActor
     func stop() {
+        activeRequest = nil
+        speechTask?.cancel()
+        speechTask = nil
         audioPlayer?.stop()
         audioPlayer = nil
-        isSpeaking = false
-    }
-
-    private func playAudio(url: URL) async throws {
-        do {
-            audioPlayer = try AVAudioPlayer(contentsOf: url)
-            guard audioPlayer?.play() == true else { throw TTSError.playbackFailed }
-
-            // Wait for playback to complete
-            while audioPlayer?.isPlaying == true {
-                try await Task.sleep(nanoseconds: 100_000_000) // 100ms
-            }
-            audioPlayer = nil
-        } catch {
-            throw TTSError.playbackFailed
-        }
     }
 
     deinit {

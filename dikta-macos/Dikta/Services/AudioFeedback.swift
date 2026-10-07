@@ -2,6 +2,19 @@ import Foundation
 import AVFoundation
 import os
 
+/// Parameters consumed by the existing generated-sweep engine.
+struct AudioFeedbackCue: Equatable {
+    let startFrequency: Double
+    let endFrequency: Double
+    let duration: Double
+    let attack: Double
+
+    static let recordingStart = Self(startFrequency: 280, endFrequency: 580, duration: 0.15, attack: 0.02)
+    static let recordingStop = Self(startFrequency: 520, endFrequency: 320, duration: 0.12, attack: 0.015)
+    static let readAloudStart = Self(startFrequency: 740, endFrequency: 1100, duration: 0.15, attack: 0.02)
+    static let readAloudStop = Self(startFrequency: 1000, endFrequency: 700, duration: 0.12, attack: 0.015)
+}
+
 /// Service for generating audio feedback sounds
 final class AudioFeedback {
     private var audioEngine: AVAudioEngine?
@@ -25,8 +38,16 @@ final class AudioFeedback {
     private var attackSamples: Int = 0
     private var decaySamples: Int = 0
 
+    private let sweepSink: ((AudioFeedbackCue) -> Void)?
+
     init() {
+        sweepSink = nil
         rebuildEngine()
+    }
+
+    /// Internal offline seam: exercises production cue routing/muting without an engine.
+    init(sweepSink: @escaping (AudioFeedbackCue) -> Void) {
+        self.sweepSink = sweepSink
     }
 
     /// Tears down the existing audio engine (if any) and builds a fresh one.
@@ -183,16 +204,25 @@ final class AudioFeedback {
 
     /// Rising "bloop" when recording starts
     func beepOn() {
-        guard !isMuted else { return }
-        // Rising bubble: low to high frequency, quick attack
-        playBubble(startFreq: 280, endFreq: 580, duration: 0.15, attackTime: 0.02)
+        play(.recordingStart)
     }
 
     /// Descending "pop" when recording stops / transcription done
     func beepOff() {
+        play(.recordingStop)
+    }
+
+    func readAloudStart() { play(.readAloudStart) }
+    func readAloudStop() { play(.readAloudStop) }
+
+    private func play(_ cue: AudioFeedbackCue) {
         guard !isMuted else { return }
-        // Falling pop: high to low frequency, quick attack
-        playBubble(startFreq: 520, endFreq: 320, duration: 0.12, attackTime: 0.015)
+        if let sweepSink {
+            sweepSink(cue)
+        } else {
+            playBubble(startFreq: cue.startFrequency, endFreq: cue.endFrequency,
+                       duration: cue.duration, attackTime: cue.attack)
+        }
     }
 
     deinit {
