@@ -40,6 +40,45 @@ final class ConfigServiceAtomicWriteTests: XCTestCase {
         XCTAssertEqual(reloaded.customPrompt, "Round-trip prompt")
     }
 
+    /// An engine value written by a newer or removed build is inactive, but a
+    /// routine settings/history save must preserve that exact raw JSON value
+    /// along with legacy language data and unrelated user state.
+    func test_unknownEngineSurvivesRoutineSettingsAndHistorySave() throws {
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+
+        var source = AppConfig.default
+        source.language = .indonesian
+        source.enabledLanguages = [.indonesian, .swedish]
+        source.muteSounds = true
+        source.customPrompt = "Keep this user prompt"
+        source.history = [HistoryItem(text: "existing history", outputMode: .custom)]
+
+        let encoded = try JSONEncoder().encode(source)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        object["engine"] = "future-ultra-successor"
+        try JSONSerialization.data(withJSONObject: object).write(to: configFile)
+
+        let service = ConfigService(configFile: configFile)
+        XCTAssertEqual(service.engine, .whisper, "unknown values keep the legacy runtime fallback")
+        service.muteNotifications = true
+        service.addHistoryItem(text: "new history", mode: .general)
+
+        let savedObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: configFile)) as? [String: Any]
+        )
+        XCTAssertEqual(savedObject["engine"] as? String, "future-ultra-successor")
+
+        let reloaded = ConfigService(configFile: configFile)
+        XCTAssertEqual(reloaded.engine, .whisper)
+        XCTAssertEqual(reloaded.language, .indonesian)
+        XCTAssertEqual(reloaded.enabledLanguages, [.indonesian, .swedish])
+        XCTAssertTrue(reloaded.muteSounds)
+        XCTAssertTrue(reloaded.muteNotifications)
+        XCTAssertEqual(reloaded.customPrompt, "Keep this user prompt")
+        XCTAssertEqual(reloaded.history.map(\.text), ["new history", "existing history"])
+        XCTAssertEqual(reloaded.history.map(\.outputMode), [.general, .custom])
+    }
+
     /// A save that fails partway (here: the temp file can't be written) must
     /// leave the existing `config.json` exactly as it was — never truncated or
     /// empty — because the write lands on a sibling temp file first and only

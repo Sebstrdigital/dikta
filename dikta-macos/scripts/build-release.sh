@@ -21,18 +21,19 @@ set -euo pipefail
 # Flags can be combined in either order.
 #
 # Test gate: before building anything, this script runs the DiktaTests
-# target and aborts if any test fails, or if the run's log has no
-# "Executed N tests" line with N > 0 (e.g. a misconfigured -only-testing:
-# filter that silently matched nothing — see docs/validation.md). This is
-# the release-time backstop for a chronic failure mode: a green-looking
-# pipeline that shipped with a broken or empty test suite. --skip-tests
+# target, excluding only the four approved real-muter absence tests listed
+# in docs/validation.md, and aborts if any included test fails, or if the
+# run's log has no "Executed N tests" line with N > 0 (e.g. a misconfigured
+# -only-testing: filter that silently matched nothing). This is a filtered
+# gate with four explicit coverage gaps, not a full-suite pass. --skip-tests
 # bypasses the gate and prints a loud warning; it exists for emergencies,
 # not routine use.
 # ============================================================
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-SCHEME="Dikta"
+SCHEME="Dikta-UltraValidation"
+TEST_SCHEME="Dikta-UltraValidation"
 APP_NAME="Dikta"
 ARCHIVE_PATH="${PROJECT_DIR}/build/Dikta.xcarchive"
 DMG_PATH="${PROJECT_DIR}/build/Dikta.dmg"
@@ -64,7 +65,14 @@ done
 #  that cause "resource fork, Finder information, or similar detritus" errors)
 WORK_DIR=$(mktemp -d /tmp/Dikta-build.XXXXXX)
 EXPORT_PATH="${WORK_DIR}/export"
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+RELEASE_LOG_DIR="${RELEASE_LOG_DIR:-${HOME}/work/artifacts/dikta-release/${RUN_ID}}"
+mkdir -p "${RELEASE_LOG_DIR}"
+BUILD_LOG="${RELEASE_LOG_DIR}/build-release.log"
+exec > >(tee -a "${BUILD_LOG}") 2>&1
 trap 'rm -rf "${WORK_DIR}"' EXIT
+
+echo "==> Durable release logs: ${RELEASE_LOG_DIR}"
 
 # Pre-flight: verify MARKETING_VERSION and CURRENT_PROJECT_VERSION match
 PBXPROJ="${PROJECT_DIR}/Dikta.xcodeproj/project.pbxproj"
@@ -94,14 +102,18 @@ if [ "${SKIP_TESTS}" -eq 1 ]; then
     echo ""
 else
     echo "==> Running DiktaTests..."
-    TEST_LOG="${WORK_DIR}/dikta-tests.log"
+    TEST_LOG="${RELEASE_LOG_DIR}/dikta-tests.log"
     set +e
     xcodebuild test \
         -project "${PROJECT_DIR}/Dikta.xcodeproj" \
-        -scheme "${SCHEME}" \
+        -scheme "${TEST_SCHEME}" \
         -configuration Release \
         ENABLE_TESTABILITY=YES \
         -only-testing:DiktaTests \
+        -skip-testing:DiktaTests/MicMutingTests/testTeamsMuterReturnsNilWhenTeamsNotRunning \
+        -skip-testing:DiktaTests/MicMutingTests/testSlackMuterReturnsNilWhenSlackNotRunning \
+        -skip-testing:DiktaTests/MicMutingTests/testWhatsAppMuterReturnsNilWhenWhatsAppNotRunning \
+        -skip-testing:DiktaTests/MicMutingTests/testUvenMuterReturnsNilWhenUvenNotRunning \
         -destination 'platform=macOS' \
         CODE_SIGN_STYLE=Manual \
         CODE_SIGN_IDENTITY="${SIGNING_IDENTITY}" \
@@ -141,7 +153,8 @@ else
         exit 1
     fi
 
-    echo "==> DiktaTests passed: ${EXECUTED_LINE}"
+    echo "==> Filtered DiktaTests passed: ${EXECUTED_LINE}"
+    echo "    Coverage gaps: four approved real-muter absence tests (Teams, Slack, WhatsApp, Uven)."
 fi
 
 echo "==> Cleaning previous build..."
@@ -183,27 +196,8 @@ fi
 
 echo "==> Export complete: ${APP_EXPORT}"
 
-# Step 2b: Bundle Whisper small model into the app
-WHISPER_MODEL_NAME="openai_whisper-small"
-WHISPER_MODEL_SRC="${HOME}/work/artifacts/huggingface/models/argmaxinc/whisperkit-coreml/${WHISPER_MODEL_NAME}"
-WHISPER_MODEL_DEST="${APP_EXPORT}/Contents/Resources/WhisperModels/${WHISPER_MODEL_NAME}"
-
-if [ ! -d "${WHISPER_MODEL_SRC}" ]; then
-    echo "ERROR: Whisper small model not found at ${WHISPER_MODEL_SRC}"
-    echo ""
-    echo "Download it first by running the app in dev mode (swift build && .build/debug/Dikta)"
-    echo "or manually download from HuggingFace:"
-    echo "  huggingface-cli download argmaxinc/whisperkit-coreml openai_whisper-small --local-dir ~/work/artifacts/huggingface/models/argmaxinc/whisperkit-coreml"
-    exit 1
-fi
-
-echo "==> Bundling Whisper small model..."
-mkdir -p "$(dirname "${WHISPER_MODEL_DEST}")"
-cp -R "${WHISPER_MODEL_SRC}" "${WHISPER_MODEL_DEST}"
-echo "    Model bundled ($(du -sh "${WHISPER_MODEL_DEST}" | cut -f1) total)"
-
 # Strip extended attributes that break code signing
-# (WhisperKit's swift-transformers_Hub.bundle gets com.apple.FinderInfo xattrs)
+# (exported frameworks or helper resources may carry Finder metadata)
 echo "==> Stripping extended attributes..."
 xattr -cr "${APP_EXPORT}"
 
@@ -257,6 +251,11 @@ xcrun stapler staple "${APP_EXPORT}"
 echo "==> Verifying stapled app..."
 spctl --assess --type execute --verbose=2 "${APP_EXPORT}"
 
+# Keep the notarized exported app outside WORK_DIR for independent validation.
+DURABLE_APP="${RELEASE_LOG_DIR}/${APP_NAME}-${MARKETING_VER}.app"
+echo "==> Preserving exported app: ${DURABLE_APP}"
+ditto "${APP_EXPORT}" "${DURABLE_APP}"
+
 # Step 6: Create DMG
 echo "==> Creating DMG..."
 rm -f "${DMG_PATH}"
@@ -287,7 +286,9 @@ xcrun stapler staple "${DMG_PATH}"
 echo ""
 echo "============================================================"
 echo "  BUILD COMPLETE"
-echo "  DMG: ${DMG_PATH}"
+echo "  DMG:  ${DMG_PATH}"
+echo "  App:  ${DURABLE_APP}"
+echo "  Logs: ${RELEASE_LOG_DIR}"
 echo "============================================================"
 
 # --no-publish: stop after the notarized DMG so it can be installed and

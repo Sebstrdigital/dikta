@@ -24,11 +24,20 @@ final class ConfigService: ObservableObject {
     }
 
     private convenience init() {
-        // ~/Library/Application Support/Dikta/
+        // The validation scheme redirects the test host itself, not merely
+        // individual test-created services, away from the user's config.
+        if let isolated = ProcessInfo.processInfo.environment["DIKTA_CONFIG_FILE"], !isolated.isEmpty {
+            self.init(configFile: URL(fileURLWithPath: isolated))
+            return
+        }
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let configDir = appSupport.appendingPathComponent("Dikta")
         self.init(configFile: configDir.appendingPathComponent("config.json"))
     }
+
+    /// Exposed internally so validation can prove the shared test-host service
+    /// is using the scheme-injected isolated path without reading user data.
+    var storageURLForTesting: URL { configFile }
 
     private static func load(from url: URL) -> AppConfig? {
         guard FileManager.default.fileExists(atPath: url.path) else {

@@ -185,17 +185,24 @@ final class AppConfigDecodingTests: XCTestCase {
         XCTAssertEqual(config.engine, .whisper)
     }
 
-    func test_decode_knownEngineValue_roundTrips() throws {
-        let json = """
-        {
-            "version": 3,
-            "hotkeys": {"toggle": {"modifiers":["shift","ctrl"]},"push_to_talk":{"modifiers":["cmd","shift"]}},
-            "output_mode": "general", "history": [], "whisper_model": "small", "llm_model": "gemma3",
-            "engine": "parakeet-v3"
+    func test_decode_knownEngineValues_roundTripTheirLegacyRawStrings() throws {
+        let legacyValues: [TranscriptionEngineKind] = [.whisper, .parakeetRedux, .parakeetV3, .parakeetUltra]
+        for expected in legacyValues {
+            let json = """
+            {
+                "version": 3,
+                "hotkeys": {"toggle": {"modifiers":["shift","ctrl"]},"push_to_talk":{"modifiers":["cmd","shift"]}},
+                "output_mode": "general", "history": [], "whisper_model": "small", "llm_model": "gemma3",
+                "engine": "\(expected.rawValue)"
+            }
+            """.data(using: .utf8)!
+            let config = try JSONDecoder().decode(AppConfig.self, from: json)
+            XCTAssertEqual(config.engine, expected)
+
+            let encoded = try JSONEncoder().encode(config)
+            let object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+            XCTAssertEqual(object["engine"] as? String, expected.rawValue)
         }
-        """.data(using: .utf8)!
-        let config = try JSONDecoder().decode(AppConfig.self, from: json)
-        XCTAssertEqual(config.engine, .parakeetV3)
     }
 
     /// The engine a caller sets via `ConfigService` must survive a save/reload
@@ -623,63 +630,7 @@ final class AppConfigEnabledLanguagesDecodingTests: XCTestCase {
     }
 }
 
-// MARK: - WhisperModel Tests
 
-final class WhisperModelTests: XCTestCase {
-
-    /// `"kb-whisper-small"` must round-trip through `WhisperModel`'s
-    /// `RawRepresentable` conformance to `.kbWhisperSmall` — this is the raw
-    /// value persisted in `AppConfig.whisperModel`/`ConfigService.whisperModel`.
-    func test_rawValue_kbWhisperSmall_roundTrips() {
-        XCTAssertEqual(WhisperModel(rawValue: "kb-whisper-small"), .kbWhisperSmall)
-        XCTAssertEqual(WhisperModel.kbWhisperSmall.rawValue, "kb-whisper-small")
-    }
-
-    /// An unrecognized raw value must keep today's existing fallback:
-    /// `WhisperModel(rawValue:) ?? .small` returns nil here, and every call
-    /// site (MenuBarViewModel.init, setWhisperModel, MenuBarView.currentModel)
-    /// falls back to `.small`.
-    func test_rawValue_unknown_returnsNil() {
-        XCTAssertNil(WhisperModel(rawValue: "not-a-real-model"))
-    }
-
-    func test_isUserSelectable_falseOnlyForKbWhisperSmall() {
-        for model in WhisperModel.allCases {
-            if model == .kbWhisperSmall {
-                XCTAssertFalse(model.isUserSelectable, "\(model) should not be user-selectable")
-            } else {
-                XCTAssertTrue(model.isUserSelectable, "\(model) should be user-selectable")
-            }
-        }
-    }
-
-    /// Mirrors the filter the Whisper Model submenu applies
-    /// (`WhisperModel.allCases.filter(\.isUserSelectable)`) — the menu's model
-    /// list must exclude `kbWhisperSmall`.
-    func test_userSelectableModels_excludesKbWhisperSmall() {
-        let menuModels = WhisperModel.allCases.filter(\.isUserSelectable)
-        XCTAssertFalse(menuModels.contains(.kbWhisperSmall))
-        XCTAssertEqual(Set(menuModels), [.small, .turbo, .medium])
-    }
-
-    func test_kbWhisperSmall_repo_isDedicatedRepo() {
-        XCTAssertEqual(WhisperModel.kbWhisperSmall.repo, "sebastian-duadigital/whisperkit-kb-whisper-small")
-    }
-
-    func test_kbWhisperSmall_variant() {
-        XCTAssertEqual(WhisperModel.kbWhisperSmall.variant, "KBLab_kb-whisper-small")
-    }
-
-    func test_existingModels_repo_unchanged() {
-        XCTAssertEqual(WhisperModel.small.repo, "argmaxinc/whisperkit-coreml")
-        XCTAssertEqual(WhisperModel.turbo.repo, "argmaxinc/whisperkit-coreml")
-        XCTAssertEqual(WhisperModel.medium.repo, "argmaxinc/whisperkit-coreml")
-    }
-
-    func test_kbWhisperSmall_sortsAfterMedium() {
-        XCTAssertGreaterThan(WhisperModel.kbWhisperSmall.sortOrder, WhisperModel.medium.sortOrder)
-    }
-}
 
 // MARK: - XCTest host detection
 

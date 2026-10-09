@@ -54,9 +54,6 @@ struct MenuBarView: View {
             // Audio submenu
             AudioMenu(viewModel: viewModel)
 
-            // Write in (language) submenu
-            WriteInMenu(viewModel: viewModel)
-
             // Post-meeting debrief submenu
             DebriefMenu(viewModel: viewModel)
 
@@ -102,7 +99,7 @@ struct HotkeysMenu: View {
 
     var body: some View {
         Menu("Hotkeys") {
-            ForEach(HotkeyMode.allCases, id: \.self) { mode in
+            ForEach(HotkeyMode.userConfigurableCases, id: \.self) { mode in
                 let hotkey = viewModel.configService.getHotkey(for: mode)
                 Button("Set \(mode.displayName) Hotkey... (\(hotkey.displayString))") {
                     viewModel.startRecordingHotkey(for: mode)
@@ -263,67 +260,10 @@ struct DebriefMenu: View {
     }
 }
 
-/// Write in (language) submenu
-struct WriteInMenu: View {
-    @ObservedObject var viewModel: MenuBarViewModel
-
-    var body: some View {
-        Menu("Write in: \(viewModel.configService.language.menuBarCode)") {
-            ForEach(Language.allCases, id: \.self) { language in
-                let isEnabled = viewModel.configService.isLanguageEnabled(language)
-                let isLastEnabled = viewModel.configService.enabledLanguages.count == 1 && isEnabled
-                Button(action: {
-                    viewModel.toggleLanguage(language)
-                }) {
-                    HStack {
-                        Text(language.displayName)
-                        if isEnabled {
-                            Spacer()
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-                .disabled(isLastEnabled)
-            }
-        }
-    }
-}
-
 /// Advanced settings submenu
 struct AdvancedMenu: View {
     @ObservedObject var viewModel: MenuBarViewModel
     @EnvironmentObject var sparkle: SparkleController
-
-    /// The persisted preference — used for the submenu's checkmark, which
-    /// reflects what the user picked even while Svenska keeps a different
-    /// model (KB-Whisper) actually loaded.
-    private var currentModel: WhisperModel {
-        WhisperModel(rawValue: viewModel.configService.whisperModel) ?? .small
-    }
-
-    /// What's actually loaded in the transcription engine right now — shown in
-    /// the submenu title so e.g. "Whisper Model: KB-Whisper Small (Svenska)"
-    /// is visible while Svenska is active, even though the preference (and
-    /// checkmark) still point at whatever the user picked. Nil only in the
-    /// rare case where every load attempt, including the last-resort `.small`
-    /// fallback, has failed.
-    private var loadedModelTitle: String {
-        viewModel.loadedModel?.displayName ?? "Not Loaded"
-    }
-
-    /// The Parakeet variant the FLEURS sv+en benchmark recommends — see
-    /// `docs/review-2026-09/parakeet-bench.md`'s "Recommendation" section. A
-    /// fixed pick from that report, not derived from any runtime data;
-    /// update it if a future bench report changes the recommendation.
-    private static let recommendedParakeetKind: TranscriptionEngineKind = .parakeetV3
-
-    private func engineRowLabel(for kind: TranscriptionEngineKind) -> String {
-        let sizeText = "~\(kind.approximateSizeMB) MB"
-        guard kind == Self.recommendedParakeetKind else {
-            return "\(kind.displayName) — \(sizeText)"
-        }
-        return "\(kind.displayName) (Recommended) — \(sizeText)"
-    }
 
     var body: some View {
         Menu("Advanced") {
@@ -344,49 +284,6 @@ struct AdvancedMenu: View {
             }
 
             Divider()
-
-            Menu("Engine: \(viewModel.configService.engine.displayName)") {
-                ForEach(TranscriptionEngineKind.allCases, id: \.self) { kind in
-                    Button(action: {
-                        viewModel.setEngine(kind)
-                    }) {
-                        HStack {
-                            Text(engineRowLabel(for: kind))
-                            if viewModel.configService.engine == kind {
-                                Spacer()
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                }
-            }
-
-            Divider()
-
-            Menu("Whisper Model: \(loadedModelTitle)") {
-                ForEach(WhisperModel.allCases.filter(\.isUserSelectable).sorted(by: { $0.sortOrder < $1.sortOrder }), id: \.self) { model in
-                    Button(action: {
-                        viewModel.setWhisperModel(model)
-                    }) {
-                        HStack {
-                            Text(model.isRecommended ? "\(model.displayName) ★" : model.displayName)
-                            if currentModel == model {
-                                Spacer()
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                }
-
-                if viewModel.configService.language == .swedish {
-                    Divider()
-                    Button(action: {}) {
-                        Text("Svenska uses KB-Whisper Small automatically")
-                    }
-                    .disabled(true)
-                }
-            }
-            .disabled(!viewModel.configService.engine.usesWhisperModelSubmenu)
 
             Button(action: { viewModel.toggleDiagnosticLogging() }) {
                 HStack {

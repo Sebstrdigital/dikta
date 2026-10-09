@@ -471,10 +471,21 @@ func runParakeetEngine(_ args: BenchArgs, audioFiles: [String], fm: FileManager)
 
         let wallStart = Date()
         let text: String
+        let timingSummary: String
         do {
             var decoderState = TdtDecoderState.make(decoderLayers: decoderLayers)
             let result = try await manager.transcribe(audioSamples, decoderState: &decoderState)
             text = result.text
+            let timings = result.tokenTimings ?? []
+            let monotonic = zip(timings, timings.dropFirst()).allSatisfy {
+                $0.startTime <= $1.startTime && $0.endTime <= $1.endTime
+            }
+            let inBounds = timings.allSatisfy {
+                $0.startTime >= 0 && $0.endTime >= $0.startTime && $0.endTime <= secondsAudio + 0.25
+            }
+            let timingStart = String(format: "%.2f", timings.first?.startTime ?? 0)
+            let timingEnd = String(format: "%.2f", timings.last?.endTime ?? 0)
+            timingSummary = "timings=\(timings.count) monotonic=\(monotonic) inBounds=\(inBounds) span=\(timingStart)-\(timingEnd)s"
         } catch {
             fail("Transcription failed for \(audioPath): \(error)")
         }
@@ -495,7 +506,7 @@ func runParakeetEngine(_ args: BenchArgs, audioFiles: [String], fm: FileManager)
             outHandle.write("\n".data(using: .utf8)!)
         }
 
-        print("  \(fileName): \(String(format: "%.2f", secondsWall))s wall / \(String(format: "%.2f", secondsAudio))s audio")
+        print("  \(fileName): \(String(format: "%.2f", secondsWall))s wall / \(String(format: "%.2f", secondsAudio))s audio | \(timingSummary)")
     }
 
     outHandle.closeFile()

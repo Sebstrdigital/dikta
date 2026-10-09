@@ -20,7 +20,6 @@
 		100000000000000000000003 /* HistoryItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000003 /* HistoryItem.swift */; };
 		100000000000000000000004 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000004 /* AppConfig.swift */; };
 		100000000000000000000005 /* Language.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000005 /* Language.swift */; };
-		100000000000000000000006 /* WhisperModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000006 /* WhisperModel.swift */; };
 		100000000000000000000007 /* AppPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000007 /* AppPaths.swift */; };
 		100000000000000000000008 /* MicSensitivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000008 /* MicSensitivity.swift */; };
 		CA11DEB10000000600000001 /* LabeledSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000600000002 /* LabeledSegment.swift */; };
@@ -29,7 +28,8 @@
 		100000000000000000000011 /* ConfigService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000011 /* ConfigService.swift */; };
 		100000000000000000000012 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000012 /* AudioRecorder.swift */; };
 		100000000000000000000013 /* AudioFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000013 /* AudioFeedback.swift */; };
-		100000000000000000000014 /* Transcriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000014 /* Transcriber.swift */; };
+		AA0000000000000000000001 /* TranscriptionSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000003 /* TranscriptionSupport.swift */; };
+		AA0000000000000000000002 /* TextLanguageInference.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000004 /* TextLanguageInference.swift */; };
 		100000000000000000000103 /* TranscriptionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000103 /* TranscriptionEngine.swift */; };
 		100000000000000000000016 /* ClipboardManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000016 /* ClipboardManager.swift */; };
 		100000000000000000000123 /* TranscriptSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000123 /* TranscriptSanitizer.swift */; };
@@ -52,12 +52,9 @@
 		100000000000000000000101 /* WhatsAppMuter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000101 /* WhatsAppMuter.swift */; };
 		100000000000000000000102 /* UvenMuter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000102 /* UvenMuter.swift */; };
 		100000000000000000000075 /* MicMutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000075 /* MicMutingTests.swift */; };
-		100000000000000000000104 /* TranscriberPostProcessingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000104 /* TranscriberPostProcessingTests.swift */; };
+		100000000000000000000104 /* TranscriptionSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000104 /* TranscriptionSupportTests.swift */; };
 		100000000000000000000105 /* FakeTranscriptionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000105 /* FakeTranscriptionEngine.swift */; };
-		100000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */; };
-		100000000000000000000129 /* MenuBarViewModelSetEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000129 /* MenuBarViewModelSetEngineTests.swift */; };
 		100000000000000000000130 /* ConfigServiceAtomicWriteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000130 /* ConfigServiceAtomicWriteTests.swift */; };
-		100000000000000000000107 /* MenuBarViewModelLanguageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000107 /* MenuBarViewModelLanguageTests.swift */; };
 		100000000000000000000108 /* TTSStaleServerPIDTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000108 /* TTSStaleServerPIDTests.swift */; };
 
 		/* Debrief */
@@ -82,6 +79,7 @@
 		100000000000000000000126 /* ParakeetEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000126 /* ParakeetEngine.swift */; };
 		100000000000000000000127 /* FakeParakeetBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000127 /* FakeParakeetBackend.swift */; };
 		100000000000000000000128 /* ParakeetEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000128 /* ParakeetEngineTests.swift */; };
+		AA0000000000000000000005 /* TextLanguageInferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000006 /* TextLanguageInferenceTests.swift */; };
 		CA11DEB10000000900000001 /* DebriefLiveSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000900000002 /* DebriefLiveSession.swift */; };
 		CA11DEB10000000900000003 /* DebriefLiveSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000900000004 /* DebriefLiveSessionTests.swift */; };
 		CA11DEB10000000600000003 /* TwoTrackMerger.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000600000004 /* TwoTrackMerger.swift */; };
@@ -136,9 +134,6 @@
 		100000000000000000000092 /* MiniLML12v2.mlpackage in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000092 /* MiniLML12v2.mlpackage */; };
 		100000000000000000000093 /* minilm-vocab.txt in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000093 /* minilm-vocab.txt */; };
 
-		/* WhisperKit */
-		100000000000000000000061 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 300000000000000000000001 /* WhisperKit */; };
-
 		/* Sparkle */
 		100000000000000000000062 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 300000000000000000000002 /* Sparkle */; };
 
@@ -179,7 +174,6 @@ F30000000000000000000002 = {isa = PBXBuildFile; fileRef = F300000000000000000000
 		200000000000000000000003 /* HistoryItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryItem.swift; sourceTree = "<group>"; };
 		200000000000000000000004 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
 		200000000000000000000005 /* Language.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Language.swift; sourceTree = "<group>"; };
-		200000000000000000000006 /* WhisperModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperModel.swift; sourceTree = "<group>"; };
 		200000000000000000000007 /* AppPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPaths.swift; sourceTree = "<group>"; };
 		200000000000000000000008 /* MicSensitivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicSensitivity.swift; sourceTree = "<group>"; };
 
@@ -187,7 +181,8 @@ F30000000000000000000002 = {isa = PBXBuildFile; fileRef = F300000000000000000000
 		200000000000000000000011 /* ConfigService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigService.swift; sourceTree = "<group>"; };
 		200000000000000000000012 /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
 		200000000000000000000013 /* AudioFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFeedback.swift; sourceTree = "<group>"; };
-		200000000000000000000014 /* Transcriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Transcriber.swift; sourceTree = "<group>"; };
+		AA0000000000000000000003 /* TranscriptionSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionSupport.swift; sourceTree = "<group>"; };
+		AA0000000000000000000004 /* TextLanguageInference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextLanguageInference.swift; sourceTree = "<group>"; };
 		200000000000000000000103 /* TranscriptionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionEngine.swift; sourceTree = "<group>"; };
 		200000000000000000000016 /* ClipboardManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManager.swift; sourceTree = "<group>"; };
 		200000000000000000000123 /* TranscriptSanitizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSanitizer.swift; sourceTree = "<group>"; };
@@ -250,12 +245,9 @@ F30000000000000000000002 = {isa = PBXBuildFile; fileRef = F300000000000000000000
 		200000000000000000000072 /* FormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatterTests.swift; sourceTree = "<group>"; };
 		200000000000000000000074 /* EmbeddingParagraphSplitterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmbeddingParagraphSplitterTests.swift; sourceTree = "<group>"; };
 		200000000000000000000075 /* MicMutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicMutingTests.swift; sourceTree = "<group>"; };
-		200000000000000000000104 /* TranscriberPostProcessingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriberPostProcessingTests.swift; sourceTree = "<group>"; };
+		200000000000000000000104 /* TranscriptionSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionSupportTests.swift; sourceTree = "<group>"; };
 		200000000000000000000105 /* FakeTranscriptionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeTranscriptionEngine.swift; sourceTree = "<group>"; };
-		200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelSetWhisperModelTests.swift; sourceTree = "<group>"; };
-		200000000000000000000129 /* MenuBarViewModelSetEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelSetEngineTests.swift; sourceTree = "<group>"; };
 		200000000000000000000130 /* ConfigServiceAtomicWriteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigServiceAtomicWriteTests.swift; sourceTree = "<group>"; };
-		200000000000000000000107 /* MenuBarViewModelLanguageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelLanguageTests.swift; sourceTree = "<group>"; };
 		200000000000000000000108 /* TTSStaleServerPIDTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSStaleServerPIDTests.swift; sourceTree = "<group>"; };
 		200000000000000000000109 /* DebriefSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebriefSummary.swift; sourceTree = "<group>"; };
 		CA11DEB10000000600000002 /* LabeledSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabeledSegment.swift; sourceTree = "<group>"; };
@@ -282,6 +274,7 @@ F30000000000000000000002 = {isa = PBXBuildFile; fileRef = F300000000000000000000
 		200000000000000000000126 /* ParakeetEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParakeetEngine.swift; sourceTree = "<group>"; };
 		200000000000000000000127 /* FakeParakeetBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeParakeetBackend.swift; sourceTree = "<group>"; };
 		200000000000000000000128 /* ParakeetEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParakeetEngineTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000006 /* TextLanguageInferenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextLanguageInferenceTests.swift; sourceTree = "<group>"; };
 		CA11DEB10000000600000006 /* TwoTrackMergerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwoTrackMergerTests.swift; sourceTree = "<group>"; };
 		CE1EC7100000000000000002 /* TextSelectionServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextSelectionServiceTests.swift; sourceTree = "<group>"; };
 		C1B0A4D00000000000000002 /* ClipboardManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManagerTests.swift; sourceTree = "<group>"; };
@@ -321,7 +314,6 @@ F30000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourceco
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				100000000000000000000061 /* WhisperKit in Frameworks */,
 				100000000000000000000062 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -398,14 +390,12 @@ F20000000000000000000021 = {isa = PBXFrameworksBuildPhase; buildActionMask = 214
 				200000000000000000000072 /* FormatterTests.swift */,
 				200000000000000000000074 /* EmbeddingParagraphSplitterTests.swift */,
 				200000000000000000000075 /* MicMutingTests.swift */,
-				200000000000000000000104 /* TranscriberPostProcessingTests.swift */,
+				200000000000000000000104 /* TranscriptionSupportTests.swift */,
 				200000000000000000000105 /* FakeTranscriptionEngine.swift */,
 				200000000000000000000127 /* FakeParakeetBackend.swift */,
 				200000000000000000000128 /* ParakeetEngineTests.swift */,
-				200000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift */,
-				200000000000000000000129 /* MenuBarViewModelSetEngineTests.swift */,
+				AA0000000000000000000006 /* TextLanguageInferenceTests.swift */,
 				200000000000000000000130 /* ConfigServiceAtomicWriteTests.swift */,
-				200000000000000000000107 /* MenuBarViewModelLanguageTests.swift */,
 				200000000000000000000108 /* TTSStaleServerPIDTests.swift */,
 				200000000000000000000114 /* DebriefSummaryTests.swift */,
 				200000000000000000000117 /* AudioFileLoaderTests.swift */,
@@ -446,7 +436,6 @@ F20000000000000000000021 = {isa = PBXFrameworksBuildPhase; buildActionMask = 214
 				200000000000000000000003 /* HistoryItem.swift */,
 				200000000000000000000004 /* AppConfig.swift */,
 				200000000000000000000005 /* Language.swift */,
-				200000000000000000000006 /* WhisperModel.swift */,
 				200000000000000000000125 /* TranscriptionEngineKind.swift */,
 				200000000000000000000007 /* AppPaths.swift */,
 				200000000000000000000008 /* MicSensitivity.swift */,
@@ -463,7 +452,8 @@ F20000000000000000000021 = {isa = PBXFrameworksBuildPhase; buildActionMask = 214
 				200000000000000000000011 /* ConfigService.swift */,
 				200000000000000000000012 /* AudioRecorder.swift */,
 				200000000000000000000013 /* AudioFeedback.swift */,
-				200000000000000000000014 /* Transcriber.swift */,
+				AA0000000000000000000003 /* TranscriptionSupport.swift */,
+				AA0000000000000000000004 /* TextLanguageInference.swift */,
 				200000000000000000000126 /* ParakeetEngine.swift */,
 				200000000000000000000103 /* TranscriptionEngine.swift */,
 				200000000000000000000016 /* ClipboardManager.swift */,
@@ -590,7 +580,6 @@ F1000000000000000000001E = {isa = PBXGroup; name = NativeKokoroBoundary; childre
 			);
 			name = Dikta;
 			packageProductDependencies = (
-				300000000000000000000001 /* WhisperKit */,
 				300000000000000000000002 /* Sparkle */,
 				300000000000000000000003 /* FluidAudio */,
 			);
@@ -644,7 +633,6 @@ F1000000000000000000002C = {isa = PBXTargetDependency; target = F100000000000000
 			);
 			mainGroup = 600000000000000000000000;
 			packageReferences = (
-				A00000000000000000000001 /* XCRemoteSwiftPackageReference "WhisperKit" */,
 				A00000000000000000000002 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				A00000000000000000000003 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 			);
@@ -685,14 +673,12 @@ F1000000000000000000002C = {isa = PBXTargetDependency; target = F100000000000000
 				100000000000000000000073 /* FormatterTests.swift in Sources */,
 				100000000000000000000074 /* EmbeddingParagraphSplitterTests.swift in Sources */,
 				100000000000000000000075 /* MicMutingTests.swift in Sources */,
-				100000000000000000000104 /* TranscriberPostProcessingTests.swift in Sources */,
+				100000000000000000000104 /* TranscriptionSupportTests.swift in Sources */,
 				100000000000000000000105 /* FakeTranscriptionEngine.swift in Sources */,
 				100000000000000000000127 /* FakeParakeetBackend.swift in Sources */,
 				100000000000000000000128 /* ParakeetEngineTests.swift in Sources */,
-				100000000000000000000106 /* MenuBarViewModelSetWhisperModelTests.swift in Sources */,
-				100000000000000000000129 /* MenuBarViewModelSetEngineTests.swift in Sources */,
+				AA0000000000000000000005 /* TextLanguageInferenceTests.swift in Sources */,
 				100000000000000000000130 /* ConfigServiceAtomicWriteTests.swift in Sources */,
-				100000000000000000000107 /* MenuBarViewModelLanguageTests.swift in Sources */,
 				100000000000000000000108 /* TTSStaleServerPIDTests.swift in Sources */,
 				100000000000000000000114 /* DebriefSummaryTests.swift in Sources */,
 				100000000000000000000117 /* AudioFileLoaderTests.swift in Sources */,
@@ -736,7 +722,8 @@ F1000000000000000000002C = {isa = PBXTargetDependency; target = F100000000000000
 				100000000000000000000011 /* ConfigService.swift in Sources */,
 				100000000000000000000012 /* AudioRecorder.swift in Sources */,
 				100000000000000000000013 /* AudioFeedback.swift in Sources */,
-				100000000000000000000014 /* Transcriber.swift in Sources */,
+				AA0000000000000000000001 /* TranscriptionSupport.swift in Sources */,
+				AA0000000000000000000002 /* TextLanguageInference.swift in Sources */,
 				100000000000000000000126 /* ParakeetEngine.swift in Sources */,
 				100000000000000000000103 /* TranscriptionEngine.swift in Sources */,
 				100000000000000000000007 /* AppPaths.swift in Sources */,
@@ -747,7 +734,6 @@ F1000000000000000000002C = {isa = PBXTargetDependency; target = F100000000000000
 				100000000000000000000031 /* MenuBarView.swift in Sources */,
 				100000000000000000000041 /* DiktaApp.swift in Sources */,
 				100000000000000000000005 /* Language.swift in Sources */,
-				100000000000000000000006 /* WhisperModel.swift in Sources */,
 				100000000000000000000125 /* TranscriptionEngineKind.swift in Sources */,
 				100000000000000000000008 /* MicSensitivity.swift in Sources */,
 				100000000000000000000018 /* Logger.swift in Sources */,
@@ -938,7 +924,7 @@ F1000000000000000000002D = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1.5.3;
+				CURRENT_PROJECT_VERSION = 1.5.4;
 				DEVELOPMENT_TEAM = UUM29335B4;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -951,7 +937,7 @@ F1000000000000000000002D = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.5.3;
+				MARKETING_VERSION = 1.5.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app;
 				PRODUCT_NAME = Dikta;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -968,7 +954,7 @@ F1000000000000000000002D = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1.5.3;
+				CURRENT_PROJECT_VERSION = 1.5.4;
 				DEVELOPMENT_TEAM = UUM29335B4;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -981,7 +967,7 @@ F1000000000000000000002D = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.5.3;
+				MARKETING_VERSION = 1.5.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app;
 				PRODUCT_NAME = Dikta;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1055,14 +1041,6 @@ F10000000000000000000029 = {isa = XCConfigurationList; buildConfigurations = (F1
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		A00000000000000000000001 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/argmaxinc/argmax-oss-swift";
-			requirement = {
-				kind = upToNextMinorVersion;
-				minimumVersion = 1.1.0;
-			};
-		};
 		A00000000000000000000002 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sparkle-project/Sparkle";
@@ -1082,11 +1060,6 @@ F10000000000000000000029 = {isa = XCConfigurationList; buildConfigurations = (F1
 	/* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		300000000000000000000001 /* WhisperKit */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A00000000000000000000001 /* XCRemoteSwiftPackageReference "WhisperKit" */;
-			productName = WhisperKit;
-		};
 		300000000000000000000002 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A00000000000000000000002 /* XCRemoteSwiftPackageReference "Sparkle" */;

@@ -39,6 +39,12 @@ enum HotkeyMode: String, Codable, CaseIterable {
     case textToSpeech = "text_to_speech"
     case languageToggle = "language_toggle"
     case formatSelection = "format_selection"
+
+    /// Modes still exposed and registered. `languageToggle` remains decodable
+    /// so existing config round-trips without making the old hotkey active.
+    static let userConfigurableCases: [HotkeyMode] = [
+        .toggle, .pushToTalk, .textToSpeech, .formatSelection
+    ]
     
     var displayName: String {
         switch self {

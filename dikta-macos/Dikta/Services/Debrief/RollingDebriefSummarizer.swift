@@ -30,7 +30,10 @@ actor RollingDebriefSummarizer {
     private let summarizer: DeltaSummarizing
     private let similarity: (String, String) -> Double
     private let resetSimilarityCache: () -> Void
-    private let language: String
+    /// Actual transcript accumulated in chunk order. Language is re-inferred
+    /// from this whole body for every prompt rather than latched from the first
+    /// chunk that happened to be confident.
+    private var accumulatedTranscript = ""
     private let dedupeThreshold: Double
 
     private var accumulator: DebriefAccumulator
@@ -48,14 +51,16 @@ actor RollingDebriefSummarizer {
     init(
         summarizer: DeltaSummarizing,
         similarity: @escaping (String, String) -> Double,
-        language: String,
+        language: String?,
         dedupeThreshold: Double = 0.9,
         initialState: DebriefState = DebriefState(),
         resetSimilarityCache: @escaping () -> Void = {}
     ) {
         self.summarizer = summarizer
         self.similarity = similarity
-        self.language = language
+        // Retained in the initializer for source compatibility with callers;
+        // automatic behavior derives language only from transcript text.
+        _ = language
         self.dedupeThreshold = dedupeThreshold
         self.accumulator = DebriefAccumulator(state: initialState)
         self.resetSimilarityCache = resetSimilarityCache
@@ -66,7 +71,7 @@ actor RollingDebriefSummarizer {
     init(
         summarizer: DeltaSummarizing,
         similarityProvider: EmbeddingSimilarity,
-        language: String,
+        language: String?,
         dedupeThreshold: Double = 0.9,
         initialState: DebriefState = DebriefState()
     ) {
@@ -95,6 +100,10 @@ actor RollingDebriefSummarizer {
     private func performIngest(chunkTranscript: String, index: Int) async throws {
         let trimmed = chunkTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+
+        accumulatedTranscript = accumulatedTranscript.isEmpty
+            ? trimmed
+            : accumulatedTranscript + "\n" + trimmed
 
         do {
             try await ingestOne(chunk: trimmed, index: index, state: accumulator.state)
@@ -138,7 +147,7 @@ actor RollingDebriefSummarizer {
             state: state,
             chunk: chunk,
             chunkIndex: index,
-            language: language
+            language: TextLanguageInference.debriefCode(for: accumulatedTranscript)
         )
         accumulator.apply(delta, chunkIndex: index)
         accumulator.dedupe(using: similarity, threshold: dedupeThreshold)
@@ -183,15 +192,22 @@ actor RollingDebriefSummarizer {
     /// whole meeting: every item already survives in the accumulator, and the
     /// summary paragraph from the last chunk is still there. Cancellation is
     /// still propagated.
-    func finish() async throws -> DebriefSummary {
-        try await serialized { try await self.performFinish() }
+    func finish(language: String? = nil) async throws -> DebriefSummary {
+        try await serialized { try await self.performFinish(language: language) }
     }
 
-    private func performFinish() async throws -> DebriefSummary {
+    private func performFinish(language: String?) async throws -> DebriefSummary {
         accumulator.dedupe(using: similarity, threshold: dedupeThreshold)
 
         do {
-            let consolidation = try await summarizer.consolidate(state: accumulator.state, language: language)
+            // Live sessions pass the pipeline's inference from the exact final
+            // transcript. Direct users fall back to the accumulated chunks.
+            let finalLanguage = language
+                ?? TextLanguageInference.debriefCode(for: accumulatedTranscript)
+            let consolidation = try await summarizer.consolidate(
+                state: accumulator.state,
+                language: finalLanguage
+            )
             applyConsolidation(consolidation)
         } catch let error as CancellationError {
             throw error

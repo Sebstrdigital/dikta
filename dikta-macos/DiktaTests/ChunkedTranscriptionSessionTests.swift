@@ -67,7 +67,6 @@ final class MarkerTranscriptionEngine: TranscriptionEngine {
     var downloadProgress: Double?
 
     func load() async {}
-    func reload(model: WhisperModel) async throws {}
     func unload() async {}
     func transcribe(_ audioSamples: [Float], language: String?, micSensitivity: MicSensitivity) async throws -> String { "" }
 
@@ -112,7 +111,6 @@ final class ScriptedTranscriptionEngine: TranscriptionEngine {
     var downloadProgress: Double?
 
     func load() async {}
-    func reload(model: WhisperModel) async throws {}
     func unload() async {}
     func transcribe(_ audioSamples: [Float], language: String?, micSensitivity: MicSensitivity) async throws -> String { "" }
 

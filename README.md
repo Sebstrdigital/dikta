@@ -11,9 +11,9 @@ Download the latest DMG from [Releases](https://github.com/Sebstrdigital/dikta/r
 ## Features
 
 - **Fully Offline** — speech-to-text runs locally on your Mac. No data ever leaves your device.
-- **Two engines** — WhisperKit (default) or NVIDIA Parakeet via FluidAudio, switchable live from **Advanced → Engine**. Parakeet v3 is roughly ten times faster than Whisper Turbo on the same audio and scored best on English in our benchmark; see [Engines](#engines).
+- **One automatic transcription experience** — NVIDIA Parakeet Ultra via FluidAudio handles dictation, imported audio, mic Debrief, and call Debrief without an engine, model, or language picker.
 - **Menu Bar App** — sits quietly in your menu bar, always one hotkey away
-- **Five Hotkey Modes** — Record (toggle), Push-to-Talk, Read Aloud, Switch Language, Format Selection — all customizable
+- **Four Hotkey Modes** — Record (toggle), Push-to-Talk, Read Aloud, and Format Selection — all customizable
 - **fn/Globe Key Support** — use the fn/Globe key as a hotkey modifier
 - **Auto-paste** — transcription goes straight to your cursor via Cmd+V simulation
 - **Silence Auto-Stop** — recording stops automatically after 10 seconds of silence
@@ -22,21 +22,14 @@ Download the latest DMG from [Releases](https://github.com/Sebstrdigital/dikta/r
 - **Debrief mode** — the same summary pipeline for a single microphone recording or an audio file you drop in
 - **Text-to-Speech** — select text and have it read aloud via Kokoro TTS (optional, installed separately)
 - **History** — access your last 5 dictations from the menu bar
-- **Multi-language** — 12 languages: English, Swedish, Spanish, French, German, Portuguese, Italian, Dutch, Finnish, Norwegian, Danish, and Indonesian. Under Whisper the selector is a hint that helps when languages could be confused (Norwegian vs Danish, Portuguese vs Spanish); Svenska additionally switches to a Swedish-tuned model. Parakeet detects the language itself among its 25 European languages, so the selector has no effect on transcription there.
+- **Automatic European-language transcription** — Ultra detects its language from audio without a hint. Formatting infers supported language behavior from the selected text; Debrief infers English or Swedish from its transcript and falls back to English when uncertain. Indonesian is not supported.
 - **Mic Sensitivity** — tune speech detection sensitivity for Normal or Headset use
 - **Launch at Login** — optionally start Dikta automatically when you log in
 - **Auto-Update** — checks for updates via Sparkle; configure in the About screen
 
-## Engines
+## Transcription
 
-| Engine | Models | Notes |
-|--------|--------|-------|
-| **Whisper** (default) | Small (bundled), Large v3 Turbo, Medium; KB-Whisper Small is used automatically for Svenska | Best Swedish accuracy by a wide margin. Language hint applies. |
-| **Parakeet v3** (Recommended) | ~460 MB download | Best English accuracy in our benchmark and ~10× faster than Turbo. 25 European languages, auto-detected. |
-| **Parakeet Redux** | ~210 MB download | Same architecture in a ternary-quantized package. Slightly less accurate than v3; pick it for the small download. |
-| **Parakeet Ultra** | ~600 MB download | Further-trained v3. Same speed; best Swedish of the Parakeet variants but still well behind KB-Whisper. |
-
-Switching engines takes effect immediately; the previous engine stays active if the new one fails to load. Parakeet does not cover Indonesian (or any non-European language), so switch back to Whisper for those. Benchmark numbers and methodology: `docs/review-2026-09/parakeet-bench.md`.
+Dikta uses **Parakeet Ultra** (~615 MB) for every speech-to-text path. The model downloads on first use and remains in FluidAudio's cache. It supports automatic European-language transcription; there is no manual language hint. Mixed-language code-switching is best-effort: qualification found that short English contributions can disappear in otherwise Swedish takes. Benchmark numbers and methodology remain in `docs/review-2026-09/parakeet-bench.md`.
 
 ## Permissions
 
@@ -59,7 +52,6 @@ All hotkeys are customizable via **Hotkeys** in the menu bar. Collision detectio
 | **Record** | Shift + Ctrl | Press to start, press again to stop |
 | **Push-to-Talk** | Cmd + Shift | Hold to record, release to stop |
 | **Read Aloud** | Cmd + Alt | Reads selected text aloud via TTS |
-| **Switch Language** | Cmd + Ctrl | Cycles through enabled languages |
 | **Format Selection** | Cmd + Shift + F | Reformats the selected text into paragraphs and lists |
 
 While you dictate, Dikta mutes your microphone in Teams, Slack, WhatsApp, Google Meet and Uven if one of them is in a call, and unmutes it when you stop.
@@ -74,16 +66,11 @@ Dikta
 │   ├── Set Record Hotkey...
 │   ├── Set Push-to-Talk Hotkey...
 │   ├── Set Read Aloud Hotkey...
-│   ├── Set Switch Language Hotkey...
 │   └── Set Format Selection Hotkey...
 ├── Audio >
 │   ├── Mute Sounds
 │   ├── Mute Notifications
 │   └── Mic Sensitivity: Normal / Headset
-├── Write in: English >
-│   ├── ✓ English (enabled)
-│   ├── Svenska (enabled)
-│   ├── Español … Indonesia
 ├── Debrief >
 │   ├── Debrief mode
 │   ├── Source: Microphone / Microphone + system audio
@@ -93,8 +80,6 @@ Dikta
 ├── Advanced >
 │   ├── Start at Login
 │   ├── Check for Updates...
-│   ├── Engine: Whisper / Parakeet Redux / Parakeet v3 / Parakeet Ultra
-│   ├── Whisper Model: Small / Large v3 Turbo / Medium
 │   ├── Diagnostic Logging
 │   └── Voice: (Kokoro TTS voices)
 ├── About
@@ -149,7 +134,7 @@ cd dikta-macos
 ./scripts/build-release.sh                # DMG + GitHub release + appcast
 ```
 
-This runs the unit tests (and refuses to continue if any fail or none ran), archives, signs, bundles the Whisper Small model, notarizes with Apple, and produces a DMG at `build/Dikta.dmg`. Requires a Developer ID certificate and notarization credentials (see script header for setup).
+This runs the unit tests (and refuses to continue if any fail or none ran), archives, signs, notarizes with Apple, and produces a DMG at `build/Dikta.dmg`. Requires a Developer ID certificate and notarization credentials (see script header for setup).
 
 ### Benchmarks
 
@@ -169,7 +154,7 @@ cd dikta-macos/bench
 
 **Text-to-speech not working** — Open the About window and click "Set Up" next to Text-to-Speech. Requires Python 3 (`/usr/bin/python3` or Homebrew).
 
-**Model loading is slow** — Models load on first launch and after an engine or model switch; downloads show a percentage in the menu. Parakeet Redux compiles for a few seconds on first use. Subsequent launches are fast (models stay cached).
+**Model loading is slow** — Ultra downloads and Core ML may compile on first use; the menu shows download progress. Subsequent launches are fast because the model stays cached.
 
 **Quality seems to drift during a long session** — Turn on **Advanced → Diagnostic Logging**; every take then logs which engine and model handled it, its confidence, and the app's memory use to `~/Library/Logs/Dikta/dikta-diagnostic.log`.
 
@@ -180,17 +165,17 @@ cd dikta-macos/bench
 ## Architecture
 
 ```
-Hotkey → Recording → Transcription engine (WhisperKit | Parakeet) → Formatter → Auto-paste + History
+Hotkey → Recording → Parakeet Ultra → Auto-paste + History
                   └→ Call Debrief: two-track capture → chunked transcription → rolling summary
 ```
 
 Key source files:
 
 - `Models/AppConfig.swift` — Full config structure, persisted as JSON at `~/Library/Application Support/Dikta/config.json`
-- `Models/TranscriptionEngineKind.swift` / `Models/WhisperModel.swift` — Engine and Whisper model catalogues (sizes, display names)
+- `Models/TranscriptionEngineKind.swift` — Inactive compatibility values for legacy saved engine preferences
 - `Models/HotkeyConfig.swift` — Modifier keys, hotkey matching, collision detection
 - `Models/MicSensitivity.swift` — Speech detection sensitivity presets
-- `Services/TranscriptionEngine.swift` — The engine protocol; `Transcriber.swift` (WhisperKit) and `ParakeetEngine.swift` (FluidAudio) implement it
+- `Services/TranscriptionEngine.swift` / `Services/ParakeetEngine.swift` — Testable engine seam and the fixed Ultra implementation
 - `Services/HotkeyManager.swift` — CGEventTap-based global hotkey detection
 - `Services/ConfigService.swift` — Singleton config manager with atomic writes
 - `Services/AudioRecorder.swift` — AVAudioEngine recording with silence auto-stop
@@ -205,10 +190,9 @@ More detail in `docs/architecture.md`; test rules per area in `docs/validation.m
 
 ## Resources
 
-- [WhisperKit](https://github.com/argmaxinc/WhisperKit) — On-device Whisper for Apple Silicon
+- [WhisperKit](https://github.com/argmaxinc/WhisperKit) — Retained only by benchmark/probe tooling for comparisons
 - [FluidAudio](https://github.com/FluidInference/FluidAudio) — Parakeet models as Core ML, in Swift
-- [Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) (NVIDIA) and [Parakeet Redux](https://huggingface.co/moondream/parakeet-redux) (Moondream)
-- [KB-Whisper](https://huggingface.co/KBLab/kb-whisper-small) — Swedish-tuned Whisper by the National Library of Sweden
+- [Parakeet TDT 0.6B](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) — NVIDIA model family used through FluidAudio
 - [Kokoro TTS](https://github.com/hexgrad/kokoro) — Text-to-speech engine
 
 ## License

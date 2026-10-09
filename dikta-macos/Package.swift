@@ -25,7 +25,6 @@ let package = Package(
             name: "Dikta",
             dependencies: [
                 "NativeKokoroShared",
-                .product(name: "WhisperKit", package: "argmax-oss-swift"),
                 .product(name: "Sparkle", package: "Sparkle"),
                 .product(name: "FluidAudio", package: "FluidAudio"),
             ],

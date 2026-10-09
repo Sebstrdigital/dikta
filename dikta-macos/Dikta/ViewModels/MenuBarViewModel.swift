@@ -25,35 +25,13 @@ final class MenuBarViewModel: ObservableObject {
     @Published private(set) var downloadProgress: Double?
     static var isModelLoaded = false
 
-    /// The model currently active in the transcription engine — the *effective*
-    /// model (see `effectiveModel(for:)`), which can differ from
-    /// `configService.whisperModel` (the user's raw preference) whenever Swedish
-    /// is the active language. `@Published` so the Whisper Model submenu title
-    /// (MenuBarView.AdvancedMenu) can show what's actually loaded, live.
-    ///
-    /// Nil only when every reload attempt — including the last-resort `.small`
-    /// fallback in `reloadWithFallback` — has failed, so nothing is actually
-    /// loaded; must never be set to a model that isn't confirmed loaded.
-    @Published private(set) var loadedModel: WhisperModel?
-
-    /// True when a language change couldn't safely reload the transcription
-    /// engine (recording or processing was in flight) and is waiting for
-    /// `appState` to return to `.idle`. See the `$appState` subscription below.
-    private var languageModelReloadPending = false
 
     // Services
     let configService: ConfigService
     private var cancellables = Set<AnyCancellable>()
-    /// The active transcription engine. `var` (not `let`): `setEngine(_:)`
-    /// swaps it for a new instance built by `engineFactory` when the user
-    /// switches engine kind, dropping the strong reference to the old one so
-    /// it deinits ("unloads") once nothing else holds it.
-    private var transcriber: any TranscriptionEngine
-    /// Builds a `TranscriptionEngine` for a given kind/model pair. Used for
-    /// the startup engine (when `engine:` isn't injected) and by every
-    /// `setEngine(_:)` call thereafter — the one seam both paths share; see
-    /// `init`'s `engineFactory:` parameter doc.
-    private let engineFactory: (TranscriptionEngineKind, WhisperModel) -> any TranscriptionEngine
+    /// The one speech-to-text engine used by dictation, imports, mic Debrief,
+    /// and call Debrief. Tests inject a fake; production always builds Ultra.
+    private let transcriber: any TranscriptionEngine
     /// Internal rather than private so tests can drive the recorder's live
     /// sample tap (`onLiveSamples`) directly, which is the only way to feed
     /// the call-recording Me track without a real microphone. Held as the
@@ -118,15 +96,8 @@ final class MenuBarViewModel: ObservableObject {
     let hotkeyWindowController = HotkeyRecordingWindowController()
 
     /// - Parameters:
-    ///   - engine: Transcription engine to use. Defaults to a real WhisperKit-backed
-    ///     `Transcriber` built from the saved config; tests can inject a fake instead.
-    ///   - engineFactory: Builds a `TranscriptionEngine` for a `(TranscriptionEngineKind,
-    ///     WhisperModel)` pair. Used for the startup engine when `engine` isn't provided
-    ///     (letting a test observe which model/kind `init` resolved — a plain injected
-    ///     `engine` never sees the startup model, since the fake doesn't care what it's
-    ///     "loaded" with) and, always, by every later `setEngine(_:)` call. Production
-    ///     never sets this; it falls through to the real `Transcriber(model:)` /
-    ///     `ParakeetEngine(kind:)`.
+    ///   - engine: Transcription engine to use. Production defaults to Parakeet
+    ///     Ultra; tests inject a fake so model loading never crosses the test boundary.
     ///   - configService: Config store to use. Defaults to `.shared` (the real, persisted
     ///     config); tests can inject an isolated instance instead.
     ///   - debriefSummarizer: Summarizer for debrief mode. Defaults to one built lazily
@@ -154,7 +125,6 @@ final class MenuBarViewModel: ObservableObject {
     ///     `makeDefaultAudioFeedback`); tests inject `FakeAudioFeedback`.
     init(
         engine: (any TranscriptionEngine)? = nil,
-        engineFactory: ((TranscriptionEngineKind, WhisperModel) -> any TranscriptionEngine)? = nil,
         configService: ConfigService? = nil,
         debriefSummarizer: DebriefSummarizer? = nil,
         debriefStore: DebriefStore? = nil,
@@ -173,30 +143,11 @@ final class MenuBarViewModel: ObservableObject {
         self.injectedDebriefSummarizer = debriefSummarizer
         self.injectedDebriefStore = debriefStore
         self.audioFileLoader = audioFileLoader ?? { try AudioFileLoader().load(url: $0) }
-        let preferenceModel = WhisperModel(rawValue: configService.whisperModel) ?? .small
-        let startupModel = Self.effectiveModel(for: configService.language, preference: preferenceModel)
-        let startupKind = configService.engine
-        self.loadedModel = startupKind.usesWhisperModelSubmenu ? startupModel : nil
-        let resolvedEngineFactory: (TranscriptionEngineKind, WhisperModel) -> any TranscriptionEngine = engineFactory ?? { kind, model in
-            // A `MenuBarViewModel` built without an injected engine/engineFactory while
-            // XCTest is linked into this process (a unit test, or `Dikta.app` itself
-            // hosting one — see `DiktaApp`) would fall through to a real, network-touching
-            // engine here as a side effect of the app merely launching. That's silent and
-            // harmless on a machine with the model already cached, but hangs or crashes
-            // the test host on a clean CI runner. Fail loudly instead of downloading.
-            assert(
-                !Self.isRunningUnderXCTestHost,
-                "MenuBarViewModel() constructed under XCTest without engine:/engineFactory: — this would build a real, network-touching engine. Inject a fake engine."
-            )
-            switch kind {
-            case .whisper:
-                return Transcriber(model: model)
-            case .parakeetRedux, .parakeetV3, .parakeetUltra:
-                return ParakeetEngine(kind: kind)
-            }
-        }
-        self.engineFactory = resolvedEngineFactory
-        self.transcriber = engine ?? resolvedEngineFactory(startupKind, startupModel)
+        assert(
+            engine != nil || !Self.isRunningUnderXCTestHost,
+            "MenuBarViewModel() under XCTest must inject a fake transcription engine."
+        )
+        self.transcriber = engine ?? ParakeetEngine()
         self.audioRecorder = audioRecorder ?? AudioRecorder()
         self.systemAudioCaptureFactory = systemAudioCaptureFactory ?? { SystemAudioTapRecorder() }
         self.audioFeedback = audioFeedback ?? Self.makeDefaultAudioFeedback()
@@ -224,16 +175,6 @@ final class MenuBarViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
-
-        // Run a deferred language-driven model reload as soon as the app is
-        // idle again (see `reloadForCurrentLanguageIfNeeded`).
-        $appState
-            .receive(on: RunLoop.main)
-            .sink { [weak self] state in
-                guard let self, state == .idle, self.languageModelReloadPending else { return }
-                self.reloadForCurrentLanguageIfNeeded()
             }
             .store(in: &cancellables)
 
@@ -318,7 +259,7 @@ final class MenuBarViewModel: ObservableObject {
             }
 
             let toggleHotkey = configService.getHotkey(for: .toggle).displayString
-            sendNotification(title: "Ready", body: "\(configService.engine.displayName) loaded. Use \(toggleHotkey) to record.", isRoutine: true)
+            sendNotification(title: "Ready", body: "Parakeet Ultra loaded. Use \(toggleHotkey) to record.", isRoutine: true)
         } else {
             sendNotification(title: "Error", body: transcriber.errorMessage ?? "Failed to load model")
         }
@@ -368,7 +309,7 @@ final class MenuBarViewModel: ObservableObject {
                     writer: try debriefStore.makeStreamingAudioWriter(in: paths),
                     live: try makeDebriefPipeline().startLiveSession(
                         tracks: [.me],
-                        language: configService.language.whisperCode,
+                        language: nil,
                         micSensitivity: configService.micSensitivity,
                         paths: paths
                     )
@@ -507,7 +448,6 @@ final class MenuBarViewModel: ObservableObject {
 
         do {
             // Transcribe with a 60-second timeout to prevent hanging
-            let language = configService.language
             let micSensitivity = configService.micSensitivity
 
             // Diagnostic: log memory before transcription
@@ -517,7 +457,7 @@ final class MenuBarViewModel: ObservableObject {
 
             let text = try await withThrowingTaskGroup(of: String.self) { group in
                 group.addTask {
-                    try await self.transcriber.transcribe(samples, language: language.whisperCode, micSensitivity: micSensitivity)
+                    try await self.transcriber.transcribe(samples, language: nil, micSensitivity: micSensitivity)
                 }
                 group.addTask {
                     try await Task.sleep(nanoseconds: MenuBarViewModel.transcriptionTimeout * 1_000_000_000)
@@ -554,8 +494,8 @@ final class MenuBarViewModel: ObservableObject {
             DiagnosticLogger.shared.log("RESULT | timeout | \(diagnosticEngineContext()) | \(diagnosticMemoryTag())")
             sendNotification(title: "Transcription Timeout", body: "Processing took too long and was cancelled.")
             appState = .idle
-        } catch is TranscriberError {
-            DiagnosticLogger.shared.log("RESULT | no_speech (TranscriberError) | \(diagnosticEngineContext())")
+        } catch ParakeetEngineError.noSpeechDetected, ParakeetEngineError.emptyAudio {
+            DiagnosticLogger.shared.log("RESULT | no_speech (ParakeetEngineError) | \(diagnosticEngineContext())")
             sendNotification(
                 title: "No Speech",
                 body: "No speech detected. Try adjusting Mic Sensitivity in Audio settings."
@@ -967,7 +907,7 @@ final class MenuBarViewModel: ObservableObject {
                     capture: systemAudioCaptureFactory(),
                     live: try pipeline.startLiveSession(
                         tracks: [.me, .them],
-                        language: configService.language.whisperCode,
+                        language: nil,
                         micSensitivity: configService.micSensitivity,
                         paths: paths
                     )
@@ -1190,7 +1130,7 @@ final class MenuBarViewModel: ObservableObject {
         do {
             let result = try await pipeline.runTwoTrack(
                 paths: paths,
-                language: configService.language.whisperCode,
+                language: nil,
                 micSensitivity: configService.micSensitivity,
                 onStage: { [weak self] stage in self?.applyDebriefStage(stage) }
             )
@@ -1253,7 +1193,7 @@ final class MenuBarViewModel: ObservableObject {
         do {
             let result = try await pipeline.run(
                 samples: samples,
-                language: configService.language.whisperCode,
+                language: nil,
                 micSensitivity: configService.micSensitivity,
                 originalFile: originalFile,
                 onStage: { [weak self] stage in self?.applyDebriefStage(stage) }
@@ -1449,324 +1389,14 @@ final class MenuBarViewModel: ObservableObject {
         configService.diagnosticLogging.toggle()
     }
 
-    // MARK: - Language
-
-    func setLanguage(_ language: Language) {
-        // Auto-enable if the chosen language is currently disabled
-        configService.enableLanguage(language)
-        applyLanguageChange(language)
-        sendNotification(title: "Write in", body: language.displayName, isRoutine: true)
-    }
-
-    func cycleLanguage() {
-        let enabled = configService.enabledLanguages
-        let next = configService.language.next(in: enabled)
-        setLanguage(next)
-    }
-
-    /// Toggle a language's enabled state in the carousel.
-    /// - If enabling: also sets it as the active language.
-    /// - If disabling and it was the active language: cycles to the next enabled language.
-    /// - No-op if it is the last enabled language (enforced by ConfigService).
-    func toggleLanguage(_ language: Language) {
-        let wasEnabled = configService.isLanguageEnabled(language)
-        let isActive = configService.language == language
-        let isLastEnabled = configService.enabledLanguages.count == 1 && wasEnabled
-
-        guard !isLastEnabled else { return }
-
-        if wasEnabled {
-            // If disabling the active language, cycle away first
-            if isActive {
-                // Compute next among remaining enabled (excluding this one)
-                let remaining = configService.enabledLanguages.filter { $0 != language }
-                let nextLang = remaining.first ?? language
-                applyLanguageChange(nextLang)
-            }
-            configService.disableLanguage(language)
-        } else {
-            // Enable and activate
-            configService.enableLanguage(language)
-            applyLanguageChange(language)
-            sendNotification(title: "Write in", body: language.displayName, isRoutine: true)
-        }
-    }
-
-    /// Sets the active language and, if its effective Whisper model (see
-    /// `effectiveModel(for:)`) differs from what's currently loaded, reloads to
-    /// it — without touching the persisted preference
-    /// (`configService.whisperModel`).
-    ///
-    /// The language change itself is always applied immediately, matching the
-    /// existing (pre-KB-Whisper) behaviour of `setLanguage`/`toggleLanguage`,
-    /// which never blocked on `appState`; there is no existing precedent for
-    /// rejecting a language change mid-recording, so none is introduced here —
-    /// only the model swap defers until the app is idle.
-    private func applyLanguageChange(_ language: Language) {
-        configService.language = language
-        reloadForCurrentLanguageIfNeeded()
-    }
-
-    /// Reloads to the effective model for the current language if it differs
-    /// from what's loaded, using the same reload-with-fallback machinery as
-    /// `setWhisperModel`. If the app isn't idle (recording or processing),
-    /// defers via `languageModelReloadPending` instead of reloading; the
-    /// `$appState` subscription in `init` re-runs this as soon as `appState`
-    /// becomes `.idle` again.
-    private func reloadForCurrentLanguageIfNeeded() {
-        // Parakeet engines don't track a Whisper model, so a language change
-        // has no reload to trigger — see `TranscriptionEngineKind.usesWhisperModelSubmenu`.
-        guard configService.engine.usesWhisperModelSubmenu else {
-            languageModelReloadPending = false
-            return
-        }
-        let target = effectiveModel(for: configService.language)
-        guard target != loadedModel else {
-            languageModelReloadPending = false
-            return
-        }
-        guard appState == .idle else {
-            languageModelReloadPending = true
-            return
-        }
-
-        languageModelReloadPending = false
-        // `?? .small` only matters if a prior total failure left nothing
-        // loaded (see `reloadWithFallback`); `.small` is bundled in release
-        // builds, so it's the safest possible fallback target.
-        let previousModel = loadedModel ?? .small
-        appState = .loading
-        Task { @MainActor in
-            await self.reloadWithFallback(to: target, from: previousModel)
-        }
-    }
-
-    // MARK: - Mic Sensitivity
+        // MARK: - Mic Sensitivity
 
     func setMicSensitivity(_ sensitivity: MicSensitivity) {
         configService.micSensitivity = sensitivity
         sendNotification(title: "Mic Sensitivity", body: "Set to \(sensitivity.displayName)", isRoutine: true)
     }
 
-    // MARK: - Whisper Model
-
-    /// The model that should be active for `language`: KB-Whisper Small
-    /// (Swedish-tuned) when `language` is Swedish, overriding any user
-    /// preference — its Swedish WER is far better than the general models', but
-    /// it must never be used for any other language, where its WER is far
-    /// worse. For every other language, the user's own preference applies —
-    /// unless the "preference" isn't actually user-selectable (e.g. a
-    /// hand-edited config with `whisper_model: "kb-whisper-small"`), in which
-    /// case it's coerced to `.small` rather than smuggling KB-Whisper into a
-    /// non-Swedish language.
-    ///
-    /// Pure and static (and `nonisolated`, since it touches no actor state) so
-    /// it's unit-testable without a live `MenuBarViewModel` or `@MainActor`.
-    nonisolated static func effectiveModel(for language: Language, preference: WhisperModel) -> WhisperModel {
-        guard language == .swedish else {
-            return preference.isUserSelectable ? preference : .small
-        }
-        return .kbWhisperSmall
-    }
-
-    /// Convenience over `effectiveModel(for:preference:)` using the currently
-    /// persisted preference (`configService.whisperModel`).
-    func effectiveModel(for language: Language) -> WhisperModel {
-        let preference = WhisperModel(rawValue: configService.whisperModel) ?? .small
-        return Self.effectiveModel(for: language, preference: preference)
-    }
-
-    /// Switches the persisted preference to `model`, reloading it live. Returns
-    /// the `Task` doing the work (nil if the switch was skipped — already
-    /// idle-blocked, already on `model`, or a no-op because Swedish is active
-    /// and KB-Whisper stays loaded regardless of preference) so tests can await
-    /// its completion instead of polling `appState`. Production callers can
-    /// ignore the return value.
-    @discardableResult
-    func setWhisperModel(_ model: WhisperModel) -> Task<Void, Never>? {
-        guard model.rawValue != configService.whisperModel else { return nil }
-
-        // Parakeet engines have no Whisper Model submenu equivalent (see
-        // `TranscriptionEngineKind.usesWhisperModelSubmenu`) — just remember the
-        // preference for whenever Whisper becomes the active engine again.
-        guard configService.engine.usesWhisperModelSubmenu else {
-            configService.whisperModel = model.rawValue
-            return nil
-        }
-
-        // While Svenska is active, KB-Whisper stays loaded no matter what the
-        // user picks here — just remember the preference for later languages.
-        if configService.language == .swedish {
-            configService.whisperModel = model.rawValue
-            return nil
-        }
-
-        guard appState == .idle else { return nil }
-
-        let previousModel = loadedModel ?? .small
-        appState = .loading
-
-        return Task { @MainActor in
-            await self.reloadWithFallback(to: model, from: previousModel) {
-                // Only persist the new model once it has actually loaded.
-                self.configService.whisperModel = model.rawValue
-                self.sendNotification(
-                    title: "Model Changed",
-                    body: "Switched to \(model.displayName).",
-                    isRoutine: true
-                )
-            }
-        }
-    }
-
-    /// Reloads the transcription engine to `model`, using the shared
-    /// progress-polling and disk-guard machinery (`withDownloadProgressPolling`,
-    /// `Transcriber.reload`), falling back to `previousModel` on failure, and —
-    /// if that fallback *also* fails — to `.small` as a last resort (unless
-    /// `.small` was already the failed fallback), since `.small` is bundled in
-    /// release builds and so can't fail on a network or disk-space problem the
-    /// way a download-dependent model can. Updates `loadedModel` and `appState`
-    /// on any successful attempt; never touches `configService.whisperModel` —
-    /// callers persist the preference themselves via `onSuccess` when the
-    /// reload represents an explicit user choice (see `setWhisperModel`).
-    /// Caller is responsible for the `appState == .idle` guard and setting
-    /// `appState = .loading` before calling this, so it's shared unmodified by
-    /// both the user-driven and the language-driven reload paths.
-    private func reloadWithFallback(to model: WhisperModel, from previousModel: WhisperModel, onSuccess: (() -> Void)? = nil) async {
-        do {
-            try await withDownloadProgressPolling {
-                try await transcriber.reload(model: model)
-            }
-            loadedModel = model
-            appState = .idle
-            onSuccess?()
-        } catch {
-            // The new model failed to load. Fall back to the model that was
-            // working before, so recording (which requires appState == .idle)
-            // doesn't stay broken until an app restart.
-            do {
-                try await withDownloadProgressPolling {
-                    try await transcriber.reload(model: previousModel)
-                }
-                loadedModel = previousModel
-                appState = .idle
-                if model == .kbWhisperSmall {
-                    sendNotification(
-                        title: "Error",
-                        body: "Could not load KB-Whisper Small. Svenska will use \(previousModel.displayName) until you switch language again."
-                    )
-                } else {
-                    sendNotification(
-                        title: "Error",
-                        body: "Could not load \(model.displayName), kept \(previousModel.displayName)."
-                    )
-                }
-            } catch {
-                // Both the target and the fallback failed. Last resort: try
-                // `.small` (skip if it was already the failed fallback above —
-                // no point retrying the same failure).
-                if previousModel != .small {
-                    do {
-                        try await withDownloadProgressPolling {
-                            try await transcriber.reload(model: .small)
-                        }
-                        loadedModel = .small
-                        appState = .idle
-                        sendNotification(
-                            title: "Error",
-                            body: "Could not load \(model.displayName) or \(previousModel.displayName). Fell back to \(WhisperModel.small.displayName)."
-                        )
-                        return
-                    } catch {
-                        // Fall through to the terminal failure below.
-                    }
-                }
-
-                // Every attempt failed, including the last-resort `.small`
-                // fallback (or it was skipped because `.small` was already the
-                // failed fallback above). Mirror the startup-failure path
-                // (initialize()) by staying out of .idle rather than
-                // pretending the app is ready to record — and don't leave
-                // `loadedModel` claiming a model that isn't actually loaded.
-                loadedModel = nil
-                sendNotification(
-                    title: "Error",
-                    body: transcriber.errorMessage ?? "Failed to load Whisper model"
-                )
-            }
-        }
-    }
-
-    // MARK: - Transcription Engine
-
-    /// Switches the active transcription engine to `kind` — Whisper or one
-    /// of the Parakeet variants (see `TranscriptionEngineKind`). Mirrors
-    /// `setWhisperModel`'s shape: a `.loading` state while the swap is in
-    /// flight, the choice persisted only once the new engine has actually
-    /// loaded, and on failure the previous engine is restored (not
-    /// persisted) rather than leaving the app on a broken one. Unlike
-    /// `setWhisperModel`'s three-step fallback ladder, there's only one
-    /// fallback here: the engine that was already loaded and working — it
-    /// doesn't need reloading, just restoring.
-    ///
-    /// Building a `.whisper` engine uses `effectiveModel(for:)` for the
-    /// current language, not the raw preference — so switching back to
-    /// Whisper while Svenska is active loads KB-Whisper Small, exactly as if
-    /// Svenska had just been selected.
-    ///
-    /// Returns the `Task` doing the work (nil if the switch was skipped —
-    /// already on `kind`, or idle-blocked) so tests can await its completion
-    /// instead of polling `appState`. Production callers can ignore the
-    /// return value.
-    @discardableResult
-    func setEngine(_ kind: TranscriptionEngineKind) -> Task<Void, Never>? {
-        guard kind != configService.engine else { return nil }
-        guard appState == .idle else { return nil }
-
-        let previousEngine = transcriber
-        let previousKind = configService.engine
-        let model = effectiveModel(for: configService.language)
-        let newEngine = engineFactory(kind, model)
-
-        appState = .loading
-        transcriber = newEngine
-
-        return Task { @MainActor in
-            await self.withDownloadProgressPolling {
-                await newEngine.load()
-            }
-
-            if newEngine.isReady {
-                self.configService.engine = kind
-                self.loadedModel = kind.usesWhisperModelSubmenu ? model : nil
-                self.appState = .idle
-                // Release the engine we just switched away from — it's no
-                // longer reachable from `self.transcriber`, but without an
-                // explicit unload its compiled models (WhisperKit's Core ML/
-                // ANE resources, or FluidAudio's AsrManager) would otherwise
-                // linger until ARC gets around to it.
-                await previousEngine.unload()
-                self.sendNotification(
-                    title: "Engine Changed",
-                    body: "Switched to \(kind.displayName).",
-                    isRoutine: true
-                )
-            } else {
-                // The new engine failed to load. Restore the engine that was
-                // working before — it's already loaded, so no need to reload
-                // it — so recording (which requires appState == .idle)
-                // doesn't stay broken until an app restart.
-                self.transcriber = previousEngine
-                self.appState = .idle
-                self.sendNotification(
-                    title: "Error",
-                    body: "Could not switch to \(kind.displayName): \(newEngine.errorMessage ?? "failed to load"). Kept \(previousKind.displayName)."
-                )
-            }
-        }
-    }
-
-    // MARK: - TTS Voice
+        // MARK: - TTS Voice
 
     var ttsVoice: KokoroVoice {
         ttsService.voice
@@ -1808,7 +1438,6 @@ final class MenuBarViewModel: ObservableObject {
             pushToTalk: configService.getHotkey(for: .pushToTalk)
         )
         hotkeyManager.updateTtsConfig(configService.ttsHotkey)
-        hotkeyManager.updateLanguageConfig(configService.languageToggleHotkey)
         hotkeyManager.updateFormatConfig(configService.getHotkey(for: .formatSelection))
     }
 
@@ -1963,8 +1592,7 @@ final class MenuBarViewModel: ObservableObject {
     /// decay apart from a take that ran on the wrong model (e.g. KB-Whisper on
     /// English after a mid-recording language switch deferred the reload).
     func diagnosticEngineContext() -> String {
-        let model = loadedModel?.rawValue ?? "-"
-        return "engine=\(configService.engine.rawValue) model=\(model) lang=\(configService.language.rawValue)"
+        "engine=parakeet model=ultra language=automatic"
     }
 
     /// Resident memory of this process as "mem=<MB>MB", or "mem=?" if the
@@ -2048,14 +1676,13 @@ extension MenuBarViewModel: HotkeyManagerDelegate {
     
     nonisolated func formatHotkeyPressed() {
         Task { @MainActor in
-            let currentLanguage = configService.language
-            clipboardManager.formatSelection(style: .message, language: currentLanguage)
+            clipboardManager.formatSelection(style: .message)
         }
     }
 
     /// Find another mode that uses the same hotkey, if any
     private func findConflictingMode(for hotkey: HotkeyConfig, excluding mode: HotkeyMode) -> HotkeyMode? {
-        for other in HotkeyMode.allCases where other != mode {
+        for other in HotkeyMode.userConfigurableCases where other != mode {
             let existing = configService.getHotkey(for: other)
             if existing == hotkey {
                 return other
@@ -2106,12 +1733,6 @@ extension MenuBarViewModel: HotkeyManagerDelegate {
     nonisolated func hotkeyManagerDidFailToStart(_ error: String) {
         Task { @MainActor in
             sendNotification(title: "Hotkey Error", body: error)
-        }
-    }
-
-    nonisolated func languageHotkeyPressed() {
-        Task { @MainActor in
-            cycleLanguage()
         }
     }
 

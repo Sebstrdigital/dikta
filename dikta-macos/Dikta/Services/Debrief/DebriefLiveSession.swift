@@ -128,7 +128,7 @@ final class DebriefLiveSession: @unchecked Sendable {
         self.rolling = RollingDebriefSummarizer(
             summarizer: deltaSummarizer,
             similarityProvider: similarity,
-            language: DebriefPipeline.renderLanguage(for: language)
+            language: language
         )
 
         // Set before the first append, as `onChunkTranscribed` requires.
@@ -281,8 +281,8 @@ final class DebriefLiveSession: @unchecked Sendable {
             paths: paths,
             language: language,
             issues: collectedIssues,
-            summarize: { [deltaEngineName] _, _ in
-                let summary = try await rolling.finish()
+            summarize: { [deltaEngineName] _, renderLanguage in
+                let summary = try await rolling.finish(language: renderLanguage)
                 let events = await rolling.events
                 return (summary, "\(deltaEngineName) (rolling)", events)
             },

@@ -3,23 +3,19 @@ import FluidAudio
 import Foundation
 
 /// Seam between `ParakeetEngine` and FluidAudio's Parakeet models — the same
-/// role `TranscriptionEngine` plays for `MenuBarViewModel` and WhisperKit:
+/// role `TranscriptionEngine` plays for `MenuBarViewModel`:
 /// `ParakeetEngine` talks to FluidAudio only through this protocol, never to
 /// `AsrModels`/`AsrManager` directly, so tests substitute `FakeParakeetBackend`
 /// (`DiktaTests/FakeParakeetBackend.swift`) and never download or load a real
 /// model under XCTest.
 protocol ParakeetBackend: AnyObject {
-    /// Download (if needed) and load the model variant for `kind`, reporting
-    /// download progress on `progressHandler` (0...1). Called on an
-    /// unspecified queue, mirroring FluidAudio's own `ProgressHandler`.
-    func loadModel(
-        kind: TranscriptionEngineKind,
-        encoderComputeUnits: MLComputeUnits?,
+    /// Download (if needed) and load Ultra, reporting download progress.
+    func loadUltra(
         progressHandler: @escaping @Sendable (Double) -> Void
     ) async throws
 
     /// Transcribe `samples` (Float32 @ 16kHz) with the loaded model.
-    /// `promptText` is accepted for interface parity with `Transcriber`, but
+    /// `promptText` is accepted for chunk-pipeline interface parity, but
     /// FluidAudio's Parakeet decoder takes no textual prompt, so a real
     /// backend ignores it.
     func transcribe(_ samples: [Float], promptText: String?) async throws -> ParakeetBackendResult
@@ -57,15 +53,12 @@ final class FluidAudioParakeetBackend: ParakeetBackend {
     private var manager: AsrManager?
     private var decoderLayers: Int?
 
-    func loadModel(
-        kind: TranscriptionEngineKind,
-        encoderComputeUnits: MLComputeUnits?,
+    func loadUltra(
         progressHandler: @escaping @Sendable (Double) -> Void
     ) async throws {
-        let version = Self.modelVersion(for: kind)
         let models = try await AsrModels.downloadAndLoad(
-            version: version,
-            encoderComputeUnits: encoderComputeUnits,
+            version: .ultra,
+            encoderComputeUnits: nil,
             progressHandler: { progress in progressHandler(progress.fractionCompleted) }
         )
 
@@ -95,34 +88,12 @@ final class FluidAudioParakeetBackend: ParakeetBackend {
         manager = nil
         decoderLayers = nil
     }
-
-    /// Maps a persisted `TranscriptionEngineKind` to the FluidAudio model
-    /// version it downloads/loads. `.whisper` has no Parakeet equivalent —
-    /// unreachable in practice, since `ParakeetEngine` is only ever
-    /// constructed for a `.parakeet*` kind — but is listed explicitly so the
-    /// switch stays exhaustive rather than needing a `default` that could
-    /// silently swallow a future kind.
-    private static func modelVersion(for kind: TranscriptionEngineKind) -> AsrModelVersion {
-        switch kind {
-        case .parakeetRedux: return .redux
-        case .parakeetV3: return .v3
-        case .parakeetUltra: return .ultra
-        case .whisper: return .v3
-        }
-    }
 }
 
 /// Service for transcribing audio using FluidAudio's Parakeet models.
 ///
-/// Conforms to `TranscriptionEngine` alongside `Transcriber` (WhisperKit) so
-/// `MenuBarViewModel` can depend on that protocol rather than on either
-/// backend directly. One instance transcribes one fixed
-/// `TranscriptionEngineKind` (`.parakeetRedux`/`.parakeetV3`/`.parakeetUltra`)
-/// — unlike `Transcriber`, whose `reload(model:)` swaps the active Whisper
-/// model size, Parakeet has no equivalent submenu
-/// (`TranscriptionEngineKind.usesWhisperModelSubmenu` is `false` for every
-/// Parakeet kind), so switching Parakeet variants means switching which
-/// `ParakeetEngine` instance is active, not reloading this one.
+/// The sole production speech-to-text engine. Every macOS transcription path
+/// uses the pinned Parakeet Ultra model with multilingual automatic decode.
 @MainActor
 final class ParakeetEngine: ObservableObject, TranscriptionEngine {
     @Published private(set) var isLoading = false
@@ -130,25 +101,16 @@ final class ParakeetEngine: ObservableObject, TranscriptionEngine {
     @Published private(set) var errorMessage: String?
     @Published private(set) var downloadProgress: Double?
 
-    private let kind: TranscriptionEngineKind
+    nonisolated static let approximateSizeMB = 615
+
     private let backend: ParakeetBackend
     private let freeDiskSpaceProvider: () -> Int64
 
-    /// - Parameters:
-    ///   - kind: Which Parakeet variant this engine loads and transcribes with.
-    ///   - backend: FluidAudio seam. Defaults to the real FluidAudio-backed
-    ///     implementation; tests inject `FakeParakeetBackend`.
-    ///   - freeDiskSpaceProvider: Same disk-space probe `Transcriber` uses
-    ///     (bytes free on the volume holding Application Support, where
-    ///     FluidAudio caches models too — see `MLModelConfigurationUtils
-    ///     .defaultModelsDirectory`), so both engines agree on what "enough
-    ///     free space" means. Defaults to `Transcriber.defaultFreeDiskSpace`.
+    /// Tests inject both dependencies so no real model or user filesystem is touched.
     init(
-        kind: TranscriptionEngineKind,
         backend: ParakeetBackend = FluidAudioParakeetBackend(),
-        freeDiskSpaceProvider: @escaping () -> Int64 = Transcriber.defaultFreeDiskSpace
+        freeDiskSpaceProvider: @escaping () -> Int64 = TranscriptionSupport.defaultFreeDiskSpace
     ) {
-        self.kind = kind
         self.backend = backend
         self.freeDiskSpaceProvider = freeDiskSpaceProvider
     }
@@ -158,13 +120,6 @@ final class ParakeetEngine: ObservableObject, TranscriptionEngine {
         guard !isLoading && !isReady else { return }
         await loadModel()
     }
-
-    /// `TranscriptionEngine.reload(model:)` exists for WhisperKit's model-size
-    /// switching (see `Transcriber.reload(model:)`); Parakeet has no
-    /// equivalent — `model` is unused. A no-op that leaves `isReady`
-    /// untouched, so a caller that always calls `reload(model:)` on a
-    /// Whisper-model-menu selection doesn't have to special-case Parakeet.
-    func reload(model: WhisperModel) async throws {}
 
     /// Release the backend's loaded model resources — called when this
     /// engine is being replaced by another (see `MenuBarViewModel.setEngine`),
@@ -182,26 +137,20 @@ final class ParakeetEngine: ObservableObject, TranscriptionEngine {
 
         do {
             guard hasEnoughDiskSpace() else {
-                throw ParakeetEngineError.insufficientDiskSpace(
-                    kind: kind,
-                    requiredMB: kind.approximateSizeMB * 2
-                )
+                throw ParakeetEngineError.insufficientDiskSpace(requiredMB: Self.approximateSizeMB * 2)
             }
 
             downloadProgress = 0
-            AppLogger.transcription.info("Downloading Parakeet model: \(self.kind.displayName)")
+            AppLogger.transcription.info("Loading Parakeet Ultra")
 
-            try await backend.loadModel(
-                kind: kind,
-                encoderComputeUnits: Self.encoderComputeUnits(for: kind)
-            ) { [weak self] progress in
+            try await backend.loadUltra { [weak self] progress in
                 Task { @MainActor in
                     self?.downloadProgress = progress
                 }
             }
             isReady = true
         } catch {
-            errorMessage = "Failed to load \(kind.displayName) model: \(error.localizedDescription)"
+            errorMessage = "Failed to load Parakeet Ultra: \(error.localizedDescription)"
             AppLogger.transcription.error("Parakeet model loading error: \(error.localizedDescription)")
         }
 
@@ -209,18 +158,9 @@ final class ParakeetEngine: ObservableObject, TranscriptionEngine {
         isLoading = false
     }
 
-    /// Redux's ternary-quantized encoder benchmarks faster on GPU than on
-    /// ANE; v3/Ultra use the platform default (ANE) by passing `nil` through
-    /// to `AsrModels`. See `AsrModels.createModelSpecs`'s doc comment on
-    /// `encoderComputeUnits` for the general ANE-vs-GPU tradeoff.
-    private static func encoderComputeUnits(for kind: TranscriptionEngineKind) -> MLComputeUnits? {
-        kind == .parakeetRedux ? .cpuAndGPU : nil
-    }
-
-    /// True if there's at least 2x `kind`'s approximate download size free,
-    /// mirroring `Transcriber.hasEnoughDiskSpace(for:)`.
+    /// True if there's at least twice the approximate Ultra download size free.
     private func hasEnoughDiskSpace() -> Bool {
-        let requiredBytes = Int64(kind.approximateSizeMB) * 2 * 1_048_576
+        let requiredBytes = Int64(Self.approximateSizeMB) * 2 * 1_048_576
         return freeDiskSpaceProvider() >= requiredBytes
     }
 
@@ -230,8 +170,7 @@ final class ParakeetEngine: ObservableObject, TranscriptionEngine {
     ///   - language: Ignored — FluidAudio's Parakeet decode path used here
     ///     has no language-hint input in this engine's scope.
     /// - Returns: Cleaned text, using the same trim/sanitize pass as
-    ///   `Transcriber` (`Transcriber.cleanSegments`, shared rather than
-    ///   duplicated so the two engines never drift on what counts as noise).
+    ///   the backend-neutral `TranscriptionSupport` cleanup pass.
     func transcribe(_ audioSamples: [Float], language: String? = nil, micSensitivity: MicSensitivity = .normal) async throws -> String {
         guard isReady else {
             throw ParakeetEngineError.modelNotLoaded
@@ -242,7 +181,7 @@ final class ParakeetEngine: ObservableObject, TranscriptionEngine {
         }
 
         let result = try await backend.transcribe(audioSamples, promptText: nil)
-        let text = Transcriber.cleanSegments([RawTranscriptSegment(text: result.text)])
+        let text = TranscriptionSupport.cleanSegments([RawTranscriptSegment(text: result.text)])
 
         if text.isEmpty {
             throw ParakeetEngineError.noSpeechDetected
@@ -254,13 +193,11 @@ final class ParakeetEngine: ObservableObject, TranscriptionEngine {
     /// Transcribe audio samples into timestamped segments, in seconds
     /// relative to the start of `samples`. `language` is ignored (see
     /// `transcribe`). `promptText` is accepted for `TranscriptionEngine`
-    /// conformance — mirroring `Transcriber`'s cross-chunk continuity prompt
-    /// — and passed through to the backend, but FluidAudio's Parakeet
+    /// conformance and passed through to the backend, but FluidAudio's Parakeet
     /// decoder takes no textual prompt, so it has no effect on the result.
     /// - Returns: Segments sorted by `start`, monotonic non-decreasing, with
     ///   sanitized text and empty segments dropped — the same rules
-    ///   `Transcriber.transcribeSegments` applies, reused via
-    ///   `Transcriber.sanitizeAndDropEmpty`/`Transcriber.sortMonotonic`.
+    ///   the shared `TranscriptionSupport` helpers apply.
     ///   When the backend reports no per-token timings for this call (see
     ///   `ParakeetBackendResult.wordTimings`), falls back to a single segment
     ///   spanning this whole chunk — "one segment per result window" for the
@@ -292,7 +229,7 @@ final class ParakeetEngine: ObservableObject, TranscriptionEngine {
             }
         }
 
-        return Transcriber.sortMonotonic(Transcriber.sanitizeAndDropEmpty(rawSegments))
+        return TranscriptionSupport.sortMonotonic(TranscriptionSupport.sanitizeAndDropEmpty(rawSegments))
     }
 }
 
@@ -300,7 +237,7 @@ enum ParakeetEngineError: Error, LocalizedError {
     case modelNotLoaded
     case emptyAudio
     case noSpeechDetected
-    case insufficientDiskSpace(kind: TranscriptionEngineKind, requiredMB: Int)
+    case insufficientDiskSpace(requiredMB: Int)
 
     var errorDescription: String? {
         switch self {
@@ -310,8 +247,8 @@ enum ParakeetEngineError: Error, LocalizedError {
             return "No audio recorded"
         case .noSpeechDetected:
             return "No speech detected in recording"
-        case .insufficientDiskSpace(let kind, let requiredMB):
-            return "Not enough free disk space to download \(kind.displayName) (~\(kind.approximateSizeMB) MB model). Free at least \(requiredMB) MB and try again."
+        case .insufficientDiskSpace(let requiredMB):
+            return "Not enough free disk space to download Parakeet Ultra (~\(ParakeetEngine.approximateSizeMB) MB model). Free at least \(requiredMB) MB and try again."
         }
     }
 }

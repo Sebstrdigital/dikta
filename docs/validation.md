@@ -26,34 +26,27 @@ cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta -only-t
 
 **Run command**: same as above (all in DiktaTests target)
 
-## Transcription Engine (Whisper + Parakeet)
+## Transcription Engine (Parakeet Ultra)
 
-**Files**: `dikta-macos/Dikta/Models/TranscriptionEngineKind.swift`, `dikta-macos/Dikta/Services/TranscriptionEngine.swift`,
-`dikta-macos/Dikta/Services/Transcriber.swift`, `dikta-macos/Dikta/Services/ParakeetEngine.swift`,
-`dikta-macos/Dikta/ViewModels/MenuBarViewModel.swift` (`setEngine(_:)`, `engineFactory`),
-`dikta-macos/Dikta/Views/MenuBarView.swift` (`Engine:` submenu in `AdvancedMenu`)
+**Files**: `dikta-macos/Dikta/Services/TranscriptionEngine.swift`,
+`dikta-macos/Dikta/Services/ParakeetEngine.swift`, `dikta-macos/Dikta/Services/TranscriptionSupport.swift`,
+`dikta-macos/Dikta/Services/TextLanguageInference.swift`, `dikta-macos/Dikta/ViewModels/MenuBarViewModel.swift`.
+Legacy config compatibility also covers `TranscriptionEngineKind.swift`, `AppConfig.swift`, and `HotkeyConfig.swift`.
 
-**Test files**: `ParakeetEngineTests.swift`, `MenuBarViewModelSetEngineTests.swift`, `FakeParakeetBackend.swift`,
-`FakeTranscriptionEngine.swift`
+**Test classes**: `ParakeetEngineTests`, `TranscriptionSupportPostProcessingTests`,
+`TranscriptionSupportSanitizeAndDropEmptyTests`, `TranscriptionSupportSortMonotonicTests`,
+`TextLanguageInferenceTests`, `HotkeyModeAvailabilityTests`, and config tests above.
 
-**Test classes**: `ParakeetEngineTests`, `MenuBarViewModelSetEngineTests`. Config decode/round-trip
-of the `engine` key (missing key, unknown value, known value) lives in the existing
-`AppConfigDecodingTests` (see Config above).
-
-**Run command**: same `DiktaTests` target as above, e.g.
-```bash
-cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta -only-testing:DiktaTests -destination 'platform=macOS' CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" DEVELOPMENT_TEAM=UUM29335B4 2>&1 | grep -E 'Executed.*test|error:|failed'
-```
-To run just these two classes: `-only-testing:DiktaTests/ParakeetEngineTests -only-testing:DiktaTests/MenuBarViewModelSetEngineTests`.
+**Run command**: same signed Release `DiktaTests` target as above.
 
 **Rules**:
-1. No test may download or load a real FluidAudio/Parakeet model — `ParakeetEngineTests` injects
-   `FakeParakeetBackend` (never the real `FluidAudioParakeetBackend`), the same way `MenuBarViewModelSetEngineTests`
-   and other ViewModel tests inject `FakeTranscriptionEngine`/a fake `engineFactory` rather than building a real
-   `Transcriber` or `ParakeetEngine`.
-2. `setEngine(_:)` behavior to cover on any change: no-op when the requested kind is already active,
-   the previous engine is restored (and not persisted over) on load failure, and the Swedish
-   KB-Whisper auto-select rule still applies when switching back to `.whisper` from Parakeet.
+1. Unit tests must inject `FakeParakeetBackend` or `FakeTranscriptionEngine`; they must never load or download a real model.
+2. Cover Ultra load/download failure, disk guard, cleanup, empty/no-speech behavior, timing fallback/order,
+   automatic language consumers, nil language hints at every app entry point, inactive language-hotkey collisions,
+   and legacy config round-trip.
+3. Real Ultra checks are separate manual qualification runs using public fixtures only.
+4. The isolated validation scheme must inject both `DIKTA_CONFIG_FILE` and `DIKTA_REAL_SESSIONS_DIR`;
+   `TestHostIsolationTests` verifies those effective test-host paths.
 
 **Parakeet bench command** (WER/RTF/load-time comparison against Whisper, not part of the
 `DiktaTests` gate — a manual report, see `docs/review-2026-09/parakeet-bench.md`):

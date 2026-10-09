@@ -155,9 +155,7 @@ class ClipboardManager {
     }
 
     /// Copy selection, format it, paste it back
-    func formatSelection(style: FormatterStyle, language: Language = .english) {
-        // Save current pasteboard to restore if needed
-        let previousContents = getText()
+    func formatSelection(style: FormatterStyle) {
         let previousChangeCount = NSPasteboard.general.changeCount
 
         // Simulate Cmd+C
@@ -175,7 +173,9 @@ class ClipboardManager {
                 return
             }
 
-            // Format
+            // Infer only from the selected text. Ambiguous, mixed, and
+            // unsupported text deliberately uses heuristic-only splitting.
+            let language = TextLanguageInference.infer(from: selectedText)
             let formatted = FormatterEngine().format(selectedText, style: style, language: language)
 
             // Write formatter text to pasteboard

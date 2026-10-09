@@ -128,11 +128,17 @@ final class DebriefPipeline {
         Int((chunking.targetChunkSeconds * AudioFileLoader.targetSampleRate).rounded())
     }
 
-    /// The language the summary is written and rendered in. Only Swedish and
-    /// English are supported for the PoC; anything else falls back to English.
+    /// Compatibility helper retained for direct callers and old tests.
+    /// Automatic app paths use `renderLanguage(forTranscript:)` below.
     nonisolated static func renderLanguage(for code: String?) -> String {
         guard let code, code == "sv" || code == "en" else { return "en" }
         return code
+    }
+
+    /// Infer from the transcript that will actually be summarized. Ambiguous,
+    /// mixed, short, and unsupported text conservatively falls back to English.
+    nonisolated static func renderLanguage(forTranscript transcript: String) -> String {
+        TextLanguageInference.debriefCode(for: transcript)
     }
 
     /// - Parameters:
@@ -229,7 +235,7 @@ final class DebriefPipeline {
 
         onStage(.summarizing)
 
-        let renderLanguage = Self.renderLanguage(for: language)
+        let renderLanguage = Self.renderLanguage(forTranscript: transcript)
         // Engines write "Not specified"/"N/A" where the schema asks for null;
         // normalize before rendering so that never reaches the pasted text.
         // validated() then checks the surviving due/owner values against the

@@ -208,10 +208,11 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
     func test_processAudio_withDebriefModeEnabled_runsSummarizer() async {
         configService.debriefModeEnabled = true
         let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
-        let (viewModel, _) = makeViewModel(summarizer: summarizer)
+        let (viewModel, engine) = makeViewModel(summarizer: summarizer)
 
         await viewModel.processAudio(silence())
 
+        XCTAssertEqual(engine.receivedLanguageHints, [nil])
         XCTAssertEqual(summarizer.summarizeCallCount, 1)
         XCTAssertEqual(viewModel.lastDebriefEngineName, "Fake")
         XCTAssertFalse(viewModel.isSummarizing)
@@ -223,10 +224,11 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
         configService.debriefModeEnabled = false
         let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
         let transcript = "This is the debrief of the sprint review."
-        let (viewModel, _) = makeViewModel(summarizer: summarizer, transcript: transcript)
+        let (viewModel, engine) = makeViewModel(summarizer: summarizer, transcript: transcript)
 
         await viewModel.processAudio(silence())
 
+        XCTAssertEqual(engine.receivedLanguageHints, [nil])
         // No debrief...
         XCTAssertEqual(summarizer.summarizeCallCount, 0)
         XCTAssertNil(viewModel.lastDebriefEngineName)
@@ -878,6 +880,7 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
         // Both tracks were transcribed and merged into one labeled transcript,
         // then pasted and recorded in History like any other debrief.
         XCTAssertEqual(engine.receivedPromptTexts.count, 2)
+        XCTAssertTrue(engine.receivedSegmentLanguageHints.allSatisfy { $0 == nil })
         let transcript = try String(contentsOf: paths.transcript, encoding: .utf8)
         XCTAssertEqual(transcript, "Me: My side of the call.\n\nThem: Their side of the call.")
         XCTAssertEqual(summarizer.summarizeCallCount, 1)

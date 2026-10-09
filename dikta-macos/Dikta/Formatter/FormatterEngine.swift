@@ -30,8 +30,8 @@ struct FormatterEngine {
 
     // MARK: - Public API
 
-    func format(_ text: String, style: FormatterStyle, language: Language = .english) -> String {
-        let splitter = language.supportsEmbeddings ? FormatterEngine.embeddingSplitter() : nil
+    func format(_ text: String, style: FormatterStyle, language: Language? = .english) -> String {
+        let splitter = language?.supportsEmbeddings == true ? FormatterEngine.embeddingSplitter() : nil
 
         switch style {
         case .message:

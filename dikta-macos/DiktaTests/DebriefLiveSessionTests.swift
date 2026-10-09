@@ -145,6 +145,34 @@ final class DebriefLiveSessionTests: XCTestCase {
         XCTAssertEqual(result.transcript, "first chunk second chunk third chunk")
     }
 
+    func test_finish_passesWholeTranscriptFallbackLanguageToRollingConsolidation() async throws {
+        let fixture = makeFixture()
+        let swedish = "Det här mötet börjar på svenska och vi diskuterar projektplanen och morgondagens arbete i detalj."
+        let english = "This meeting continues in English and we discuss the project plan and tomorrow's work in detail."
+        fixture.engine.segmentsPerCall = [
+            [segment(swedish, 0, 1)],
+            [segment(english, 0, 1)],
+        ]
+        fixture.delta.consolidationResult = ConsolidationDelta(summary: "Mixed recap.", dropIds: [])
+
+        let session = try fixture.pipeline.startLiveSession(
+            tracks: [.me],
+            language: nil,
+            micSensitivity: .normal
+        )
+        session.append(audio(seconds: 2), track: .me)
+
+        let result = try await session.finish { _ in }
+
+        XCTAssertEqual(TextLanguageInference.debriefCode(for: result.transcript), "en")
+        XCTAssertEqual(fixture.delta.seenLanguages, ["sv", "en"])
+        XCTAssertEqual(
+            fixture.delta.consolidationLanguages,
+            ["en"],
+            "DebriefPipeline's exact whole-transcript fallback must reach rolling.finish"
+        )
+    }
+
     // MARK: - Rendering
 
     func test_twoTrackSession_rendersALabeledTranscript() async throws {

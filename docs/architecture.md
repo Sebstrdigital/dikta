@@ -3,154 +3,91 @@
 ## Pipeline
 
 ```
-Hotkey → Recording → WhisperKit STT → Auto-paste + History
+Hotkey → Recording → Parakeet Ultra → Auto-paste + History
+                  └→ Debrief → transcript-language inference → summary
 ```
+
+Every macOS speech-to-text entry point—dictation, imported audio, microphone
+Debrief, and two-track call Debrief—uses one `ParakeetEngine` backed by the
+pinned FluidAudio Ultra model. Ultra receives no language hint.
 
 ## Key Files (Swift)
 
 - **Models/**
-  - `AppConfig.swift` — Full config structure, persisted as JSON
-  - `HotkeyConfig.swift` — Modifier keys (shift, ctrl, cmd, alt, fn), hotkey matching logic
-  - `WhisperModel.swift` — Available models: small, medium, plus KB-Whisper Small (`kbWhisperSmall`), a Swedish-tuned model that is never user-selectable — `MenuBarViewModel.effectiveModel(for:)` auto-selects it whenever the active language is Svenska, overriding the user's own model preference, and releases back to it for every other language
-  - `MicDistance.swift` — Close/Normal/Far presets for speech detection sensitivity
-  - `Language.swift` — Supported languages: English, Swedish, Indonesian
+  - `AppConfig.swift` — Full persisted config. Legacy engine/model/language
+    values remain compatibility data and continue to round-trip.
+  - `TranscriptionEngineKind.swift` — Stable legacy engine raw values only.
+  - `HotkeyConfig.swift` — Hotkey matching and the four active modes;
+    `languageToggle` remains decodable but inactive.
+  - `Language.swift` — Compatibility values and formatter capabilities.
 - **Services/**
-  - `HotkeyManager.swift` — CGEventTap-based global hotkey detection (flagsChanged + keyDown/keyUp)
-  - `ConfigService.swift` — Singleton config manager, persists to `~/Library/Application Support/Dikta/config.json`
-  - `TranscriptionEngine.swift` — Protocol both STT backends conform to (see Transcription Engine below)
-  - `Transcriber.swift` — WhisperKit-backed `TranscriptionEngine`
-  - `ParakeetEngine.swift` — FluidAudio-backed `TranscriptionEngine`, one of the three Parakeet variants
-  - `UpdateChecker.swift` — Checks GitHub releases for newer versions
-  - `TextToSpeechService.swift` — Kokoro TTS integration via local Python server
-  - `TextSelectionService.swift` — Gets selected text via Accessibility API
-  - `ClipboardManager.swift` — Clipboard operations and auto-paste (Cmd+V simulation)
+  - `TranscriptionEngine.swift` — Testable speech-to-text protocol.
+  - `ParakeetEngine.swift` — The sole production STT implementation, fixed
+    to Ultra. `ParakeetBackend` lets tests avoid real model loads.
+  - `TranscriptionSupport.swift` — Shared disk-space and transcript cleanup/
+    timestamp ordering helpers extracted before Whisper removal.
+  - `TextLanguageInference.swift` — Conservative inference from actual text.
+  - `HotkeyManager.swift`, `ConfigService.swift`, `ClipboardManager.swift`.
 - **ViewModels/**
-  - `MenuBarViewModel.swift` — Main app state machine (idle/loading/recording/processing/speaking), delegates hotkey events
+  - `MenuBarViewModel.swift` — Main app state machine and all STT routing.
 - **Views/**
-  - `MenuBarView.swift` — Menu structure: Hotkeys, Audio, Write in, Advanced
-  - `OnboardingWindow.swift` — About window with permission checks, TTS install, version display, update checker
-  - `HotkeyRecordingWindow.swift` — Hotkey capture UI
+  - `MenuBarView.swift` — Menus without STT engine/model/language controls.
+  - `OnboardingWindow.swift` and `HotkeyRecordingWindow.swift`.
 
-## Hotkey Detection
+## Hotkeys
 
-Uses `CGEvent.tapCreate` listening for `keyDown`, `keyUp`, and `flagsChanged` events. Modifier-only hotkeys (e.g., Shift+Ctrl) detected via `flagsChanged`. fn/Globe key uses `.maskSecondaryFn`.
+`HotkeyManager` uses a CGEvent tap for key and modifier events. Active modes
+are Record, Push-to-Talk, Read Aloud, and Format Selection. The old language
+hotkey remains in decoded config so upgrades preserve data, but it is not
+registered, displayed, or considered by collision detection.
 
-`HotkeyConfig.matchesModifiers()` does **strict matching** — all modifiers in `ModifierKey.allCases` must match exactly.
+## Config compatibility
 
-## Hotkey Modes
+The app still decodes legacy `engine`, `whisper_model`, `language`,
+`enabled_languages`, and `language_toggle` values—including Indonesian and
+unknown engine values through the existing fallback—without using them to
+choose STT behavior. Unrelated settings and history continue to round-trip.
 
-- **Toggle** (default): Press to start, press again to stop
-- **Push-to-Talk**: Hold to record, release to stop
-- **Read Aloud**: Press to read selected text via TTS
-- **Language Toggle**: Press to cycle between languages
+Tests construct `ConfigService` with temporary files. The isolated validation
+scheme also sets `DIKTA_CONFIG_FILE` for the app test host and
+`DIKTA_REAL_SESSIONS_DIR` to an empty synthetic directory.
 
-Default hotkeys: Toggle = Shift+Ctrl, PTT = Cmd+Shift, TTS = Cmd+Alt, Language = Cmd+Ctrl.
-
-## Config
-
-Persisted at `~/Library/Application Support/Dikta/config.json`.
-
-Key fields: `hotkeys` (toggle, push_to_talk, text_to_speech, language_toggle), `whisper_model`, `language`, `mic_distance`, `mute_sounds`, `mute_notifications`.
-
-## Menu Structure
+## Menu structure
 
 ```
 Dikta
-├── Stop Recording / Stop Speaking / Processing...
-├── History >
-├── Hotkeys >
-│   ├── Set Record Hotkey...
-│   ├── Set Push-to-Talk Hotkey...
-│   ├── Set Read Aloud Hotkey...
-│   └── Set Language Toggle Hotkey...
-├── Audio >
-│   ├── Mute Sounds
-│   ├── Mute Notifications
-│   └── Mic Distance: Close / Normal / Far
-├── Write in: (language) >
-│   ├── English
-│   ├── Svenska
-│   └── Bahasa Indonesia
-├── Debrief >
-│   ├── Debrief mode
-│   ├── Source >
-│   │   ├── Microphone
-│   │   └── Microphone + system audio (one-time consent notice on first selection)
-│   ├── Load audio file…
-│   ├── Engine >
-│   │   ├── Auto
-│   │   ├── Apple Intelligence (macOS 26)
-│   │   ├── Ollama (local)
-│   │   └── Heuristic
-│   └── Open Dikta folder
-├── Advanced >
-│   ├── Engine: Whisper / Parakeet Redux / Parakeet v3 (Recommended) / Parakeet Ultra
-│   ├── Whisper Model: Small / Medium (KB-Whisper Small hidden — auto-selected for Svenska, see below;
-│   │   disabled while a Parakeet engine is active — see Transcription Engine below)
-│   └── Voice: (Kokoro voices)
+├── History
+├── Hotkeys: Record / Push-to-Talk / Read Aloud / Format Selection
+├── Audio
+├── Debrief: mode / source / import / summary engine / folder
+├── Advanced: login / updates / diagnostics / TTS voice
 ├── About
 └── Quit
 ```
 
-## Swedish Auto-Select (KB-Whisper)
+## Transcription and automatic language
 
-Whenever the active language (`ConfigService.language`) is Svenska, the transcription
-engine loads KB-Whisper Small instead of the user's chosen Whisper Model preference —
-its Swedish WER is far better than the general models', but it must never be used for
-any other language, where its WER is far worse. This is computed by
-`MenuBarViewModel.effectiveModel(for:)` and is separate from the persisted preference
-(`ConfigService.whisperModel`): picking a different model in the Whisper Model submenu
-while Svenska is active updates the preference but keeps KB-Whisper loaded, and the
-submenu shows a disabled row explaining this. Switching away from Svenska reloads back
-to the preference automatically. KB-Whisper Small is never offered as a manual choice
-(`WhisperModel.isUserSelectable == false`).
+`MenuBarViewModel` constructs one `ParakeetEngine`; tests inject
+`FakeTranscriptionEngine`. Ultra model load/download failures remain visible
+through the protocol's readiness, error, and progress state. FluidAudio keeps
+its model cache under Application Support; Dikta never deletes old or current
+model caches.
 
-## Transcription Engine
+Language-sensitive work happens only after text exists:
 
-Dictation transcribes through one of two backends, both conforming to the `TranscriptionEngine`
-protocol (`Services/TranscriptionEngine.swift`) so `MenuBarViewModel` depends on that abstraction
-rather than on either backend directly:
+- Format Selection infers from the selected text. Confident English, Spanish,
+  French, German, Portuguese, Italian, and Dutch preserve embedding eligibility;
+  Swedish remains heuristic-only. Short, ambiguous, mixed, and unsupported
+  text uses heuristic-only splitting.
+- Debrief infers English or Swedish from the transcript. Uncertain, mixed, and
+  unsupported transcripts fall back to English prompts and rendering.
+- Ultra code-switching is best-effort. Public qualification showed that short
+  English contributions can disappear in mixed English/Swedish takes; this is
+  an accepted limitation, not reliable mixed-language support.
 
-- **`Transcriber`** — WhisperKit-backed. The only kind before this feature, and the only one the
-  Whisper Model submenu applies to.
-- **`ParakeetEngine`** — FluidAudio-backed. One instance transcribes one fixed variant; switching
-  variants means swapping which `ParakeetEngine` instance is active, not reloading one instance.
-  `ParakeetEngine` never talks to FluidAudio's `AsrModels`/`AsrManager` directly — it goes through
-  its own `ParakeetBackend` seam, so tests substitute `FakeParakeetBackend` and never download or
-  load a real model under XCTest.
-
-**Kinds** (`Models/TranscriptionEngineKind.swift`, `TranscriptionEngineKind: String, CaseIterable`):
-`.whisper` (default), `.parakeetRedux` (`"parakeet-redux"`), `.parakeetV3` (`"parakeet-v3"`),
-`.parakeetUltra` (`"parakeet-ultra"`). `usesWhisperModelSubmenu` is `true` only for `.whisper` — the
-Whisper Model submenu is disabled while any Parakeet kind is active, since each Parakeet variant is
-its own fixed model with no size choice.
-
-**Factory.** `MenuBarViewModel` holds one `engineFactory: (TranscriptionEngineKind, WhisperModel) ->
-any TranscriptionEngine` — the single seam both the startup engine and every later
-`setEngine(_:)` call go through. Production builds resolve it to `Transcriber(model:)` for
-`.whisper` and `ParakeetEngine(kind:)` for the three Parakeet kinds; tests inject a fake factory so
-no real model ever loads under XCTest. `setEngine(_:)` builds the new engine, loads it, and only
-persists the switch and drops the old engine once the new one reports `isReady`; on failure the
-previous (already-loaded) engine is restored and the kind is not persisted — never falls back to a
-different kind than the one that was already working. Switching away from Parakeet back to Whisper
-while Svenska is the active language re-applies the existing KB-Whisper auto-select rule (see above);
-none of the three Parakeet variants beat KB-Whisper on Swedish (see
-`docs/review-2026-09/parakeet-bench.md`), so that rule is unchanged by this feature.
-
-**Config key.** Persisted as `engine` in `AppConfig`/`config.json`, decoded from
-`TranscriptionEngineKind.rawValue` (e.g. `"parakeet-v3"`). A config saved without an `engine` key, or
-with a raw value this build doesn't recognize, falls back to `.whisper` rather than failing to
-decode.
-
-**Model cache location.** FluidAudio downloads and caches Parakeet models under
-`~/Library/Application Support/FluidAudio/Models/<repo>/` — a sibling of Dikta's own
-`~/Library/Application Support/Dikta/config.json`, on the same volume WhisperKit's models and the
-free-disk-space check (`Transcriber.defaultFreeDiskSpace`) already use, so both engines agree on
-what "enough free space" means.
-
-**macOS 15 floor.** Adding the FluidAudio dependency raised the deployment target from 14.2 to 15.0
-(`Package.swift` `platforms`, and `MACOSX_DEPLOYMENT_TARGET` in `Dikta.xcodeproj/project.pbxproj`) —
-FluidAudio requires it. This is a floor for the whole app, not only the Parakeet engine.
+The app target and release archive have no WhisperKit dependency or bundled
+Whisper model. The separate benchmark and TimestampProbe products retain
+WhisperKit for comparison work.
 
 ## Debrief
 
@@ -218,4 +155,4 @@ Kokoro TTS is set up from the About window. Creates a Python venv at `~/Library/
 
 ## Release Build Notes
 
-The re-signing step after bundling the Whisper model must pass `--entitlements` or they get stripped. This is handled in `scripts/build-release.sh`.
+Release archives do not bundle Whisper. The release script preserves Sparkle signing order and the packaged Native Kokoro helper while signing the main app with its entitlements.

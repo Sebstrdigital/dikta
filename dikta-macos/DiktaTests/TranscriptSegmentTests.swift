@@ -1,7 +1,6 @@
 /// TranscriptSegmentTests — Codable round-trip for `TranscriptSegment`, plus
-/// the pure helpers `Transcriber` factors out for the segment API
-/// (`sanitizeAndDropEmpty`, `sortMonotonic`, `cappedPromptTokens`). No test
-/// loads a real WhisperKit model.
+/// the backend-neutral cleanup helpers used by Ultra's segment API.
+/// No test loads a real FluidAudio model.
 ///
 /// Run via: cd dikta-macos && swift test --filter TranscriptSegmentTests
 
@@ -34,11 +33,11 @@ final class TranscriptSegmentTests: XCTestCase {
     }
 }
 
-// MARK: - Transcriber.sanitizeAndDropEmpty
+// MARK: - TranscriptionSupport.sanitizeAndDropEmpty
 
-// Transcriber is @MainActor, so its static segment helpers are too.
+// Transcription cleanup helpers are backend-neutral.
 @MainActor
-final class TranscriberSanitizeAndDropEmptyTests: XCTestCase {
+final class TranscriptionSupportSanitizeAndDropEmptyTests: XCTestCase {
     func test_stripsControlTokensAndBracketNoiseFromText() {
         let segments = [
             TranscriptSegment(start: 0, end: 1, text: "<|startoftranscript|><|en|>Hello there<|endoftext|>"),
@@ -46,7 +45,7 @@ final class TranscriberSanitizeAndDropEmptyTests: XCTestCase {
             TranscriptSegment(start: 2, end: 3, text: "Actual words")
         ]
 
-        let result = Transcriber.sanitizeAndDropEmpty(segments)
+        let result = TranscriptionSupport.sanitizeAndDropEmpty(segments)
 
         XCTAssertEqual(result, [
             TranscriptSegment(start: 0, end: 1, text: "Hello there"),
@@ -61,26 +60,26 @@ final class TranscriberSanitizeAndDropEmptyTests: XCTestCase {
             TranscriptSegment(start: 2, end: 3, text: "")
         ]
 
-        XCTAssertEqual(Transcriber.sanitizeAndDropEmpty(segments), [])
+        XCTAssertEqual(TranscriptionSupport.sanitizeAndDropEmpty(segments), [])
     }
 
     func test_preservesTimestampsOnKeptSegments() {
         let segments = [TranscriptSegment(start: 12.5, end: 14.0, text: "  Real text  ")]
 
-        let result = Transcriber.sanitizeAndDropEmpty(segments)
+        let result = TranscriptionSupport.sanitizeAndDropEmpty(segments)
 
         XCTAssertEqual(result, [TranscriptSegment(start: 12.5, end: 14.0, text: "Real text")])
     }
 
     func test_emptyInputProducesEmptyOutput() {
-        XCTAssertEqual(Transcriber.sanitizeAndDropEmpty([]), [])
+        XCTAssertEqual(TranscriptionSupport.sanitizeAndDropEmpty([]), [])
     }
 }
 
-// MARK: - Transcriber.sortMonotonic
+// MARK: - TranscriptionSupport.sortMonotonic
 
 @MainActor
-final class TranscriberSortMonotonicTests: XCTestCase {
+final class TranscriptionSupportSortMonotonicTests: XCTestCase {
     func test_alreadySortedSegmentsAreUnchanged() {
         let segments = [
             TranscriptSegment(start: 0, end: 1, text: "a"),
@@ -88,7 +87,7 @@ final class TranscriberSortMonotonicTests: XCTestCase {
             TranscriptSegment(start: 2, end: 3, text: "c")
         ]
 
-        XCTAssertEqual(Transcriber.sortMonotonic(segments), segments)
+        XCTAssertEqual(TranscriptionSupport.sortMonotonic(segments), segments)
     }
 
     func test_outOfOrderSegmentsAreSortedByStart() {
@@ -97,7 +96,7 @@ final class TranscriberSortMonotonicTests: XCTestCase {
             TranscriptSegment(start: 0, end: 1, text: "first")
         ]
 
-        XCTAssertEqual(Transcriber.sortMonotonic(segments), [
+        XCTAssertEqual(TranscriptionSupport.sortMonotonic(segments), [
             TranscriptSegment(start: 0, end: 1, text: "first"),
             TranscriptSegment(start: 5, end: 6, text: "second")
         ])
@@ -109,7 +108,7 @@ final class TranscriberSortMonotonicTests: XCTestCase {
             TranscriptSegment(start: 3, end: 4, text: "b")
         ]
 
-        let result = Transcriber.sortMonotonic(segments)
+        let result = TranscriptionSupport.sortMonotonic(segments)
 
         XCTAssertEqual(result.count, 2)
         XCTAssertGreaterThanOrEqual(result[1].start, result[0].start)
@@ -122,7 +121,7 @@ final class TranscriberSortMonotonicTests: XCTestCase {
             TranscriptSegment(start: 2, end: 3, text: "b")
         ]
 
-        let result = Transcriber.sortMonotonic(segments)
+        let result = TranscriptionSupport.sortMonotonic(segments)
 
         for i in 1..<result.count {
             XCTAssertGreaterThanOrEqual(result[i].start, result[i - 1].start)
@@ -130,48 +129,12 @@ final class TranscriberSortMonotonicTests: XCTestCase {
     }
 
     func test_emptyInputProducesEmptyOutput() {
-        XCTAssertEqual(Transcriber.sortMonotonic([]), [])
+        XCTAssertEqual(TranscriptionSupport.sortMonotonic([]), [])
     }
 
     func test_singleSegmentIsUnchanged() {
         let segments = [TranscriptSegment(start: 4, end: 5, text: "solo")]
 
-        XCTAssertEqual(Transcriber.sortMonotonic(segments), segments)
-    }
-}
-
-// MARK: - Transcriber.cappedPromptTokens
-
-@MainActor
-final class TranscriberCappedPromptTokensTests: XCTestCase {
-    func test_tokensUnderBudgetAreUnchanged() {
-        let tokens = [1, 2, 3]
-
-        XCTAssertEqual(Transcriber.cappedPromptTokens(tokens, budget: 220), tokens)
-    }
-
-    func test_tokensOverBudgetAreTrimmedKeepingTheTail() {
-        let tokens = Array(0..<300)
-
-        let result = Transcriber.cappedPromptTokens(tokens, budget: 220)
-
-        XCTAssertEqual(result.count, 220)
-        XCTAssertEqual(result, Array(80..<300))
-    }
-
-    func test_tokensExactlyAtBudgetAreUnchanged() {
-        let tokens = Array(0..<220)
-
-        XCTAssertEqual(Transcriber.cappedPromptTokens(tokens, budget: 220), tokens)
-    }
-
-    func test_emptyInputProducesEmptyOutput() {
-        XCTAssertEqual(Transcriber.cappedPromptTokens([], budget: 220), [])
-    }
-
-    func test_defaultBudgetIs220() {
-        let tokens = Array(0..<300)
-
-        XCTAssertEqual(Transcriber.cappedPromptTokens(tokens).count, 220)
+        XCTAssertEqual(TranscriptionSupport.sortMonotonic(segments), segments)
     }
 }

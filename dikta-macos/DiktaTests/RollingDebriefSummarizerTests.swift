@@ -38,6 +38,8 @@ final class FakeDeltaSummarizer: DeltaSummarizing, @unchecked Sendable {
     private(set) var seenStates: [DebriefState] = []
     private(set) var seenChunks: [String] = []
     private(set) var seenRenderStyles: [DebriefState.RenderStyle] = []
+    private(set) var seenLanguages: [String] = []
+    private(set) var consolidationLanguages: [String] = []
     private(set) var consolidateCallCount = 0
 
     init(name: String = "Fake") {
@@ -75,6 +77,7 @@ final class FakeDeltaSummarizer: DeltaSummarizing, @unchecked Sendable {
         seenStates.append(state)
         seenChunks.append(chunk)
         seenRenderStyles.append(state.renderStyle)
+        seenLanguages.append(language)
 
         if let extractError { throw extractError }
         if let maxChunkCharacters, chunk.count > maxChunkCharacters {
@@ -90,6 +93,7 @@ final class FakeDeltaSummarizer: DeltaSummarizing, @unchecked Sendable {
 
     func consolidate(state: DebriefState, language: String) async throws -> ConsolidationDelta {
         consolidateCallCount += 1
+        consolidationLanguages.append(language)
         if let consolidateError { throw consolidateError }
         return consolidationResult
     }
@@ -107,9 +111,10 @@ final class RollingDebriefSummarizerTests: XCTestCase {
 
     private func makeSummarizer(
         _ fake: FakeDeltaSummarizer,
+        language: String? = "en",
         similarity: @escaping (String, String) -> Double = { _, _ in 0 }
     ) -> RollingDebriefSummarizer {
-        RollingDebriefSummarizer(summarizer: fake, similarity: similarity, language: "en")
+        RollingDebriefSummarizer(summarizer: fake, similarity: similarity, language: language)
     }
 
     // MARK: - Ingest
@@ -153,6 +158,67 @@ final class RollingDebriefSummarizerTests: XCTestCase {
         XCTAssertTrue(fake.seenChunks.isEmpty)
         let items = await rolling.state.items
         XCTAssertTrue(items.isEmpty)
+    }
+
+    func testLanguageIsReinferredFromAccumulatedEnglishThenSwedishText() async throws {
+        let fake = FakeDeltaSummarizer()
+        let rolling = makeSummarizer(fake, language: nil)
+        let english = "This meeting starts in English and we discuss the project plan and tomorrow's work in detail."
+        let swedish = "Det här mötet fortsätter på svenska och vi diskuterar projektplanen och morgondagens arbete i detalj."
+
+        try await rolling.ingest(chunkTranscript: english, index: 0)
+        try await rolling.ingest(chunkTranscript: swedish, index: 1)
+        _ = try await rolling.finish()
+
+        XCTAssertEqual(fake.seenLanguages, ["en", "en"])
+        XCTAssertEqual(fake.consolidationLanguages, ["en"], "mixed accumulated text must use English fallback")
+    }
+
+    func testLanguageIsReinferredFromAccumulatedSwedishThenEnglishText() async throws {
+        let fake = FakeDeltaSummarizer()
+        let rolling = makeSummarizer(fake, language: nil)
+        let swedish = "Det här mötet börjar på svenska och vi diskuterar projektplanen och morgondagens arbete i detalj."
+        let english = "This meeting continues in English and we discuss the project plan and tomorrow's work in detail."
+
+        try await rolling.ingest(chunkTranscript: swedish, index: 0)
+        try await rolling.ingest(chunkTranscript: english, index: 1)
+        _ = try await rolling.finish()
+
+        XCTAssertEqual(fake.seenLanguages, ["sv", "en"], "the first confident chunk must not latch the session language")
+        XCTAssertEqual(fake.consolidationLanguages, ["en"])
+    }
+
+    func testInitiallyAmbiguousTranscriptCanBecomeConfidentSwedish() async throws {
+        let fake = FakeDeltaSummarizer()
+        let rolling = makeSummarizer(fake, language: nil)
+
+        try await rolling.ingest(chunkTranscript: "Plan Atlas meeting tomorrow", index: 0)
+        try await rolling.ingest(
+            chunkTranscript: "Det här är ett tydligt svenskt stycke med flera vanliga ord om morgondagens arbete och projektplanen.",
+            index: 1
+        )
+        _ = try await rolling.finish()
+
+        XCTAssertEqual(fake.seenLanguages, ["en", "sv"])
+        XCTAssertEqual(fake.consolidationLanguages, ["sv"])
+    }
+
+    func testPureSwedishAccumulatedTranscriptRemainsSwedish() async throws {
+        let fake = FakeDeltaSummarizer()
+        let rolling = makeSummarizer(fake, language: nil)
+
+        try await rolling.ingest(
+            chunkTranscript: "Det här är ett tydligt svenskt stycke med flera vanliga ord om projektets första del.",
+            index: 0
+        )
+        try await rolling.ingest(
+            chunkTranscript: "Vi fortsätter mötet på svenska och diskuterar morgondagens arbete och nästa tydliga beslut.",
+            index: 1
+        )
+        _ = try await rolling.finish()
+
+        XCTAssertEqual(fake.seenLanguages, ["sv", "sv"])
+        XCTAssertEqual(fake.consolidationLanguages, ["sv"])
     }
 
     func testDedupeRunsPerChunkSoTheModelNeverSeesARepeat() async throws {

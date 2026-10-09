@@ -2,40 +2,31 @@ import Foundation
 
 /// Abstraction over a speech-to-text backend.
 ///
-/// `Transcriber` (WhisperKit-backed) is the only conformer today, but callers
-/// (namely `MenuBarViewModel`) depend on this protocol rather than on WhisperKit
-/// directly. That keeps the WhisperKit dependency contained to one file and lets
-/// the active model be swapped at runtime via `reload(model:)` without an app
-/// restart.
+/// The macOS app has one production conformer, `ParakeetEngine`, while tests
+/// inject fakes. Keeping callers behind this seam prevents tests from loading or
+/// downloading the real Ultra model.
 @MainActor
 protocol TranscriptionEngine: AnyObject {
-    /// True while a model is being loaded or reloaded.
+    /// True while the Ultra model is being loaded.
     var isLoading: Bool { get }
     /// True once a model has finished loading successfully.
     var isReady: Bool { get }
-    /// Set when the most recent load/reload attempt failed.
+    /// Set when the most recent load attempt failed.
     var errorMessage: String? { get }
     /// Fraction (0...1) of an in-progress model download, or nil when no
     /// download is happening (including while a bundled model loads, which
     /// never downloads).
     var downloadProgress: Double? { get }
 
-    /// Load the currently configured model. No-op if already loading or ready.
+    /// Load Ultra. No-op if already loading or ready.
     func load() async
 
-    /// Unload the current model (if any) and load `model` in its place.
-    /// Throws if the new model fails to load; `isReady`/`errorMessage` reflect
-    /// the failure as well.
-    func reload(model: WhisperModel) async throws
-
-    /// Release any loaded model resources. Called on the previously active
-    /// engine when `MenuBarViewModel.setEngine` swaps it for a different
-    /// `TranscriptionEngineKind`, so the old engine's compiled models don't
-    /// linger in memory (Core ML/ANE resources, FluidAudio's `AsrManager`)
-    /// alongside the new engine's.
+    /// Release loaded model resources.
     func unload() async
 
-    /// Transcribe audio samples using the currently loaded model.
+    /// Transcribe audio samples using Ultra. `language` remains in the seam for
+    /// source compatibility with pipeline tests, but production callers pass
+    /// nil and Ultra does not accept a language hint.
     func transcribe(_ audioSamples: [Float], language: String?, micSensitivity: MicSensitivity) async throws -> String
 
     /// Transcribe audio samples using the currently loaded model, returning

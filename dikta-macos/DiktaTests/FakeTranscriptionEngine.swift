@@ -1,8 +1,8 @@
 import Foundation
 @testable import Dikta
 
-/// Test double for `TranscriptionEngine`. Lets tests control load/reload
-/// outcomes deterministically, without touching WhisperKit.
+/// Test double for `TranscriptionEngine`. Lets tests control Ultra load and
+/// transcription outcomes without touching FluidAudio.
 @MainActor
 final class FakeTranscriptionEngine: TranscriptionEngine {
     private(set) var isLoading = false
@@ -10,19 +10,8 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     private(set) var errorMessage: String?
     var downloadProgress: Double?
 
-    /// Models (by rawValue) whose `reload(model:)` should fail.
-    var modelsThatFail: Set<String> = []
-
-    /// When true, `load()` reports failure (`isReady = false`, `errorMessage`
-    /// set) instead of succeeding. `reload(model:)`'s `modelsThatFail` doesn't
-    /// cover this: `MenuBarViewModel.setEngine` builds a brand-new engine
-    /// instance for the target kind and calls `load()` on it, never
-    /// `reload(model:)`, so this is the seam `MenuBarViewModelSetEngineTests`
-    /// uses to exercise that failure/fallback path.
+    /// When true, `load()` reports failure instead of succeeding.
     var shouldFailLoad = false
-
-    /// Every model passed to `reload(model:)`, in call order.
-    private(set) var reloadedModels: [WhisperModel] = []
 
     /// Text returned by `transcribe`. Empty by default, which is what the
     /// pre-debrief tests relied on.
@@ -32,8 +21,9 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     /// exercised without waiting on a real model.
     var transcribeDelay: TimeInterval = 0
 
-    /// Number of `transcribe` calls, for tests that assert the engine ran.
+    /// Number of `transcribe` calls and legacy hints received.
     private(set) var transcribeCallCount = 0
+    private(set) var receivedLanguageHints: [String?] = []
 
     /// Segments returned by `transcribeSegments`. Empty by default.
     var segmentsToReturn: [TranscriptSegment] = []
@@ -44,8 +34,9 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     /// track its own distinguishable transcript.
     var segmentsPerCall: [[TranscriptSegment]] = []
 
-    /// `promptText` passed to each `transcribeSegments` call, in call order.
+    /// Arguments passed to each `transcribeSegments` call, in call order.
     private(set) var receivedPromptTexts: [String?] = []
+    private(set) var receivedSegmentLanguageHints: [String?] = []
 
     /// Awaited just before `transcribeSegments` returns, with that call's
     /// 0-based index. Lets a test hold one chunk's transcription job open for
@@ -69,21 +60,9 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
         errorMessage = nil
     }
 
-    func reload(model: WhisperModel) async throws {
-        reloadedModels.append(model)
-
-        if modelsThatFail.contains(model.rawValue) {
-            isReady = false
-            errorMessage = "Fake failure loading \(model.rawValue)"
-            throw TranscriberError.reloadFailed(errorMessage!)
-        }
-
-        isReady = true
-        errorMessage = nil
-    }
-
     func transcribe(_ audioSamples: [Float], language: String?, micSensitivity: MicSensitivity) async throws -> String {
         transcribeCallCount += 1
+        receivedLanguageHints.append(language)
         if transcribeDelay > 0 {
             try await Task.sleep(nanoseconds: UInt64(transcribeDelay * 1_000_000_000))
         }
@@ -98,6 +77,7 @@ final class FakeTranscriptionEngine: TranscriptionEngine {
     ) async throws -> [TranscriptSegment] {
         let callIndex = receivedPromptTexts.count
         receivedPromptTexts.append(promptText)
+        receivedSegmentLanguageHints.append(language)
         receivedSegmentSampleCounts.append(samples.count)
         if transcribeDelay > 0 {
             try await Task.sleep(nanoseconds: UInt64(transcribeDelay * 1_000_000_000))

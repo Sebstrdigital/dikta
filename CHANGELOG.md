@@ -6,6 +6,25 @@ All notable changes to Dikta will be documented in this file.
 - 2026-09-28: `ConfigService.save()` now uses a single atomic-write strategy (temp file + `replaceItemAt`), removing the duplicate approach that had carried as unresolved tech debt for 14 sprints.
 - 2026-04-17: DiagnosticLogger (Windows) now correctly gated behind `[Conditional("DIAGNOSTICS")]` compile flag — release builds produce no log output
 
+## [1.5.4] - 2026-10-09 — Simpler Dictation
+
+### Changed
+
+- Every macOS transcription path now uses Parakeet Ultra: dictation, imported audio, microphone Debrief, and call Debrief share one automatic experience.
+- Removed the engine, model, and language controls and the language-switch hotkey. Ultra determines language from audio without a manual hint; formatting and Debrief infer language behavior from the actual resulting text.
+- Legacy engine, model, language, and language-hotkey preferences remain readable compatibility data. Existing unrelated settings and dictation history are retained, and Dikta does not delete existing model caches.
+
+### Removed
+
+- Indonesian transcription support. Indonesian values in an older configuration remain readable, but Indonesian is no longer a supported transcription language.
+- WhisperKit and bundled Whisper models from the app runtime and release archive. Comparison tooling retains its separate Whisper dependency.
+
+### Notes
+
+- Mixed English/Swedish transcription is best-effort, not reliable code-switching. In qualification, short English contributions could disappear from mixed-language takes.
+- This release does not claim improved Swedish accuracy.
+- Requires macOS 15 or later. The macOS app is Developer ID signed and notarized.
+
 ## [1.5.3] - 2026-10-07 — Read Aloud Polish
 
 ### Changed

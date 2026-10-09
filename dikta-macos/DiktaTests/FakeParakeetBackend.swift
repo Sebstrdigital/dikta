@@ -1,4 +1,3 @@
-import CoreML
 import Foundation
 @testable import Dikta
 
@@ -6,16 +5,13 @@ import Foundation
 /// `ParakeetEngine`'s load/transcribe logic deterministically, without
 /// downloading or loading a real Parakeet model under XCTest.
 final class FakeParakeetBackend: ParakeetBackend {
-    /// Error `loadModel` should throw, or nil to succeed.
+    /// Error `loadUltra` should throw, or nil to succeed.
     var loadError: Error?
 
-    /// `kind` passed to the most recent `loadModel` call.
-    private(set) var loadedKind: TranscriptionEngineKind?
+    /// Number of Ultra load calls.
+    private(set) var loadCallCount = 0
 
-    /// `encoderComputeUnits` passed to the most recent `loadModel` call.
-    private(set) var loadedEncoderComputeUnits: MLComputeUnits?
-
-    /// Progress fractions reported via `loadModel`'s `progressHandler`, in call order.
+    /// Progress fractions reported via `loadUltra`, in call order.
     private(set) var reportedProgress: [Double] = []
 
     /// Result returned by every `transcribe` call.
@@ -30,14 +26,10 @@ final class FakeParakeetBackend: ParakeetBackend {
     /// Number of `unload` calls, for tests that assert the backend was released.
     private(set) var unloadCallCount = 0
 
-    func loadModel(
-        kind: TranscriptionEngineKind,
-        encoderComputeUnits: MLComputeUnits?,
+    func loadUltra(
         progressHandler: @escaping @Sendable (Double) -> Void
     ) async throws {
-        loadedKind = kind
-        loadedEncoderComputeUnits = encoderComputeUnits
-
+        loadCallCount += 1
         progressHandler(0.5)
         reportedProgress.append(0.5)
 

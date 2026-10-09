@@ -43,11 +43,14 @@ struct AppConfig: Codable {
     /// Whether the one-time "Recording call audio" consent notice has been
     /// shown. Set the first time `.microphoneAndSystemAudio` is selected.
     var callRecordingNoticeShown: Bool
-    /// Which speech-to-text engine transcribes dictation. Defaults to
-    /// `.whisper`, which also absorbs any config saved without this key (pre
-    /// this feature) or with a raw value this build doesn't recognize yet —
-    /// see `init(from:)`.
-    var engine: TranscriptionEngineKind
+    /// Inactive compatibility view of the persisted speech-to-text engine.
+    /// The original raw string is kept separately so a newer/removed value is
+    /// not destroyed when this build performs an unrelated routine save.
+    var engine: TranscriptionEngineKind {
+        get { TranscriptionEngineKind(rawValue: persistedEngineRawValue) ?? .whisper }
+        set { persistedEngineRawValue = newValue.rawValue }
+    }
+    private var persistedEngineRawValue: String
 
     struct HotkeyConfigs: Codable {
         var toggle: HotkeyConfig
@@ -101,7 +104,7 @@ struct AppConfig: Codable {
         case ollamaModel = "ollama_model"
         case debriefSource = "debrief_source"
         case callRecordingNoticeShown = "call_recording_notice_shown"
-        case engine
+        case persistedEngineRawValue = "engine"
     }
 
     static let defaultCustomPrompt = "Clean up this dictation. Fix grammar, punctuation, and remove filler words. Output only the cleaned text."
@@ -158,7 +161,7 @@ struct AppConfig: Codable {
         self.ollamaModel = ollamaModel
         self.debriefSource = debriefSource
         self.callRecordingNoticeShown = callRecordingNoticeShown
-        self.engine = engine
+        self.persistedEngineRawValue = engine.rawValue
     }
 
     /// Handle missing fields from old configs (v2 configs with active_mode are handled gracefully —
@@ -199,14 +202,12 @@ struct AppConfig: Codable {
         ollamaModel = try container.decodeIfPresent(String.self, forKey: .ollamaModel) ?? Self.defaultOllamaModel
         debriefSource = try container.decodeIfPresent(DebriefSource.self, forKey: .debriefSource) ?? .microphone
         callRecordingNoticeShown = try container.decodeIfPresent(Bool.self, forKey: .callRecordingNoticeShown) ?? false
-        // Decode the raw string ourselves rather than TranscriptionEngineKind directly:
-        // the synthesized RawRepresentable decoding throws on an unrecognized raw value,
-        // but an unknown engine (e.g. saved by a newer build) should fall back to
-        // .whisper, not fail the whole config load.
-        if let rawEngine = try container.decodeIfPresent(String.self, forKey: .engine) {
-            engine = TranscriptionEngineKind(rawValue: rawEngine) ?? .whisper
-        } else {
-            engine = .whisper
-        }
+        // Preserve the exact inactive compatibility value even when this build
+        // does not recognize it. `engine` exposes the historical `.whisper`
+        // fallback without normalizing the raw string on the next save.
+        persistedEngineRawValue = try container.decodeIfPresent(
+            String.self,
+            forKey: .persistedEngineRawValue
+        ) ?? TranscriptionEngineKind.whisper.rawValue
     }
 }

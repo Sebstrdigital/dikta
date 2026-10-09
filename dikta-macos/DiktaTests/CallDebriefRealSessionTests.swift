@@ -179,19 +179,19 @@ final class CallDebriefRealSessionTests: XCTestCase {
                           "the real session folder must never be written to")
     }
 
-    /// Opt-in end-to-end run: real WhisperKit over the real audio. Off by
-    /// default because it downloads/loads a model and takes minutes.
+    /// Opt-in end-to-end run: real Ultra over local audio. Off by default
+    /// because task validation must never inspect private sessions.
     /// Enable with `DIKTA_REAL_ENGINE=1`.
     func test_realSession_withRealEngine_producesANonEmptySummary() async throws {
         try XCTSkipUnless(
             ProcessInfo.processInfo.environment["DIKTA_REAL_ENGINE"] == "1",
-            "set DIKTA_REAL_ENGINE=1 to run the real Whisper + summarizer pass over a real session"
+            "set DIKTA_REAL_ENGINE=1 only for an explicitly authorized private-session run"
         )
 
         let session = try newestRealSession()
         let (store, paths) = try copyIntoTempSession(session)
 
-        let transcriber = Transcriber(model: .turbo)
+        let transcriber = ParakeetEngine()
         await transcriber.load()
         try XCTSkipUnless(
             transcriber.isReady,

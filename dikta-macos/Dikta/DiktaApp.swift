@@ -38,10 +38,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 /// the unit-test host for `xcodebuild test -scheme Dikta` (a "Host Application"
 /// unit test bundle launches the real app first). In that case `DiktaApp`'s own
 /// `init` still runs for real, so without this, `MenuBarViewModel()` below would
-/// fall through to a real `Transcriber` and attempt a live WhisperKit model
-/// download as a side effect of the app launching — invisible on a dev machine
-/// with the model cached, but a hang/crash on a clean CI runner. Never touches
-/// WhisperKit or the network.
+/// fall through to a real Ultra engine and attempt a model load as a side
+/// effect of the test host launching. It never touches FluidAudio or the network.
 @MainActor
 private final class NoOpTranscriptionEngine: TranscriptionEngine {
     let isLoading = false
@@ -50,7 +48,6 @@ private final class NoOpTranscriptionEngine: TranscriptionEngine {
     let downloadProgress: Double? = nil
 
     func load() async {}
-    func reload(model: WhisperModel) async throws {}
     func unload() async {}
     func transcribe(_ audioSamples: [Float], language: String?, micSensitivity: MicSensitivity) async throws -> String { "" }
     func transcribeSegments(_ samples: [Float], language: String?, micSensitivity: MicSensitivity, promptText: String?) async throws -> [TranscriptSegment] { [] }
@@ -96,10 +93,6 @@ struct DiktaApp: App {
             }
         }()
 
-        HStack(spacing: 2) {
-            icon
-            Text(viewModel.configService.language.menuBarCode)
-                .font(.caption2)
-        }
+        icon
     }
 }
