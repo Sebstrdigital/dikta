@@ -92,8 +92,7 @@ To run a single class, use its class name, e.g.
 
 **Signing**: test builds are signed with the same Developer ID identity as releases, never ad-hoc (`CODE_SIGN_IDENTITY=-`). macOS ties Microphone / System Audio grants to the code signature; an ad-hoc signature changes on every rebuild, so each rebuilt test host re-prompts. With the stable identity you grant once. Confirmed 2026-09-18.
 
-**Before every run**: quit any running `Dikta.app` (`pgrep -x Dikta` → `osascript -e 'quit app "Dikta"'`) and make
-sure no other `xcodebuild` is in flight — a live instance holds the audio device and can hang the ViewModel tests.
+**Before a run that requires Dikta to be stopped**: ask the user before quitting it. Check for conflicting builds; do not stop unrelated applications. A live Dikta instance can hold the audio device and interfere with ViewModel tests.
 
 **Real-input tests**: `DebriefRealTranscriptTests.swift`'s real-transcript tests read from a local, gitignored
 directory — `~/Documents/Dikta` by default, or the `DIKTA_REAL_SESSIONS_DIR` environment variable — and skip via
@@ -145,6 +144,18 @@ for p in $(pgrep -x Dikta); do ps -o command= -p $p | grep -q ApplePersistenceIg
 
 **Known pre-existing failure**: `testSlackMuterReturnsNilWhenSlackNotRunning` (`MicMutingTests.swift`) fails when
 Slack.app is open on the test machine — unrelated to Call Debrief, not a regression.
+
+## Non-interfering local validation
+
+ViewModel tests must use `FakeMuterRegistry` (including omitted/nil factory arguments), not production muters. Keep the user's browsers, Slack and other unrelated applications open and untouched; their presence alone is not a blocker.
+
+Until the four real-muter absence tests are isolated, local validation may exclude them:
+- `-skip-testing:DiktaTests/MicMutingTests/testTeamsMuterReturnsNilWhenTeamsNotRunning`
+- `-skip-testing:DiktaTests/MicMutingTests/testSlackMuterReturnsNilWhenSlackNotRunning`
+- `-skip-testing:DiktaTests/MicMutingTests/testWhatsAppMuterReturnsNilWhenWhatsAppNotRunning`
+- `-skip-testing:DiktaTests/MicMutingTests/testUvenMuterReturnsNilWhenUvenNotRunning`
+
+Report this as a filtered run with the four coverage gaps, not a full-suite pass. Keep safe fake tests and relevant Native Kokoro checks. Use synthetic/isolated real-session inputs rather than the user's recordings. No mandatory app inventory or repeated whole-test-factory audit. Ask before stopping Dikta itself if a check requires it.
 
 ## Release gate (build-release.sh / CI)
 

@@ -1,0 +1,26 @@
+# Team task: qualify the exported native helper’s describe path
+
+## Task
+
+Unblock the next Native Kokoro slice by reproducing and resolving the exported-helper `describe` failure recorded in Munin `5cdc0619-de17-4cf4-90c2-7623f5c45d38`. Establish fresh relevant Release evidence before proposing a concrete fix, then make the smallest justified repair to the bundled-manifest/layout path or its packaging. Acceptance requires the actual Developer-ID-signed exported app’s helper to complete `hello → ready → describe → layout + complete`, report its real sandbox/cache layout, and exit under owned cleanup, with regression coverage. This task does not complete native inference qualification or replace the production Read Aloud backend.
+
+## Current evidence and references
+
+- Starting point: `main` at `590cad1`, with existing uncommitted work; no fresh checks run during preparation.
+- Existing candidate: `dikta-macos/NativeKokoroHelper/`, `NativeKokoroShared/`, `Dikta/Services/NativeKokoro/`, the candidate manifest, native tests, and Xcode/SwiftPM integration. `main.swift` validates the bundled manifest before describing layout; existing packaged-helper tests cover handshake/cleanup, not this operation. The failure’s cause remains unverified.
+- Preserve fake-muter isolation in the four modified ViewModel test files. Leave `docs/TODO.md`’s terminal-selection bug, `debug-active.md`, and unrelated work untouched.
+- Governing references: repository `CLAUDE.md`, `docs/validation.md`, `docs/adr/0001-native-kokoro.md`, and relevant discovery under this directory. The updated validation rules and post-cleanup handoff supersede obsolete app-closure ceremony. Deleted run/evidence paths are not prerequisites or resumable sessions.
+
+## Agreement — approved
+
+The maintainer explicitly approved this Agreement in the conversation after preparation.
+
+- **Mode/branch:** Team; create `feature/native-kokoro-exported-helper` from the current dirty tree without resetting, stashing or committing it.
+- **Scope:** Repair only the existing helper/shared code, native parent boundary, candidate manifest, native tests, Xcode/SwiftPM packaging, and a narrowly scoped probe if needed. Do not change SDK pins, model identities, entitlements/security architecture, dictation behavior, Setup/UI or the production backend without renewed approval.
+- **Checks:** Before edits, run fresh Developer-ID-signed Release `DiktaTests` using an isolated synthetic/empty real-session directory and the four exact real-muter exclusions in `docs/validation.md`; record actual exit, nonzero counts and skips. Reproduce `describe` on a freshly archived/exported Release app, then add regression coverage and repeat affected checks plus the filtered target on the final candidate. Verify nested signatures and sandbox/no-inherit/no-network entitlements. Report this as filtered validation, not a full-suite pass or proof of runtime network denial.
+- **Permissions:** Approve local signed Release tests and isolated archive/export output, without notarization. Do not invoke the destructive/notarizing `build-release.sh`, install, publish, push, commit, delete existing outputs, download models, synthesize/play audio, or control unrelated apps. Ask before stopping Dikta if required.
+- **Execution:** One fresh builder, then no-edit validator and inspection-only reviewer, sequentially on the same candidate; lead independently inspects and accepts. At most two focused repair cycles. Baseline failures are blockers to diagnose, not permission for unrelated fixes. Stop for changed security/architecture, missing authority, no progress or exhausted repairs.
+
+## Progress
+
+Agreement approved. Created `feature/native-kokoro-exported-helper` from the existing dirty tree; `git diff --check` passed. Builder complete, not accepted. Embedded pinned manifest repair and packaged describe regression are in the candidate. Lead inspected delta/probe and green log summaries: 48 focused tests; reconstructed baseline and final filtered runs each report 790 executed, 6 skips, zero failures, exit 0 (builder’s 796 count is incorrect). Original isolation/pre-edit-baseline breach remains recorded; later isolated reconstruction is corrective evidence, not retroactive compliance. One repair cycle consumed; one remains. Independent validation passed: fresh normal-scheme signed archive/export and owned describe probe; independently built isolated filtered suite 790 executed, 6 skipped, zero failures, exit 0. Reviewer approved with no task-owned blocker; findings retained in `exported-helper-evidence/reviewer-report.md`. Lead inspected source/delta, validator probe identities/layout/exit, signature/entitlement evidence, test summaries and actual exits, and accepts the narrowly scoped describe repair. Evidence: `builder-report.md`, `validator-report.md`, `reviewer-report.md` and task delta in that evidence directory. Lead corrected builder’s erroneous 796 counts to 790; raw logs unchanged. Probe deadline/semantic-assertion hardening and a dedicated second-describe test are nonblocking suggestions, not new authorized tasks. No broader migration, inference, runtime network-denial, quality or shipping acceptance; no commit/install/publication. Task complete with the recorded workflow limitation.

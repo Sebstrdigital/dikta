@@ -50,6 +50,7 @@ final class MenuBarViewModelSetWhisperModelTests: XCTestCase {
         MenuBarViewModel(
             engine: engine,
             configService: configService,
+            muterRegistry: FakeMuterRegistry(),
             audioRecorder: FakeAudioRecorder(),
             audioFeedback: FakeAudioFeedback()
         )

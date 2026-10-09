@@ -148,6 +148,21 @@
 		100000000000000000000073 /* FormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000072 /* FormatterTests.swift */; };
 		100000000000000000000074 /* EmbeddingParagraphSplitterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000074 /* EmbeddingParagraphSplitterTests.swift */; };
 		100000000000000000000072 /* Dikta.app in Frameworks */ = {isa = PBXBuildFile; fileRef = 400000000000000000000001 /* Dikta.app */; };
+F10000000000000000000014 = {isa = PBXBuildFile; fileRef = F1000000000000000000000A; };
+F10000000000000000000015 = {isa = PBXBuildFile; fileRef = F1000000000000000000000B; };
+F10000000000000000000016 = {isa = PBXBuildFile; fileRef = F1000000000000000000000C; };
+F10000000000000000000017 = {isa = PBXBuildFile; fileRef = F1000000000000000000000D; };
+F10000000000000000000018 = {isa = PBXBuildFile; fileRef = F1000000000000000000000A; };
+F10000000000000000000019 = {isa = PBXBuildFile; fileRef = F1000000000000000000000E; };
+F1000000000000000000001A = {isa = PBXBuildFile; fileRef = F1000000000000000000000F; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+F20000000000000000000001 = {isa = PBXBuildFile; fileRef = F20000000000000000000011; };
+F20000000000000000000002 = {isa = PBXBuildFile; fileRef = F20000000000000000000011; };
+F20000000000000000000003 = {isa = PBXBuildFile; fileRef = F20000000000000000000012; };
+F20000000000000000000004 = {isa = PBXBuildFile; fileRef = F20000000000000000000013; };
+F20000000000000000000005 = {isa = PBXBuildFile; fileRef = F20000000000000000000014; };
+F20000000000000000000006 = {isa = PBXBuildFile; productRef = 300000000000000000000003; };
+F30000000000000000000001 = {isa = PBXBuildFile; fileRef = F30000000000000000000003; };
+F30000000000000000000002 = {isa = PBXBuildFile; fileRef = F30000000000000000000003; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -288,6 +303,17 @@
 		/* Product */
 		400000000000000000000001 /* Dikta.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Dikta.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		400000000000000000000002 /* DiktaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "DiktaTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+F1000000000000000000000A = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeKokoroShared/NativeKokoroProtocol.swift"; sourceTree = SOURCE_ROOT; };
+F1000000000000000000000B = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Dikta/Services/NativeKokoro/NativeKokoroChild.swift"; sourceTree = SOURCE_ROOT; };
+F1000000000000000000000C = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Dikta/Services/NativeKokoro/NativeKokoroSession.swift"; sourceTree = SOURCE_ROOT; };
+F1000000000000000000000D = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeKokoroHelper/main.swift"; sourceTree = SOURCE_ROOT; };
+F1000000000000000000000E = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DiktaTests/NativeKokoroTests.swift"; sourceTree = SOURCE_ROOT; };
+F1000000000000000000000F = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; path = NativeKokoroHelper; sourceTree = BUILT_PRODUCTS_DIR; };
+F20000000000000000000011 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeKokoroShared/NativeKokoroAssets.swift"; sourceTree = SOURCE_ROOT; };
+F20000000000000000000012 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeKokoroHelper/NativeKokoroEngine.swift"; sourceTree = SOURCE_ROOT; };
+F20000000000000000000013 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DiktaTests/NativeKokoroAssetTests.swift"; sourceTree = SOURCE_ROOT; };
+F20000000000000000000014 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Dikta/Resources/NativeKokoro/candidate-base-manifest.json"; sourceTree = SOURCE_ROOT; };
+F30000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeKokoroShared/NativeKokoroEmbeddedManifest.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -307,6 +333,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+F20000000000000000000021 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (F20000000000000000000006,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -316,6 +343,7 @@
 				600000000000000000000001 /* Dikta */,
 				600000000000000000000007 /* DiktaTests */,
 				600000000000000000000099 /* Products */,
+                F1000000000000000000001E,
 			);
 			sourceTree = "<group>";
 		};
@@ -525,6 +553,7 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+F1000000000000000000001E = {isa = PBXGroup; name = NativeKokoroBoundary; children = (F20000000000000000000011,F30000000000000000000003,F20000000000000000000012,F20000000000000000000013,F20000000000000000000014,F1000000000000000000000A,F1000000000000000000000B,F1000000000000000000000C,F1000000000000000000000D,F1000000000000000000000E,F1000000000000000000000F,); sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -552,10 +581,12 @@
 				500000000000000000000002 /* Sources */,
 				500000000000000000000001 /* Frameworks */,
 				500000000000000000000003 /* Resources */,
+                F1000000000000000000002D,
 			);
 			buildRules = (
 			);
 			dependencies = (
+                F1000000000000000000002C,
 			);
 			name = Dikta;
 			packageProductDependencies = (
@@ -567,6 +598,7 @@
 			productReference = 400000000000000000000001 /* Dikta.app */;
 			productType = "com.apple.product-type.application";
 		};
+F10000000000000000000028 = {isa = PBXNativeTarget; buildConfigurationList = F10000000000000000000029; buildPhases = (F1000000000000000000002A,F20000000000000000000021,); buildRules = (); dependencies = (); packageProductDependencies = (300000000000000000000003,); name = NativeKokoroHelper; productName = NativeKokoroHelper; productReference = F1000000000000000000000F; productType = "com.apple.product-type.tool"; };
 /* End PBXNativeTarget section */
 
 /* Begin PBXContainerItemProxy section */
@@ -577,6 +609,7 @@
 			remoteGlobalIDString = 700000000000000000000001;
 			remoteInfo = Dikta;
 		};
+F1000000000000000000002B = {isa = PBXContainerItemProxy; containerPortal = 900000000000000000000001; proxyType = 1; remoteGlobalIDString = F10000000000000000000028; remoteInfo = NativeKokoroHelper; };
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXTargetDependency section */
@@ -585,6 +618,7 @@
 			target = 700000000000000000000001 /* Dikta */;
 			targetProxy = C00000000000000000000002 /* PBXContainerItemProxy */;
 		};
+F1000000000000000000002C = {isa = PBXTargetDependency; target = F10000000000000000000028; targetProxy = F1000000000000000000002B; };
 /* End PBXTargetDependency section */
 
 /* Begin PBXProject section */
@@ -620,6 +654,7 @@
 			targets = (
 				700000000000000000000001 /* Dikta */,
 				700000000000000000000002 /* DiktaTests */,
+                F10000000000000000000028,
 			);
 		};
 /* End PBXProject section */
@@ -629,7 +664,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				100000000000000000000051 /* Assets.xcassets in Resources */,
+				F20000000000000000000005,
+                100000000000000000000051 /* Assets.xcassets in Resources */,
 				100000000000000000000052 /* kokoro_server.py in Resources */,
 				100000000000000000000053 /* setup.sh in Resources */,
 				100000000000000000000092 /* MiniLML12v2.mlpackage in Resources */,
@@ -644,7 +680,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				100000000000000000000071 /* DiktaTests.swift in Sources */,
+				F10000000000000000000019,F20000000000000000000004,
+                100000000000000000000071 /* DiktaTests.swift in Sources */,
 				100000000000000000000073 /* FormatterTests.swift in Sources */,
 				100000000000000000000074 /* EmbeddingParagraphSplitterTests.swift in Sources */,
 				100000000000000000000075 /* MicMutingTests.swift in Sources */,
@@ -691,7 +728,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				100000000000000000000001 /* OutputMode.swift in Sources */,
+				F10000000000000000000014,F10000000000000000000015,F10000000000000000000016,F20000000000000000000001,F30000000000000000000001,
+                100000000000000000000001 /* OutputMode.swift in Sources */,
 				100000000000000000000002 /* HotkeyConfig.swift in Sources */,
 				100000000000000000000003 /* HistoryItem.swift in Sources */,
 				100000000000000000000004 /* AppConfig.swift in Sources */,
@@ -766,7 +804,11 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+F1000000000000000000002A = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (F10000000000000000000017,F10000000000000000000018,F20000000000000000000002,F20000000000000000000003,F30000000000000000000002,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
+/* Begin PBXCopyFilesBuildPhase section */
+F1000000000000000000002D = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = Contents/Helpers; dstSubfolderSpec = 1; files = (F1000000000000000000001A,); name = "Embed NativeKokoroHelper"; runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
 		B00000000000000000000001 /* Debug */ = {
@@ -977,6 +1019,8 @@
 			};
 			name = Release;
 		};
+F1000000000000000000002E = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_ENTITLEMENTS = NativeKokoroHelper/NativeKokoroHelper.entitlements; CODE_SIGN_IDENTITY = "Developer ID Application"; CODE_SIGN_STYLE = Manual; DEVELOPMENT_TEAM = UUM29335B4; ENABLE_APP_SANDBOX = YES; ENABLE_HARDENED_RUNTIME = YES; CREATE_INFOPLIST_SECTION_IN_BINARY = YES; INFOPLIST_FILE = NativeKokoroHelper/Info.plist; GENERATE_INFOPLIST_FILE = NO; MACOSX_DEPLOYMENT_TARGET = 15.0; PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app.NativeKokoroHelper; PRODUCT_NAME = NativeKokoroHelper; SWIFT_VERSION = 5.0; SKIP_INSTALL = YES;}; name = Debug; };
+F1000000000000000000002F = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO; CODE_SIGN_ENTITLEMENTS = NativeKokoroHelper/NativeKokoroHelper.entitlements; CODE_SIGN_IDENTITY = "Developer ID Application"; CODE_SIGN_STYLE = Manual; DEVELOPMENT_TEAM = UUM29335B4; ENABLE_APP_SANDBOX = YES; ENABLE_HARDENED_RUNTIME = YES; CREATE_INFOPLIST_SECTION_IN_BINARY = YES; INFOPLIST_FILE = NativeKokoroHelper/Info.plist; GENERATE_INFOPLIST_FILE = NO; MACOSX_DEPLOYMENT_TARGET = 15.0; PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app.NativeKokoroHelper; PRODUCT_NAME = NativeKokoroHelper; SWIFT_VERSION = 5.0; SKIP_INSTALL = YES;}; name = Release; };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1007,6 +1051,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+F10000000000000000000029 = {isa = XCConfigurationList; buildConfigurations = (F1000000000000000000002E,F1000000000000000000002F,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */

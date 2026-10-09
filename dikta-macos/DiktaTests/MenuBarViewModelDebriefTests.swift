@@ -161,13 +161,32 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
             debriefStore: debriefStore ?? store,
             clipboardManager: clipboard,
             audioFileLoader: audioFileLoader,
-            muterRegistry: muterRegistry,
+            muterRegistry: muterRegistry ?? FakeMuterRegistry(),
             systemAudioCaptureFactory: systemAudioCaptureFactory,
             audioRecorder: recorder ?? FakeAudioRecorder(),
             audioFeedback: FakeAudioFeedback()
         )
         recordingViewModels.append(viewModel)
         return (viewModel, engine)
+    }
+
+    // Inspect injection without invoking a possibly real muter.
+    func test_makeViewModel_defaultAndExplicitNilMutersAreFake() {
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (defaultViewModel, _) = makeViewModel(summarizer: summarizer)
+        let (nilViewModel, _) = makeViewModel(summarizer: summarizer, muterRegistry: nil)
+        for viewModel in [defaultViewModel, nilViewModel] {
+            let injected = Mirror(reflecting: viewModel).children.first { $0.label == "muterRegistry" }?.value
+            XCTAssertTrue(injected is FakeMuterRegistry, "Factory must never fall through to production muters")
+        }
+    }
+
+    func test_makeViewModel_preservesExplicitMuterInstance() {
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let muter = FakeMuterRegistry()
+        let (viewModel, _) = makeViewModel(summarizer: summarizer, muterRegistry: muter)
+        let injected = Mirror(reflecting: viewModel).children.first { $0.label == "muterRegistry" }?.value
+        XCTAssertTrue((injected as? FakeMuterRegistry) === muter)
     }
 
     private func silence(seconds: Int = 1) -> [Float] {

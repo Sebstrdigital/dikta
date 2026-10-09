@@ -39,6 +39,7 @@ final class MenuBarViewModelLanguageTests: XCTestCase {
         MenuBarViewModel(
             engine: engine,
             configService: configService,
+            muterRegistry: FakeMuterRegistry(),
             audioRecorder: FakeAudioRecorder(),
             audioFeedback: FakeAudioFeedback()
         )
@@ -53,6 +54,7 @@ final class MenuBarViewModelLanguageTests: XCTestCase {
         MenuBarViewModel(
             engineFactory: engineFactory,
             configService: configService,
+            muterRegistry: FakeMuterRegistry(),
             audioRecorder: FakeAudioRecorder(),
             audioFeedback: FakeAudioFeedback()
         )

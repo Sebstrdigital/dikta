@@ -8,6 +8,7 @@ let package = Package(
     ],
     products: [
         .executable(name: "Dikta", targets: ["Dikta"]),
+        .executable(name: "NativeKokoroHelper", targets: ["NativeKokoroHelper"]),
         .executable(name: "DiktaBench", targets: ["DiktaBench"]),
         .executable(name: "TimestampProbe", targets: ["TimestampProbe"])
     ],
@@ -17,9 +18,13 @@ let package = Package(
         .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.17.3"),
     ],
     targets: [
+        .target(name: "NativeKokoroShared", path: "NativeKokoroShared"),
+        .executableTarget(name: "NativeKokoroHelper", dependencies: ["NativeKokoroShared", .product(name: "FluidAudio", package: "FluidAudio")],
+                          path: "NativeKokoroHelper", exclude: ["Info.plist", "NativeKokoroHelper.entitlements"]),
         .executableTarget(
             name: "Dikta",
             dependencies: [
+                "NativeKokoroShared",
                 .product(name: "WhisperKit", package: "argmax-oss-swift"),
                 .product(name: "Sparkle", package: "Sparkle"),
                 .product(name: "FluidAudio", package: "FluidAudio"),
@@ -27,7 +32,8 @@ let package = Package(
             path: "Dikta",
             exclude: ["Resources/Info.plist", "Resources/Dikta.entitlements"],
             resources: [
-                .process("Resources/Assets.xcassets")
+                .process("Resources/Assets.xcassets"),
+                .copy("Resources/NativeKokoro/candidate-base-manifest.json")
             ]
         ),
         .testTarget(

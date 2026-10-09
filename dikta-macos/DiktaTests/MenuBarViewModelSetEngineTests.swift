@@ -60,6 +60,7 @@ final class MenuBarViewModelSetEngineTests: XCTestCase {
             engine: engine,
             engineFactory: engineFactory,
             configService: configService,
+            muterRegistry: FakeMuterRegistry(),
             audioRecorder: FakeAudioRecorder(),
             audioFeedback: FakeAudioFeedback()
         )
