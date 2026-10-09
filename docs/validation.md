@@ -150,11 +150,12 @@ Until the four real-muter absence tests are isolated, local validation may exclu
 
 Report this as a filtered run with the four coverage gaps, not a full-suite pass. Keep safe fake tests and relevant Native Kokoro checks. Use synthetic/isolated real-session inputs rather than the user's recordings. No mandatory app inventory or repeated whole-test-factory audit. Ask before stopping Dikta itself if a check requires it.
 
-## Release gate (build-release.sh / CI)
+## Release gate (build-release.sh)
 
-**Files**: `dikta-macos/scripts/build-release.sh`, `.github/workflows/macos-build.yml`
+**Files**: `dikta-macos/scripts/build-release.sh`
 
-Both the release script and macOS CI enforce that the `DiktaTests` target actually ran before anything ships —
+There is no macOS CI — releases are built, tested, signed, notarized and published locally, so the release
+script is the only gate. It enforces that the `DiktaTests` target actually ran before anything ships —
 a chronic failure mode is a green-looking pipeline that shipped a broken or empty test suite (e.g. an
 `-only-testing:` filter that silently matches zero tests, or a build error that never reaches the test phase).
 
@@ -171,10 +172,6 @@ the gate; the two flags combine in either order:
 ./scripts/build-release.sh --skip-tests
 ./scripts/build-release.sh --no-publish --skip-tests
 ```
-
-**CI (`macos-build.yml`)**: the `xcodebuild test (ad-hoc signing)` step applies the same log check — it fails the
-job on a non-zero exit *or* on zero executed tests, so a misconfigured scheme/filter can't pass CI by matching
-nothing.
 
 **Known pre-existing gap this gate must not choke on**: `DebriefRealTranscriptTests` skips via `XCTSkip` (not a
 failure) when `~/Documents/Dikta` has no local sessions — the gate counts a skip as part of a passing run, since
