@@ -6,6 +6,23 @@ All notable changes to Dikta will be documented in this file.
 - 2026-09-28: `ConfigService.save()` now uses a single atomic-write strategy (temp file + `replaceItemAt`), removing the duplicate approach that had carried as unresolved tech debt for 14 sprints.
 - 2026-04-17: DiagnosticLogger (Windows) now correctly gated behind `[Conditional("DIAGNOSTICS")]` compile flag — release builds produce no log output
 
+## [1.5.6] - 2026-10-11 — Faster Read Aloud
+
+### Changed
+
+- Read Aloud immediately shows its preparation phase, from selecting text and checking assets through generating speech. Playback is labelled as scheduled, not asserted to be physically audible.
+- Medium selections with a short opening sentence can begin playback sooner without omitting text or increasing generation concurrency.
+- Added content-free, request-correlated timing from the matched Read Aloud hotkey through selection, preparation, synthesis and playback scheduling.
+
+### Fixed
+
+- Pressing the Read Aloud hotkey again can cancel while selection or preparation is pending. Cancelled and stale requests cannot update or interrupt a newer read.
+
+### Notes
+
+- Requires macOS 15 or later. Native Read Aloud remains unavailable on macOS 26.4–26.5.
+- Cold-start latency varies; this release does not claim to resolve every previously reported long first-read delay.
+
 ## [1.5.5] - 2026-10-11 — Read Aloud, Simplified
 
 ### Changed

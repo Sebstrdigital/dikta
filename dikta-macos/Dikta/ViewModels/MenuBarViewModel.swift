@@ -14,11 +14,26 @@ enum AppState {
     case speaking
 }
 
+/// Request progress, not a claim that sound has reached the output device.
+enum ReadAloudPhase {
+    case selecting, checkingAssets, generating, playbackScheduled
+
+    var status: String {
+        switch self {
+        case .selecting: return "Read Aloud: capturing selection…"
+        case .checkingAssets: return "Read Aloud: checking voice assets…"
+        case .generating: return "Read Aloud: preparing speech…"
+        case .playbackScheduled: return "Read Aloud: playback scheduled"
+        }
+    }
+}
+
 /// ViewModel for the menu bar app
 @MainActor
 final class MenuBarViewModel: ObservableObject {
     // State
     @Published var appState: AppState = .loading
+    @Published private(set) var readAloudPhase: ReadAloudPhase?
     /// Fraction (0...1) of an in-progress Whisper model download, mirrored from
     /// `transcriber.downloadProgress` while `appState == .loading`. Nil when no
     /// download is happening (bundled load, or not currently loading at all).
@@ -49,6 +64,7 @@ final class MenuBarViewModel: ObservableObject {
     private(set) var unsupportedTtsVoiceID: String?
     private let textSelectionService: any TextSelectionProviding
     private var readAloudRequest: UUID?
+    private var readAloudTrace: ReadAloudTrace?
     private var readAloudAccepted = false
     private var readAloudTask: Task<Void, Error>?
     private let readAloudNotification: ((String, String) -> Void)?
@@ -1468,28 +1484,45 @@ final class MenuBarViewModel: ObservableObject {
 
     /// Speak selected text using TTS
     func speakSelectedText() async {
+        let trace = ReadAloudTiming.trace ?? ReadAloudTrace(origin: .direct)
+        await ReadAloudTiming.$trace.withValue(trace) { await performSpeakSelectedText(trace: trace) }
+    }
+
+    private func performSpeakSelectedText(trace: ReadAloudTrace) async {
         guard appState == .idle, readAloudRequest == nil, !Task.isCancelled else { return }
         if let raw = unsupportedTtsVoiceID {
             sendNotification(title: "Voice Unavailable", body: "\(raw) is not supported by this version. Choose an installed voice in Advanced.", isRoutine: false)
             return
         }
-        let id = UUID()
+        let id = trace.id
         let speechRequest = ttsService.captureRequest()
         readAloudRequest = id
+        readAloudTrace = trace
+        readAloudPhase = .selecting
+        let onsetStart = trace.triggeredAt
+        ReadAloudTiming.event("request.accepted")
         defer {
+            ReadAloudTiming.event("request.end", trace: trace)
             if readAloudRequest == id {
                 readAloudRequest = nil
+                readAloudTrace = nil
                 readAloudTask = nil
+                readAloudPhase = nil
                 if readAloudAccepted, appState == .speaking { appState = .idle }
                 readAloudAccepted = false
             }
         }
 
         // AX remains primary; only unsupported selections need the asynchronous copy.
+        let selectionStart = ReadAloudTiming.now
         var selectedText = textSelectionService.getSelectedText()
         if selectedText == nil {
+            ReadAloudTiming.event("selection.clipboard_fallback")
             selectedText = await textSelectionService.getSelectedTextViaClipboard()
+        } else {
+            ReadAloudTiming.event("selection.ax")
         }
+        ReadAloudTiming.log("selection", ReadAloudTiming.now - selectionStart)
         guard !Task.isCancelled, readAloudRequest == id, appState == .idle else { return }
         guard let text = selectedText else {
             notifyReadAloud("No Selection", "Please select text first")
@@ -1503,7 +1536,10 @@ final class MenuBarViewModel: ObservableObject {
 
         // Verify configured native assets, not whether the helper is already loaded.
         // The accepted first request remains owned below while lazy startup runs.
+        readAloudPhase = .checkingAssets
+        let availabilityStart = ReadAloudTiming.now
         let available = await ttsService.checkAvailable(for: speechRequest)
+        ReadAloudTiming.log("availability", ReadAloudTiming.now - availabilityStart)
         // Both success and failure paths must recheck ownership after the await.
         guard !Task.isCancelled, readAloudRequest == id, appState == .idle else { return }
         guard available else {
@@ -1515,9 +1551,18 @@ final class MenuBarViewModel: ObservableObject {
         }
 
         readAloudAccepted = true
+        readAloudPhase = .generating
         appState = .speaking
-        audioFeedback.readAloudStart()
-        let task = Task { @MainActor in try await self.ttsService.speak(text, request: speechRequest) }
+        audioFeedback.readAloudStart() // Accepted speech, not audible playback.
+        let task = Task { @MainActor in
+            try await self.ttsService.speak(text, request: speechRequest) { [weak self] in
+                guard let self, self.readAloudRequest == id, self.appState == .speaking else { return }
+                self.readAloudPhase = .playbackScheduled
+                ReadAloudTiming.$trace.withValue(trace) {
+                    ReadAloudTiming.log("request_to_playback_scheduled", ReadAloudTiming.now - onsetStart)
+                }
+            }
+        }
         readAloudTask = task
         do {
             try await withTaskCancellationHandler {
@@ -1538,7 +1583,10 @@ final class MenuBarViewModel: ObservableObject {
     func stopSpeaking() {
         guard readAloudRequest != nil else { return }
         let accepted = readAloudAccepted
+        ReadAloudTiming.event("request.cancel", trace: readAloudTrace)
         readAloudRequest = nil
+        readAloudTrace = nil
+        readAloudPhase = nil
         readAloudAccepted = false
         readAloudTask?.cancel()
         readAloudTask = nil
@@ -1765,12 +1813,20 @@ extension MenuBarViewModel: HotkeyManagerDelegate {
     }
 
     nonisolated func ttsHotkeyPressed() {
+        ttsHotkeyPressed(trigger: ReadAloudTrace(origin: .direct))
+    }
+
+    nonisolated func ttsHotkeyPressed(trigger: ReadAloudTrace) {
         Task { @MainActor in
-            // Toggle: if speaking, stop; otherwise start
-            if appState == .speaking {
-                stopSpeaking()
-            } else {
-                await speakSelectedText()
+            await ReadAloudTiming.$trace.withValue(trigger) {
+                ReadAloudTiming.event("hotkey.handled")
+                // Toggle every owned phase, including asynchronous selection/setup.
+                if readAloudRequest != nil {
+                    ReadAloudTiming.event("hotkey.stop")
+                    stopSpeaking()
+                } else {
+                    await speakSelectedText()
+                }
             }
         }
     }

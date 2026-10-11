@@ -50,6 +50,54 @@ private final class FakeNativeTTSPlayer: NativeTTSPlayback {
 
 @MainActor
 final class TextToSpeechCancellationTests: XCTestCase {
+    func testTaggedPlaybackSchedulingIsReportedOnlyOnceAndNeverForStaleAudio() async throws {
+        let runtime = FakeNativeKokoroRuntime()
+        let player = FakeNativeTTSPlayer()
+        let service = TextToSpeechService(runtime: runtime, player: player)
+        var started = 0
+        let task = Task {
+            try await service.speak("A synthetic sentence.", request: TextToSpeechRequest(voice: .af_heart)) { started += 1 }
+        }
+        await waitUntil { player.plays.count == 1 }
+        XCTAssertEqual(started, 1)
+        player.emit(.started(UUID()))
+        player.emit(.started(player.plays[0].1))
+        XCTAssertEqual(started, 1)
+        player.finish(0)
+        try await task.value
+        player.emit(.started(player.plays[0].1))
+        XCTAssertEqual(started, 1)
+    }
+
+    func testStopFromSchedulingCallbackCannotLaunchLookahead() async {
+        let runtime = FakeNativeKokoroRuntime()
+        let player = FakeNativeTTSPlayer()
+        let service = TextToSpeechService(runtime: runtime, player: player)
+        let text = "The morning light falls across the quiet garden. " + String(repeating: "synthetic ", count: 20)
+        do {
+            try await service.speak(text, request: TextToSpeechRequest(voice: .af_heart)) { service.stop() }
+            XCTFail("Scheduling cancellation must remain terminal")
+        } catch { XCTAssertTrue(error is CancellationError) }
+        XCTAssertEqual(runtime.syntheses.count, 1)
+        XCTAssertFalse(service.speaking)
+    }
+
+    func testEarlySentenceLeavesShortUnsentencedAndLongPlansUnchanged() throws {
+        for source in ["A short synthetic sentence.", String(repeating: "synthetic ", count: 44), String(repeating: "A synthetic sentence with several words. ", count: 20)] {
+            let current = try ProgressiveTextChunker().chunks(in: source)
+            let original = try ProgressiveTextChunker(earlierFirstSentence: false).chunks(in: source)
+            XCTAssertEqual(current, original)
+        }
+    }
+
+    func testEarlierFirstSentenceForMediumSelectionPreservesEveryCharacter() throws {
+        let source = "The morning light falls across the quiet garden. A small bird rests on the wooden fence, while the leaves move gently in the breeze. Today we will review the project, discuss the next steps, and write a clear summary for everyone on the team."
+        let chunks = try ProgressiveTextChunker().chunks(in: source)
+        XCTAssertEqual(chunks.count, 2)
+        XCTAssertEqual(String(source[chunks[0].range]), "The morning light falls across the quiet garden.")
+        XCTAssertEqual(chunks.map { String(source[$0.range]) }.joined(), source)
+    }
+
     private func makeService() -> (TextToSpeechService, FakeNativeKokoroRuntime, FakeNativeTTSPlayer) {
         let runtime = FakeNativeKokoroRuntime()
         let player = FakeNativeTTSPlayer()

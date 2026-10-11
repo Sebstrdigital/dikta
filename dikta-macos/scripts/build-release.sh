@@ -70,7 +70,12 @@ RELEASE_LOG_DIR="${RELEASE_LOG_DIR:-${HOME}/work/artifacts/dikta-release/${RUN_I
 mkdir -p "${RELEASE_LOG_DIR}"
 BUILD_LOG="${RELEASE_LOG_DIR}/build-release.log"
 exec > >(tee -a "${BUILD_LOG}") 2>&1
-trap 'rm -rf "${WORK_DIR}"' EXIT
+# Retain this run's staging when evidence/artifact preservation is required.
+if [ "${KEEP_RELEASE_WORK_DIR:-0}" != "1" ]; then
+    trap 'rm -rf "${WORK_DIR}"' EXIT
+else
+    echo "==> Preserving release staging: ${WORK_DIR}"
+fi
 
 echo "==> Durable release logs: ${RELEASE_LOG_DIR}"
 

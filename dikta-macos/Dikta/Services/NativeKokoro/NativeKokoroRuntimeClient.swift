@@ -95,6 +95,7 @@ final class NativeKokoroRuntimeClient: NativeKokoroRuntimeServing {
     private let idleNanoseconds: UInt64
     private let makeSession: (() -> NativeKokoroSession)?
     private let verificationHook: @Sendable () throws -> Void
+    private let timing: (String, TimeInterval) -> Void
 
     init(
         executable: @escaping () -> URL = { NativeKokoroSession.packagedURL() },
@@ -102,7 +103,8 @@ final class NativeKokoroRuntimeClient: NativeKokoroRuntimeServing {
         osVersion: @escaping () -> OperatingSystemVersion = { ProcessInfo.processInfo.operatingSystemVersion },
         idleNanoseconds: UInt64 = 120_000_000_000,
         makeSession: (() -> NativeKokoroSession)? = nil,
-        verificationHook: @escaping @Sendable () throws -> Void = {}
+        verificationHook: @escaping @Sendable () throws -> Void = {},
+        timing: @escaping (String, TimeInterval) -> Void = ReadAloudTiming.log
     ) {
         self.executable = executable
         self.resolveHome = resolveHome
@@ -110,9 +112,11 @@ final class NativeKokoroRuntimeClient: NativeKokoroRuntimeServing {
         self.idleNanoseconds = idleNanoseconds
         self.makeSession = makeSession
         self.verificationHook = verificationHook
+        self.timing = timing
     }
 
     func prepare(voiceID: String, speed: Float = 1) async throws -> NativeKokoroAssetSnapshot {
+        let start = ReadAloudTiming.now
         let worker = try verificationWorker(voiceID: voiceID, speed: speed)
         let prepared = try await withTaskCancellationHandler(
             operation: { try await worker.value },
@@ -121,6 +125,7 @@ final class NativeKokoroRuntimeClient: NativeKokoroRuntimeServing {
         try Task.checkCancellation()
         // `prepared.lease` is intentionally scoped to this function. ARC releases
         // it on every success, error, and cancellation return.
+        timing("runtime.verify_probe", ReadAloudTiming.now - start)
         return prepared.snapshot
     }
 
@@ -128,6 +133,7 @@ final class NativeKokoroRuntimeClient: NativeKokoroRuntimeServing {
         try Task.checkCancellation()
         epoch &+= 1
         let operationEpoch = epoch
+        let verificationStart = ReadAloudTiming.now
         let worker = try verificationWorker(voiceID: snapshot.voiceID, speed: snapshot.speed)
         let prepared = try await withTaskCancellationHandler(
             operation: { try await worker.value },
@@ -138,6 +144,7 @@ final class NativeKokoroRuntimeClient: NativeKokoroRuntimeServing {
             throw CancellationError()
         }
 
+        timing("runtime.verify_generation", ReadAloudTiming.now - verificationStart)
         let owned: Context
         if let existing = context, existing.snapshot == snapshot {
             // Move the warm session into a new immutable operation context. The
@@ -162,6 +169,7 @@ final class NativeKokoroRuntimeClient: NativeKokoroRuntimeServing {
             try requireCurrent(owned)
             let payload = try NKSynthesisRequest(voiceID: snapshot.voiceID, speed: snapshot.speed, text: text).encoded()
             let request = takeRequestID()
+            let synthesisStart = ReadAloudTiming.now
             try session.begin(.synthesize, request: request, payload: payload, cold: false)
             try await waitUntilReady(session, context: owned, deadline: NativeKokoroSession.workDeadline + 1)
             try requireCurrent(owned)
@@ -171,6 +179,7 @@ final class NativeKokoroRuntimeClient: NativeKokoroRuntimeServing {
                 throw NativeKokoroReadError.invalidResponse
             }
             try NKAudio.validate(frames[0].payload)
+            timing("helper.first_buffer", ReadAloudTiming.now - synthesisStart)
             return frames[0].payload
         } catch is CancellationError {
             retire(owned)
@@ -296,16 +305,20 @@ final class NativeKokoroRuntimeClient: NativeKokoroRuntimeServing {
         })
         owned.session = created
         do {
+            let launchStart = ReadAloudTiming.now
             try created.startAsync()
             try await waitUntilReady(created, context: owned, deadline: NativeKokoroSession.startupDeadline + 1)
             try requireCurrent(owned)
+            timing("helper.launch", ReadAloudTiming.now - launchStart)
             let request = takeRequestID()
+            let initializationStart = ReadAloudTiming.now
             try created.begin(.initialize, request: request, cold: true)
             try await waitUntilReady(created, context: owned, deadline: NativeKokoroSession.coldInitializationDeadline + 1)
             try requireCurrent(owned)
             guard created.isEngineReady, created.takeResults().map(\.kind) == [.complete] else {
                 throw NativeKokoroReadError.helperFailed(created.runtimeFailure)
             }
+            timing("helper.initialize", ReadAloudTiming.now - initializationStart)
             return created
         } catch {
             created.shutdown()

@@ -43,6 +43,9 @@ struct ProgressiveTextChunk: Equatable {
 /// acoustic-frame guards and returns an explicit input failure when they reject a
 /// chunk. Exact source ranges preserve every scalar, space and punctuation mark.
 struct ProgressiveTextChunker {
+    /// Qualification can retain the old plan as a control without weakening any
+    /// input, generation, lease or playback bound.
+    var earlierFirstSentence = true
     static let maximumSourceUTF8Bytes = 256 * 1024
     static let maximumChunks = 1_024
     static let maximumChunkUTF8Bytes = 480
@@ -59,6 +62,12 @@ struct ProgressiveTextChunker {
             throw ChunkError.unsupportedInput
         }
 
+        // Real helper measurements justify a small opening sentence for medium
+        // reads that formerly waited for one whole buffer. Leave long-read chunk
+        // planning and short/unsentenced selections unchanged. No text is lost.
+        let earlierSentence = earlierFirstSentence && text.utf8.count <= Self.maximumChunkUTF8Bytes
+            && text.split(whereSeparator: { $0.isWhitespace }).count <= Self.maximumChunkWords
+            && text.split(whereSeparator: { $0.isWhitespace }).count > 16
         var chunks: [ProgressiveTextChunk] = []
         var start = text.startIndex
         while start < text.endIndex {
@@ -80,6 +89,7 @@ struct ProgressiveTextChunker {
                     lastWhitespace = next
                 } else if isSentenceBoundary(character, at: characterIndex, in: text) {
                     lastSentence = next
+                    if earlierSentence, chunks.isEmpty, (4...16).contains(words), next < text.endIndex { break }
                 } else if isClauseBoundary(character, at: characterIndex, in: text) {
                     lastClause = next
                 }
@@ -179,6 +189,8 @@ final class TextToSpeechService: TextToSpeechSpeaking {
     private let player: any NativeTTSPlayback
     private let chunker: ProgressiveTextChunker
     private var activeRequest: UUID?
+    private var playbackStarted: (() -> Void)?
+    private let timing: (String, TimeInterval) -> Void
     private var playbackWaiter: PlaybackWaiter?
     private var pendingPlaybackIdentity: (request: UUID, chunk: Int, tag: UUID)?
     private var earlyPlaybackResult: Result<Void, Error>?
@@ -194,11 +206,13 @@ final class TextToSpeechService: TextToSpeechSpeaking {
     init(
         runtime: (any NativeKokoroRuntimeServing)? = nil,
         player: (any NativeTTSPlayback)? = nil,
-        chunker: ProgressiveTextChunker = ProgressiveTextChunker()
+        chunker: ProgressiveTextChunker = ProgressiveTextChunker(),
+        timing: @escaping (String, TimeInterval) -> Void = ReadAloudTiming.log
     ) {
         self.runtime = runtime ?? NativeKokoroRuntimeClient()
         self.player = player ?? AVNativeTTSPlayer()
         self.chunker = chunker
+        self.timing = timing
         self.player.eventHandler = { [weak self] event in self?.handlePlayback(event) }
     }
 
@@ -226,6 +240,10 @@ final class TextToSpeechService: TextToSpeechSpeaking {
     }
 
     func speak(_ text: String, request: TextToSpeechRequest) async throws {
+        try await speak(text, request: request, playbackStarted: {})
+    }
+
+    func speak(_ text: String, request: TextToSpeechRequest, playbackStarted: @escaping () -> Void) async throws {
         // Chunking and request ownership happen before startup. Unsupported input
         // cannot acquire an asset lease or helper.
         try Task.checkCancellation()
@@ -236,18 +254,24 @@ final class TextToSpeechService: TextToSpeechSpeaking {
 
         let requestID = UUID()
         activeRequest = requestID
+        self.playbackStarted = playbackStarted
 
         try await withTaskCancellationHandler {
             do {
+                let preparationStart = ReadAloudTiming.now
                 let snapshot = try await runtime.prepare(voiceID: request.voice.rawValue, speed: Float(request.speed.rawValue))
                 try requireOwnership(requestID)
+                timing("service.assets", ReadAloudTiming.now - preparationStart)
 
                 var index = 0
+                let synthesisStart = ReadAloudTiming.now
                 var audio = try await synthesize(text[chunks[0].range], snapshot: snapshot, request: requestID)
+                timing("service.first_buffer", ReadAloudTiming.now - synthesisStart)
                 while true {
                     try requireOwnership(requestID)
                     let tag = UUID() // distinct audio identity for every source range
                     try startPlayback(audio, request: requestID, chunk: index, tag: tag)
+                    try requireOwnership(requestID) // Scheduling observers can cancel synchronously.
 
                     let nextIndex = index + 1
                     let lookahead: Task<Data, Error>?
@@ -288,9 +312,11 @@ final class TextToSpeechService: TextToSpeechSpeaking {
                 try requireOwnership(requestID)
                 clearGeneration(request: requestID)
                 activeRequest = nil
+                self.playbackStarted = nil
             } catch {
                 if activeRequest == requestID {
                     activeRequest = nil // invalidate before playback/helper cleanup
+                    self.playbackStarted = nil
                     cancelGeneration(request: requestID)
                     let continuation = playbackWaiter?.request == requestID ? playbackWaiter?.continuation : nil
                     playbackWaiter = nil
@@ -346,7 +372,11 @@ final class TextToSpeechService: TextToSpeechSpeaking {
     private func startPlayback(_ wav: Data, request: UUID, chunk: Int, tag: UUID) throws {
         pendingPlaybackIdentity = (request, chunk, tag)
         earlyPlaybackResult = nil
-        do { try player.play(wav: wav, tag: tag) }
+        let start = ReadAloudTiming.now
+        do {
+            try player.play(wav: wav, tag: tag)
+            timing("playback.schedule", ReadAloudTiming.now - start)
+        }
         catch {
             pendingPlaybackIdentity = nil
             throw TTSError.playbackFailed
@@ -370,8 +400,12 @@ final class TextToSpeechService: TextToSpeechSpeaking {
 
     private func handlePlayback(_ event: NativeTTSPlaybackEvent) {
         switch event {
-        case .started:
-            return
+        case .started(let tag):
+            guard let pending = pendingPlaybackIdentity,
+                  activeRequest == pending.request, pending.tag == tag else { return }
+            let callback = playbackStarted
+            playbackStarted = nil // First scheduling event only, even for progressive reads.
+            callback?()
         case .finished(let tag):
             resumePlayback(tag: tag, result: .success(()))
         case .failed(let tag):
@@ -398,6 +432,7 @@ final class TextToSpeechService: TextToSpeechSpeaking {
     private func cancel(id: UUID) {
         guard activeRequest == id else { return }
         activeRequest = nil
+        playbackStarted = nil
         cancelGeneration(request: id)
         let continuation = playbackWaiter?.request == id ? playbackWaiter?.continuation : nil
         playbackWaiter = nil

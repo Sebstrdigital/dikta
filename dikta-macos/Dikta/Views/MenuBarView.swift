@@ -21,9 +21,11 @@ struct MenuBarView: View {
                 Button(action: { viewModel.toggleRecording() }) {
                     Text("Stop Recording")
                 }
-            } else if viewModel.appState == .speaking {
+            } else if let phase = viewModel.readAloudPhase {
+                Text(phase.status)
+                    .foregroundColor(.secondary)
                 Button(action: { viewModel.stopSpeaking() }) {
-                    Text("Stop Speaking")
+                    Text(phase == .playbackScheduled ? "Stop Speaking" : "Cancel Read Aloud")
                 }
             } else if viewModel.appState == .processing {
                 if viewModel.isSummarizing, let status = viewModel.debriefStatus {

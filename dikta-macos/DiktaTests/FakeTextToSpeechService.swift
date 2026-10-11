@@ -16,6 +16,14 @@ final class FakeTextToSpeechService: TextToSpeechSpeaking {
     private(set) var availabilityRequests: [TextToSpeechRequest] = []
     private(set) var stopCount = 0
     private var completions: [Int: CheckedContinuation<Void, Error>] = [:]
+    private var starts: [Int: () -> Void] = [:]
+
+    func speak(_ text: String, request: TextToSpeechRequest, playbackStarted: @escaping () -> Void) async throws {
+        starts[texts.count] = playbackStarted
+        try await speak(text, request: request)
+    }
+
+    func startPlayback(_ index: Int) { starts[index]?() }
 
     func captureRequest() -> TextToSpeechRequest { TextToSpeechRequest(voice: voice, speed: speed) }
     func checkAvailable(for request: TextToSpeechRequest) async -> Bool {

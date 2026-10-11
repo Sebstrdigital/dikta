@@ -59,6 +59,9 @@ struct DiktaApp: App {
     @ViewBuilder
     private var menuBarLabel: some View {
         let icon: some View = {
+            if let phase = viewModel.readAloudPhase, viewModel.appState != .recording {
+                return Image(systemName: phase == .playbackScheduled ? "speaker.wave.2.fill" : "hourglass")
+            }
             switch viewModel.appState {
             case .idle:
                 return Image(systemName: "mic")

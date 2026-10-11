@@ -8,7 +8,7 @@ protocol HotkeyManagerDelegate: AnyObject {
     func hotkeyReleased(mode: HotkeyMode)
     func hotkeyRecorded(modifiers: [ModifierKey], key: String?)
     func formatHotkeyPressed()
-    func ttsHotkeyPressed()
+    func ttsHotkeyPressed(trigger: ReadAloudTrace)
     func hotkeyManagerDidFailToStart(_ error: String)
 }
 
@@ -120,7 +120,8 @@ final class HotkeyManager {
         isRecordingHotkey = false
     }
 
-    private func handleEvent(type: CGEventType, event: CGEvent) {
+    // Internal for inert routing tests: no tap is installed and no event is posted.
+    func handleEvent(type: CGEventType, event: CGEvent) {
         // Re-enable tap if macOS disabled it (e.g. after sleep/timeout)
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let eventTap = eventTap {
@@ -193,8 +194,10 @@ final class HotkeyManager {
             let ttsMatches = ttsHotkeyConfig.matchesModifiers(flags)
             if ttsMatches && !isTtsHotkeyActive {
                 isTtsHotkeyActive = true
+                let trigger = ReadAloudTrace(origin: .hotkey)
+                ReadAloudTiming.event("hotkey.matched.modifiers", trace: trigger)
                 DispatchQueue.main.async { [weak self] in
-                    self?.delegate?.ttsHotkeyPressed()
+                    self?.delegate?.ttsHotkeyPressed(trigger: trigger)
                 }
             } else if !ttsMatches && isTtsHotkeyActive {
                 isTtsHotkeyActive = false
@@ -240,8 +243,10 @@ final class HotkeyManager {
            pressedKey.lowercased() == ttsKey.lowercased(),
            ttsHotkeyConfig.matchesModifiers(flags),
            type == .keyDown {
+            let trigger = ReadAloudTrace(origin: .hotkey)
+            ReadAloudTiming.event("hotkey.matched.key", trace: trigger)
             DispatchQueue.main.async { [weak self] in
-                self?.delegate?.ttsHotkeyPressed()
+                self?.delegate?.ttsHotkeyPressed(trigger: trigger)
             }
             return
         }
