@@ -29,21 +29,31 @@ final class MenuBarViewModelReadAloudTests: XCTestCase {
         XCTAssertTrue(condition(), "Controlled lifecycle did not reach its expected gate")
     }
 
-    private func makeViewModel() async -> MenuBarViewModel {
+    private func makeViewModel(
+        configFile: URL? = nil,
+        ttsService: FakeTextToSpeechService? = nil
+    ) async -> MenuBarViewModel {
         let vm = MenuBarViewModel(
             engine: FakeTranscriptionEngine(),
-            configService: ConfigService(configFile: directory.appendingPathComponent("config.json")),
+            configService: ConfigService(configFile: configFile ?? directory.appendingPathComponent("config.json")),
             clipboardManager: FakeClipboardManager(),
             muterRegistry: FakeMuterRegistry(),
             systemAudioCaptureFactory: { FakeSystemAudioCapture() },
             audioRecorder: FakeAudioRecorder(),
             audioFeedback: feedback,
-            ttsService: tts,
+            ttsService: ttsService ?? tts,
             textSelectionService: selection,
             readAloudNotification: { [weak self] title, _ in self?.notifications.append(title) }
         )
         await waitUntil { vm.appState == .idle }
         return vm
+    }
+
+    private func writePersistedVoice(_ voice: String, to configFile: URL) throws {
+        try FileManager.default.createDirectory(at: configFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var config = AppConfig.default
+        config.ttsVoiceRawValue = voice
+        try JSONEncoder().encode(config).write(to: configFile)
     }
 
     private func begin(_ vm: MenuBarViewModel, count: Int = 1) async -> Task<Void, Never> {
@@ -270,6 +280,93 @@ final class MenuBarViewModelReadAloudTests: XCTestCase {
         assertCues(0, 0)
         XCTAssertTrue(tts.texts.isEmpty)
         XCTAssertEqual(vm.appState, .recording)
+    }
+
+    func testVoiceCapturedBeforeAvailabilityWaitAndChangeAppliesToNextRequest() async {
+        let vm = await makeViewModel()
+        var availability: CheckedContinuation<Bool, Never>?
+        var first = true
+        tts.availability = {
+            if first {
+                first = false
+                return await withCheckedContinuation { availability = $0 }
+            }
+            return true
+        }
+        let requestA = Task { await vm.speakSelectedText() }
+        await waitUntil { availability != nil }
+        vm.setTtsVoice(.af_bella)
+        availability?.resume(returning: true)
+        await requestA.value
+        XCTAssertEqual(tts.availabilityRequests.map(\.voice), [.af_heart])
+        XCTAssertEqual(tts.requests.map(\.voice), [.af_heart])
+
+        await vm.speakSelectedText()
+        XCTAssertEqual(tts.availabilityRequests.map(\.voice), [.af_heart, .af_bella])
+        XCTAssertEqual(tts.requests.map(\.voice), [.af_heart, .af_bella])
+    }
+
+    func testPersistedRemovedVoiceIsPreservedAndBlocksBeforeRead() async throws {
+        let configFile = directory.appendingPathComponent("persisted-removed.json")
+        try writePersistedVoice(KokoroVoice.af_bella.rawValue, to: configFile)
+        let restoredTTS = FakeTextToSpeechService()
+        let restored = await makeViewModel(configFile: configFile, ttsService: restoredTTS)
+
+        XCTAssertEqual(restored.ttsVoice, .af_heart)
+        XCTAssertEqual(restored.unsupportedTtsVoiceID, KokoroVoice.af_bella.rawValue)
+        XCTAssertFalse(restored.isTtsVoiceSelected(.af_heart))
+        await restored.speakSelectedText()
+        XCTAssertTrue(restoredTTS.availabilityRequests.isEmpty)
+        XCTAssertTrue(restoredTTS.texts.isEmpty)
+        XCTAssertEqual(ConfigService(configFile: configFile).ttsVoiceRawValue, KokoroVoice.af_bella.rawValue)
+    }
+
+    func testPersistedUnknownVoiceHasNoSelectedRowAndBlocksBeforeRead() async throws {
+        let configFile = directory.appendingPathComponent("persisted-unknown.json")
+        try writePersistedVoice("future_voice", to: configFile)
+        let restoredTTS = FakeTextToSpeechService()
+
+        let restored = await makeViewModel(configFile: configFile, ttsService: restoredTTS)
+
+        XCTAssertEqual(restored.ttsVoice, .af_heart, "The service fallback is not a selected preference")
+        XCTAssertEqual(restored.unsupportedTtsVoiceID, "future_voice")
+        XCTAssertEqual(restored.ttsVoiceDisplayName, "future_voice")
+        XCTAssertFalse(restored.isTtsVoiceSelected(.af_heart))
+        XCTAssertFalse(restored.isTtsVoiceSelected(.af_bella))
+        await restored.speakSelectedText()
+        XCTAssertTrue(restoredTTS.availabilityRequests.isEmpty)
+        XCTAssertTrue(restoredTTS.texts.isEmpty)
+        XCTAssertEqual(ConfigService(configFile: configFile).ttsVoiceRawValue, "future_voice")
+    }
+
+    func testUnknownPersistedSpeedUsesNormalUntilExplicitSelectionReplacesRawValue() async throws {
+        let configFile = directory.appendingPathComponent("future-speed.json")
+        var config = AppConfig.default; config.ttsSpeedRawValue = 2.5
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try JSONEncoder().encode(config).write(to: configFile)
+        let vm = await makeViewModel(configFile: configFile)
+        XCTAssertEqual(vm.ttsSpeed, .normal)
+        XCTAssertEqual(ConfigService(configFile: configFile).ttsSpeedRawValue, 2.5)
+        vm.setTtsSpeed(.fast)
+        XCTAssertEqual(ConfigService(configFile: configFile).ttsSpeedRawValue, TextToSpeechSpeed.fast.rawValue)
+    }
+
+    func testSpeedCapturedBeforeAvailabilityWaitAndChangeAppliesToNextRequest() async {
+        let vm = await makeViewModel()
+        var availability: CheckedContinuation<Bool, Never>?
+        var first = true
+        tts.availability = {
+            if first { first = false; return await withCheckedContinuation { availability = $0 } }
+            return true
+        }
+        let firstRead = Task { await vm.speakSelectedText() }
+        await waitUntil { availability != nil }
+        vm.setTtsSpeed(.speedy)
+        availability?.resume(returning: true)
+        await firstRead.value
+        XCTAssertEqual(tts.requests.map(\.speed), [.normal])
+        await vm.speakSelectedText()
+        XCTAssertEqual(tts.requests.map(\.speed), [.normal, .speedy])
     }
 
     func testClipboardFallbackAcceptsUsableCurrentText() async {

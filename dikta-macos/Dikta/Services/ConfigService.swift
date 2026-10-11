@@ -133,6 +133,26 @@ final class ConfigService: ObservableObject {
 
     // MARK: - Model Configuration
 
+    /// Raw persisted voice; do not normalize unknown values on load/save.
+    var ttsVoiceRawValue: String {
+        get { config.ttsVoiceRawValue }
+        set {
+            config.ttsVoiceRawValue = newValue
+            objectWillChange.send()
+            save()
+        }
+    }
+
+    /// Raw persisted speed; unknown future values are deliberately retained.
+    var ttsSpeedRawValue: Double {
+        get { config.ttsSpeedRawValue }
+        set {
+            config.ttsSpeedRawValue = newValue
+            objectWillChange.send()
+            save()
+        }
+    }
+
     var whisperModel: String {
         get { config.whisperModel }
         set {

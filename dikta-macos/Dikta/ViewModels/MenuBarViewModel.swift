@@ -44,6 +44,9 @@ final class MenuBarViewModel: ObservableObject {
     private let clipboardManager: ClipboardManager
     private let hotkeyManager: HotkeyManager
     private let ttsService: any TextToSpeechSpeaking
+    /// Non-nil when config names a catalogue value this build does not know.
+    /// Keep it raw and block reading rather than silently reading as Heart.
+    private(set) var unsupportedTtsVoiceID: String?
     private let textSelectionService: any TextSelectionProviding
     private var readAloudRequest: UUID?
     private var readAloudAccepted = false
@@ -156,6 +159,13 @@ final class MenuBarViewModel: ObservableObject {
         self.hotkeyManager = HotkeyManager()
         self.ttsService = ttsService ?? (Self.isRunningUnderXCTestHost
             ? InertTextToSpeechService() : TextToSpeechService())
+        if let savedVoice = KokoroVoice(rawValue: configService.ttsVoiceRawValue),
+           KokoroVoice.allCases.contains(savedVoice) {
+            self.ttsService.voice = savedVoice
+        } else {
+            self.unsupportedTtsVoiceID = configService.ttsVoiceRawValue
+        }
+        self.ttsService.speed = TextToSpeechSpeed(rawValue: configService.ttsSpeedRawValue) ?? .normal
         self.textSelectionService = textSelectionService ?? TextSelectionService(clipboardManager: resolvedClipboardManager)
         self.readAloudNotification = readAloudNotification
         self.muterRegistry = muterRegistry ?? MuterRegistry()
@@ -1398,13 +1408,26 @@ final class MenuBarViewModel: ObservableObject {
 
         // MARK: - TTS Voice
 
-    var ttsVoice: KokoroVoice {
-        ttsService.voice
+    var ttsVoice: KokoroVoice { ttsService.voice }
+    var ttsVoiceDisplayName: String { unsupportedTtsVoiceID ?? ttsService.voice.displayName }
+
+    /// A preserved unsupported raw value must not visually select the service's
+    /// in-memory Heart fallback. SwiftUI uses this for the installed voice rows.
+    func isTtsVoiceSelected(_ voice: KokoroVoice) -> Bool {
+        unsupportedTtsVoiceID == nil && ttsService.voice == voice
     }
 
     func setTtsVoice(_ voice: KokoroVoice) {
+        unsupportedTtsVoiceID = nil
         ttsService.voice = voice
+        configService.ttsVoiceRawValue = voice.rawValue
         sendNotification(title: "Voice Changed", body: "Now using \(voice.displayName)", isRoutine: true)
+    }
+
+    var ttsSpeed: TextToSpeechSpeed { ttsService.speed }
+    func setTtsSpeed(_ speed: TextToSpeechSpeed) {
+        ttsService.speed = speed
+        configService.ttsSpeedRawValue = speed.rawValue
     }
 
     // MARK: - Hotkey Recording
@@ -1446,7 +1469,12 @@ final class MenuBarViewModel: ObservableObject {
     /// Speak selected text using TTS
     func speakSelectedText() async {
         guard appState == .idle, readAloudRequest == nil, !Task.isCancelled else { return }
+        if let raw = unsupportedTtsVoiceID {
+            sendNotification(title: "Voice Unavailable", body: "\(raw) is not supported by this version. Choose an installed voice in Advanced.", isRoutine: false)
+            return
+        }
         let id = UUID()
+        let speechRequest = ttsService.captureRequest()
         readAloudRequest = id
         defer {
             if readAloudRequest == id {
@@ -1473,23 +1501,23 @@ final class MenuBarViewModel: ObservableObject {
             return
         }
 
-        // Check if TTS server is available
-        let available = await ttsService.checkAvailable()
+        // Verify configured native assets, not whether the helper is already loaded.
+        // The accepted first request remains owned below while lazy startup runs.
+        let available = await ttsService.checkAvailable(for: speechRequest)
         // Both success and failure paths must recheck ownership after the await.
         guard !Task.isCancelled, readAloudRequest == id, appState == .idle else { return }
         guard available else {
-            if ttsService.isSetUp {
-                notifyReadAloud("TTS Starting Up", "Voice engine is loading, please try again shortly.", isRoutine: true)
-            } else {
-                notifyReadAloud("TTS Not Available", "Open Setup to install Text-to-Speech.")
-            }
+            notifyReadAloud(
+                "TTS Not Available",
+                ttsService.unavailabilityMessage ?? "Open Setup to install native Text-to-Speech."
+            )
             return
         }
 
         readAloudAccepted = true
         appState = .speaking
         audioFeedback.readAloudStart()
-        let task = Task { @MainActor in try await self.ttsService.speak(text) }
+        let task = Task { @MainActor in try await self.ttsService.speak(text, request: speechRequest) }
         readAloudTask = task
         do {
             try await withTaskCancellationHandler {

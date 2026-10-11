@@ -6,6 +6,9 @@ import NativeKokoroShared
 // Qualification lifecycle seam. Not constructed by DiktaApp or production TTS.
 final class NativeKokoroSession {
     enum State: Equatable { case stopped, starting, ready, working, cancelling, retiring, failed }
+    enum PlaybackDrainStatus: Equatable { case pending, drained, terminal }
+    enum RequestAdmission: Equatable { case available, waitForDrain, rollover, terminal }
+    static let maximumRequestIDs = 64
     static let startupDeadline: TimeInterval = 5
     static let coldInitializationDeadline: TimeInterval = 90
     static let laterInitializationDeadline: TimeInterval = 30
@@ -36,6 +39,9 @@ final class NativeKokoroSession {
     private let launchQueue = DispatchQueue(label: "com.duatalk.native-kokoro.launch")
     private var operation: NKKind = .blockedWork
     private var engineReady = false
+    // At most two generated buffers may own credits: one playing and one
+    // lookahead. Completion never starts idle; consumption/invalidation does.
+    private var pendingPlaybackBuffers = 0
     private var lastFailure: NKRuntimeFailure?
     private var lastPhase: NKPhase?
     private var reconciliationExceeded = false
@@ -107,10 +113,14 @@ final class NativeKokoroSession {
     }
     func begin(_ kind: NKKind, request id: UInt64, payload: Data = Data(), cold: Bool = true) throws {
         try queue.sync {
-            guard current == .ready, id != 0, [.describe, .initialize, .synthesize, .loopback].contains(kind),
+            let playbackCapacity = kind == .synthesize
+                ? pendingPlaybackBuffers < 2
+                : pendingPlaybackBuffers == 0
+            guard current == .ready, playbackCapacity, id != 0,
+                  [.describe, .initialize, .synthesize, .loopback].contains(kind),
                   resultFrames.isEmpty else { throw NKError.identity }
             try NKControl.validate(NKFrame(kind, session: session, request: id, payload: payload))
-            guard usedRequests.count < 64, usedRequests.insert(id).inserted else { throw NKError.identity }
+            guard usedRequests.count < Self.maximumRequestIDs, usedRequests.insert(id).inserted else { throw NKError.identity }
             request = id; nextSequence = 0; gate = NKIdentityGate(session: session, request: id)
             operation = kind; lastFailure = nil; lastPhase = nil
             try send(kind, payload: payload); current = .working
@@ -134,6 +144,32 @@ final class NativeKokoroSession {
             do { try send(.cancel) } catch { retireLocked() }
         }
     }
+    /// Atomically observes terminal state and releases exactly one generated
+    /// buffer credit. Runtime lease/idle decisions are based only on this result.
+    func markPlaybackDrained() -> PlaybackDrainStatus {
+        queue.sync {
+            guard current == .ready || current == .working else { return .terminal }
+            guard pendingPlaybackBuffers > 0 else { return .terminal }
+            pendingPlaybackBuffers -= 1
+            if current == .ready {
+                deadline = pendingPlaybackBuffers == 0
+                    ? clock() + Self.idleDeadline
+                    : .greatestFiniteMagnitude
+            }
+            return current == .ready && pendingPlaybackBuffers == 0 ? .drained : .pending
+        }
+    }
+
+    /// A capacity decision from the same serialized owner as request admission
+    /// and playback credits. A full session rolls only after old audio drains.
+    func requestAdmission() -> RequestAdmission {
+        queue.sync {
+            guard current == .ready || current == .working else { return .terminal }
+            guard usedRequests.count >= Self.maximumRequestIDs else { return .available }
+            guard current == .ready, pendingPlaybackBuffers == 0 else { return .waitForDrain }
+            return .rollover
+        }
+    }
     func shutdown() { queue.sync { retireLocked() } }
     func tick() { queue.sync { pumpLocked() } }
     func takeResults() -> [NKFrame] { queue.sync { let frames = resultFrames; resultFrames.removeAll(); resultBytes = 0; return frames } }
@@ -152,7 +188,7 @@ final class NativeKokoroSession {
             return
         }
         current = .retiring; retirementStart = clock(); forced = false
-        resultFrames.removeAll(); resultBytes = 0; outbox.clear()
+        resultFrames.removeAll(); resultBytes = 0; pendingPlaybackBuffers = 0; outbox.clear()
         child.closeControl(); child.signal(force: false)
     }
     private func pumpLocked() {
@@ -193,7 +229,13 @@ final class NativeKokoroSession {
                 case (.working, .complete):
                     guard frame.payload.isEmpty, resultFrames.count < 3 else { throw NKError.framing }
                     if operation == .initialize { engineReady = true }
-                    resultFrames.append(frame); current = .ready; deadline = now + Self.idleDeadline
+                    if operation == .synthesize {
+                        guard pendingPlaybackBuffers < 2 else { throw NKError.backpressure }
+                        pendingPlaybackBuffers += 1
+                    }
+                    resultFrames.append(frame)
+                    current = .ready
+                    deadline = pendingPlaybackBuffers > 0 ? .greatestFiniteMagnitude : now + Self.idleDeadline
                 case (.working, .failed):
                     lastFailure = try NKControl.failure(frame.payload); engineReady = false; retireLocked()
                 case (.cancelling, .phase), (.cancelling, .complete), (.cancelling, .failed), (.cancelling, .layout): break

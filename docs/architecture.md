@@ -151,7 +151,9 @@ rolling, and seconds from stop to summary — the feature's headline metric).
 
 ## Text-to-Speech
 
-Kokoro TTS is set up from the About window. Creates a Python venv at `~/Library/Application Support/Dikta/venv` and installs kokoro + dependencies.
+Read Aloud uses the bundled, separately sandboxed native Kokoro helper. Setup downloads and verifies only the pinned base model and English frontend, then verifies and stages the four signed app resources: Heart (`af_heart`), Nicole (`af_nicole`), Adam (`am_adam`), and George (`bm_george`). There is no optional-voice download path. Synthesis is offline after setup, with no Python dependency, loopback server, hidden download, or Python fallback in the native candidate. Each request snapshots its voice and engine-native speed (0.75×, 1×, 1.25×, or 1.75×), so menu changes apply only to the next read, including progressive chunks.
+
+Legacy Python setup/server source and existing on-disk virtual environments are retained only for older-release rollback compatibility. The native app does not start, reuse, or delete them.
 
 ## Release Build Notes
 

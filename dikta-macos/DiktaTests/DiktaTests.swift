@@ -243,6 +243,32 @@ final class AppConfigDecodingTests: XCTestCase {
         XCTAssertEqual(config.whisperModel, "small")
     }
 
+    func test_ttsVoice_absentDefaultsToHeart_andUnknownRawRoundTrips() throws {
+        let legacy = """
+        {"version":3,"hotkeys":{"toggle":{"modifiers":["shift","ctrl"]},"push_to_talk":{"modifiers":["cmd","shift"]}},"output_mode":"general","history":[],"whisper_model":"small","llm_model":"gemma3"}
+        """.data(using: .utf8)!
+        XCTAssertEqual(try JSONDecoder().decode(AppConfig.self, from: legacy).ttsVoiceRawValue, KokoroVoice.af_heart.rawValue)
+
+        let unknown = """
+        {"version":3,"hotkeys":{"toggle":{"modifiers":["shift","ctrl"]},"push_to_talk":{"modifiers":["cmd","shift"]}},"output_mode":"general","history":[],"whisper_model":"small","llm_model":"gemma3","tts_voice":"future_voice"}
+        """.data(using: .utf8)!
+        let config = try JSONDecoder().decode(AppConfig.self, from: unknown)
+        XCTAssertEqual(config.ttsVoiceRawValue, "future_voice")
+        let encoded = try JSONEncoder().encode(config)
+        XCTAssertEqual((try JSONSerialization.jsonObject(with: encoded) as? [String: Any])?["tts_voice"] as? String, "future_voice")
+    }
+
+    func test_configService_ttsVoiceRoundTripsWithoutNormalizingUnknownValue() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("config.json")
+        let service = ConfigService(configFile: file)
+        service.ttsVoiceRawValue = "af_bella"
+        XCTAssertEqual(ConfigService(configFile: file).ttsVoiceRawValue, "af_bella")
+        service.ttsVoiceRawValue = "future_voice"
+        XCTAssertEqual(ConfigService(configFile: file).ttsVoiceRawValue, "future_voice")
+    }
+
     func test_decode_backwardCompatOutputMode_codePrompt() throws {
         let json = """
         {
@@ -642,5 +668,21 @@ final class XCTestHostDetectionTests: XCTestCase {
     @MainActor
     func test_isRunningUnderXCTestHost_isTrueInsideTests() {
         XCTAssertTrue(MenuBarViewModel.isRunningUnderXCTestHost)
+    }
+}
+
+final class TextToSpeechSpeedConfigTests: XCTestCase {
+    func testSpeedDefaultsDecodesAllValuesAndPreservesUnknownRawValue() throws {
+        XCTAssertEqual(AppConfig.default.ttsSpeedRawValue, 1)
+        for speed in TextToSpeechSpeed.allCases {
+            var config = AppConfig.default; config.ttsSpeedRawValue = speed.rawValue
+            let decoded = try JSONDecoder().decode(AppConfig.self, from: JSONEncoder().encode(config))
+            XCTAssertEqual(decoded.ttsSpeedRawValue, speed.rawValue)
+        }
+        var future = AppConfig.default; future.ttsSpeedRawValue = 2.5
+        let encoded = try JSONEncoder().encode(future)
+        let decoded = try JSONDecoder().decode(AppConfig.self, from: encoded)
+        XCTAssertEqual(decoded.ttsSpeedRawValue, 2.5)
+        XCTAssertNil(TextToSpeechSpeed(rawValue: decoded.ttsSpeedRawValue))
     }
 }

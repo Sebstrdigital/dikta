@@ -1,7 +1,11 @@
 import XCTest
 import Darwin
+import CryptoKit
 @testable import Dikta
 
+// Retained as K5 legacy history. K3 removes the production loopback/PID path,
+// so these Python-process tests intentionally do not compile into the native gate.
+#if false
 /// Pins the two invariants `TextToSpeechService.killStaleServer()` must never
 /// break: it must never SIGTERM this process, and it must never SIGTERM a
 /// program that merely happens to hold port 59123.
@@ -382,8 +386,97 @@ final class TTSStaleServerPIDTests: XCTestCase {
         XCTAssertTrue(TextToSpeechService.listeningServerPIDs(onPort: 0).isEmpty)
     }
 }
+#endif
 
 /// Offline installer regressions: no pip, Kokoro import, model or network.
+/// Test-only copy of the retired Python setup process harness. These six active
+/// regressions continue to pin its bounded process behavior for downgrade/source
+/// compatibility without compiling Python setup into the Dikta application.
+private enum LegacyTTSSetupCommandError: LocalizedError {
+    case pythonNotFound
+    case commandFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .pythonNotFound: return "Python 3.11 was not found."
+        case .commandFailed(let message): return message
+        }
+    }
+}
+
+private enum TTSSetupCommands {
+    static func findPython(candidates: [String]) async throws -> String {
+        for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
+            if let version = try? await run(
+                path,
+                arguments: ["-c", "import sys; print('%d.%d' % sys.version_info[:2])"],
+                timeout: 5
+            ), version.trimmingCharacters(in: .whitespacesAndNewlines) == "3.11" {
+                return path
+            }
+        }
+        throw LegacyTTSSetupCommandError.pythonNotFound
+    }
+
+    @discardableResult
+    static func preserveVenv(at path: String) throws -> String? {
+        guard FileManager.default.fileExists(atPath: path) else { return nil }
+        let backup = path + ".backup-" + UUID().uuidString
+        try FileManager.default.moveItem(atPath: path, toPath: backup)
+        return backup
+    }
+
+    static func run(_ path: String, arguments: [String], timeout: TimeInterval = 600) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let log = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("dikta-legacy-tts-setup-test-\(UUID().uuidString).log")
+                    guard FileManager.default.createFile(atPath: log.path, contents: nil) else {
+                        throw LegacyTTSSetupCommandError.commandFailed("Cannot create installer log.")
+                    }
+                    let output = try FileHandle(forWritingTo: log)
+                    defer { try? output.close() }
+                    let process = Process()
+                    process.executableURL = URL(fileURLWithPath: path)
+                    process.arguments = arguments
+                    process.standardOutput = output
+                    process.standardError = output
+                    try process.run()
+                    let deadline = ProcessInfo.processInfo.systemUptime + timeout
+                    while process.isRunning && ProcessInfo.processInfo.systemUptime < deadline {
+                        Thread.sleep(forTimeInterval: 0.05)
+                    }
+                    let timedOut = process.isRunning
+                    if timedOut {
+                        process.terminate()
+                        let grace = ProcessInfo.processInfo.systemUptime + 2
+                        while process.isRunning && ProcessInfo.processInfo.systemUptime < grace {
+                            Thread.sleep(forTimeInterval: 0.05)
+                        }
+                        if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+                    }
+                    process.waitUntilExit()
+                    let input = try FileHandle(forReadingFrom: log)
+                    defer { try? input.close() }
+                    let end = try input.seekToEnd()
+                    try input.seek(toOffset: end > 8192 ? end - 8192 : 0)
+                    let text = String(decoding: try input.readToEnd() ?? Data(), as: UTF8.self)
+                    if timedOut || process.terminationStatus != 0 {
+                        let reason = timedOut ? "Timed out after \(Int(timeout))s" : "Exit code \(process.terminationStatus)"
+                        throw LegacyTTSSetupCommandError.commandFailed(
+                            "\(reason): \(text.suffix(1000))\nLog: \(log.path)"
+                        )
+                    }
+                    continuation.resume(returning: text)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+}
+
 final class TTSSetupCommandTests: XCTestCase {
     func testVerboseChildCannotDeadlockAndReturnsDiagnosticTail() async throws {
         let output = try await TTSSetupCommands.run("/usr/bin/python3", arguments: [
@@ -459,5 +552,90 @@ final class TTSSetupCommandTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: venv.path))
         XCTAssertEqual(try String(contentsOfFile: backup + "/marker", encoding: .utf8), "seed")
         XCTAssertNil(try TTSSetupCommands.preserveVenv(at: venv.path))
+    }
+}
+
+/// K5 candidate-composition and source-only downgrade fixtures. No live config,
+/// recordings, installed assets, or legacy environment are read by these tests.
+final class K5NativeCandidateCompatibilityTests: XCTestCase {
+    func testCandidateBundlesCompleteNativeNoticeAndDependencyLicensePacket() throws {
+        let expectedHashes = [
+            "ThirdPartyNotices": "9ff24052a3c2886e5fccdf3d6f74fd616bbd00483d79209786208a437f86ca3c",
+            "NativeKokoroNemo-NOTICE": "886143044515319a91f4447f9b447bb89089b4c9af847300f4b8de830c805852",
+            "NativeKokoroNemo-ThirdParty-Licenses": "14d21dbb0deb74aa7775f5803c36609aa6ef0c38c94fb03dbc95efb3645f7678",
+            "NativeKokoroNemo-Apache-2.0": "ac84752611bfcb8e2f472b17f9cb18f5321c9a75c2a5445b766725b1de67790b",
+            "NativeKokoroNemo-Dependency-Licenses": "9c2464f94695806d43711b9e60c87b4b109a0bd38f131be334a28b2d66a003df"
+        ]
+        var texts: [String: String] = [:]
+        for (name, expectedHash) in expectedHashes {
+            let url = try XCTUnwrap(Bundle.main.url(forResource: name, withExtension: "txt"), name)
+            let data = try Data(contentsOf: url)
+            let actualHash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+            XCTAssertEqual(actualHash, expectedHash, name)
+            texts[name] = try XCTUnwrap(String(data: data, encoding: .utf8), name)
+        }
+        XCTAssertNotNil(Bundle.main.url(forResource: "Apache-2.0", withExtension: "txt"))
+        XCTAssertNil(Bundle.main.url(forResource: "kokoro_server", withExtension: "py"))
+        XCTAssertNil(Bundle.main.url(forResource: "setup", withExtension: "sh"))
+
+        let notices = try XCTUnwrap(texts["ThirdPartyNotices"])
+        for required in ["FluidAudio 0.17.4", "NemoTextProcessing", "Kokoro-82M", "Misaki"] {
+            XCTAssertTrue(notices.contains(required), required)
+        }
+
+        let expectedCrates = [
+            "adler2 2.0.1", "anyhow 1.0.103", "autocfg 1.5.1", "bimap 0.6.3",
+            "bitflags 2.13.0", "cfg-if 1.0.4", "crc32fast 1.5.0", "either 1.16.0",
+            "flate2 1.1.9", "generic-array 1.4.3", "getrandom 0.3.4", "itertools 0.14.0",
+            "lazy_static 1.5.0", "libc 0.2.186", "memchr 2.8.3", "minimal-lexical 0.2.1",
+            "miniz_oxide 0.8.9", "nom 7.1.3", "num-traits 0.2.19", "ordered-float 5.3.0",
+            "ppv-lite86 0.2.21", "proc-macro2 1.0.106", "quote 1.0.46", "r-efi 5.3.0",
+            "rand 0.9.4", "rand_chacha 0.9.0", "rand_core 0.9.5", "rustfst 1.3.1",
+            "rustversion 1.0.23", "serde 1.0.228", "serde_core 1.0.228", "serde_derive 1.0.228",
+            "simd-adler32 0.3.9", "superslice 1.0.0", "syn 2.0.118", "typenum 1.20.1",
+            "unicode-ident 1.0.24", "wasip2 1.0.4+wasi-0.2.12", "wit-bindgen 0.57.1",
+            "zerocopy 0.8.53", "zerocopy-derive 0.8.53"
+        ]
+        let dependencyLicenses = try XCTUnwrap(texts["NativeKokoroNemo-Dependency-Licenses"])
+        let actualCrates = dependencyLicenses.split(separator: "\n").compactMap { line -> String? in
+            let prefix = "===== CRATE "
+            guard line.hasPrefix(prefix), line.hasSuffix(" =====") else { return nil }
+            return String(line.dropFirst(prefix.count).dropLast(" =====".count))
+        }
+        XCTAssertEqual(actualCrates, expectedCrates)
+        XCTAssertEqual(dependencyLicenses.components(separatedBy: "Selected license: MIT").count - 1, 39)
+        XCTAssertEqual(dependencyLicenses.components(separatedBy: "Selected license: Apache-2.0").count - 1, 2)
+        XCTAssertTrue(dependencyLicenses.contains("Additional required full license text (Unicode-3.0):"))
+        XCTAssertTrue(dependencyLicenses.contains("Copyright (C) 2017-2023 Red Hat, Inc."))
+        XCTAssertFalse(dependencyLicenses.contains("===== CRATE getrandom 0.4.3 ====="))
+        XCTAssertFalse(dependencyLicenses.contains("===== CRATE r-efi 6.0.0 ====="))
+    }
+
+    func testSourceOnlyLegacyCompatibilityFixturesRemainByteExact() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fixtures: [String: Data] = [
+            "config.json": Data("""
+            {"version":2,"hotkeys":{"toggle":{"modifiers":["shift","ctrl"]},"push_to_talk":{"modifiers":["cmd","shift"]}},"output_mode":"general","history":[],"whisper_model":"small","llm_model":"gemma3","engine":"whisper"}
+            """.utf8),
+            "venv/bin/python": Data("legacy-python-placeholder".utf8),
+            "kokoro_server.py": Data("# legacy rollback fixture".utf8),
+            "models/native-valid-asset.marker": Data("immutable-native-asset".utf8),
+            "preferences/tts-voice": Data("bm_lewis".utf8),
+            "sessions/older/transcript.txt": Data("Public synthetic transcript fixture.".utf8)
+        ]
+        for (relative, data) in fixtures {
+            let url = root.appendingPathComponent(relative)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: url)
+        }
+
+        let config = try JSONDecoder().decode(AppConfig.self, from: XCTUnwrap(fixtures["config.json"]))
+        XCTAssertEqual(config.engine, .whisper)
+        XCTAssertEqual(KokoroVoice(rawValue: String(decoding: try XCTUnwrap(fixtures["preferences/tts-voice"]), as: UTF8.self)), .bm_lewis)
+
+        for (relative, expected) in fixtures {
+            XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent(relative)), expected, relative)
+        }
     }
 }

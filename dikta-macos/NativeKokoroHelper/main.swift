@@ -24,6 +24,7 @@ let mailbox = NKResultMailbox()
 let workOwner = DispatchQueue(label: "com.duatalk.native-kokoro.sdk")
 // Accessed exclusively by workOwner; at most one operation is submitted at a time.
 var engine: NKVerifiedEngine?
+var runtimeAssetLease: NKAssetLease? // workOwner-only; retained through helper lifetime
 let startupDeadline = ProcessInfo.processInfo.systemUptime + 5
 var outputDeadline = startupDeadline
 
@@ -69,7 +70,7 @@ func accept(_ frame: NKFrame) throws {
     case .initialize, .synthesize:
         activeRequest = frame.request
         let token = mailbox.begin(), request = frame.request, identity = session, operation = frame.kind
-        let text = String(data: frame.payload, encoding: .utf8) ?? ""
+        let synthesisRequest = operation == .synthesize ? try NKSynthesisRequest.decode(frame.payload) : nil
         // This is a pre-invocation phase, NOT proof of active Core ML prediction.
         try respond(.phase, request: request, payload: Data([(operation == .initialize ? NKPhase.initializing : .synthesizing).rawValue]))
         workOwner.async {
@@ -78,12 +79,13 @@ func accept(_ frame: NKFrame) throws {
                 defer { settled.signal() }
                 do {
                     if operation == .initialize {
+                        let lease = try NKAssetLease(home: NKAssetLayout().home, mode: .shared)
                         let instance = try NativeKokoroEngine.qualificationEngine(manifestData: pinnedManifest())
-                        try await instance.initialize(); engine = instance
+                        try await instance.initialize(); runtimeAssetLease = lease; engine = instance
                         mailbox.publish([NKFrame(.complete, session: identity, request: request, sequence: 1)], epoch: token)
                     } else {
-                        guard let engine else { throw NKRuntimeFailure.notReady }
-                        let audio = try await engine.synthesize(text: text)
+                        guard let engine, runtimeAssetLease != nil, let synthesisRequest else { throw NKRuntimeFailure.notReady }
+                        let audio = try await engine.synthesize(text: synthesisRequest.text, voiceID: synthesisRequest.voiceID, speed: synthesisRequest.speed)
                         mailbox.publish([NKFrame(.audio, session: identity, request: request, sequence: 1, payload: audio),
                                          NKFrame(.complete, session: identity, request: request, sequence: 2)], epoch: token)
                     }
@@ -114,8 +116,16 @@ func accept(_ frame: NKFrame) throws {
         try respond(.layout, request: frame.request, payload: data)
         try respond(.complete, request: frame.request)
     case .cancel:
+        // A completed request must never be acknowledged as cancelled. The content-free
+        // marker records the exact control-loop observation used by the K1 qualification.
+        guard activeRequest != 0, activeRequest == frame.request else { throw NKError.identity }
+        let cancelledDuringAcousticCall = NativeKokoroEngine.isAcousticCallActive
         mailbox.invalidate(); outbox.clear(); workerGate.signal()
-        try respond(.cancelled, request: activeRequest)
+        if cancelledDuringAcousticCall {
+            let marker = "NK_QUAL_CANCEL_DURING_ACOUSTIC_CALL\n"
+            marker.withCString { pointer in _ = Darwin.write(STDERR_FILENO, pointer, strlen(pointer)) }
+        }
+        try respond(.cancelled, request: frame.request)
         exiting = true; exitDeadline = ProcessInfo.processInfo.systemUptime + 1
     case .shutdown:
         mailbox.invalidate(); outbox.clear(); workerGate.signal()

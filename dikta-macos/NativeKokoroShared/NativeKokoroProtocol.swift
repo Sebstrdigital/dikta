@@ -14,12 +14,7 @@ public enum NKControl {
         case .hello, .blockedWork, .cancel, .shutdown, .describe, .initialize:
             guard frame.payload.isEmpty else { throw NKError.framing }
         case .synthesize:
-            guard let text = String(data: frame.payload, encoding: .utf8),
-                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  frame.payload.count <= 1024,
-                  text.split(whereSeparator: { $0.isWhitespace }).count <= 64,
-                  text.split(whereSeparator: { $0.isWhitespace }).allSatisfy({ $0.count <= 62 }),
-                  !text.unicodeScalars.contains(where: { $0.value < 32 && !$0.properties.isWhitespace }) else { throw NKError.framing }
+            _ = try NKSynthesisRequest.decode(frame.payload)
         case .loopback:
             guard frame.payload.count == 2,
                   frame.payload.nkInteger(0, as: UInt16.self) >= 49152 else { throw NKError.framing }
@@ -35,6 +30,52 @@ public enum NKControl {
         return phase
     }
 }
+/// Versioned synthesis payload. Legacy text and v1 frames remain Heart at normal
+/// speed; v2 pins voice and engine speed for the complete helper request.
+public struct NKSynthesisRequest: Equatable {
+    public static let defaultVoiceID = "af_heart"
+    private static let magicV1 = Data([0x4e, 0x4b, 0x53, 0x52, 0x01])
+    private static let magicV2 = Data([0x4e, 0x4b, 0x53, 0x52, 0x02])
+    public let voiceID: String
+    public let speed: Float
+    public let text: String
+    public init(voiceID: String = defaultVoiceID, speed: Float = 1, text: String) { self.voiceID = voiceID; self.speed = speed; self.text = text }
+    public func encoded() throws -> Data {
+        guard let voice = voiceID.data(using: .utf8), voice.count <= 32,
+              let body = text.data(using: .utf8), body.count <= 1024 else { throw NKError.framing }
+        try Self.validate(voiceID: voiceID, speed: speed, text: text)
+        var data = Self.magicV2
+        data.append(UInt8(voice.count)); data.append(voice); data.nkAppend(speed.bitPattern); data.nkAppend(UInt16(body.count)); data.append(body)
+        return data
+    }
+    public static func decode(_ data: Data) throws -> Self {
+        if !data.starts(with: magicV1) && !data.starts(with: magicV2) {
+            guard data.count <= 1024, let text = String(data: data, encoding: .utf8) else { throw NKError.framing }
+            try validate(voiceID: defaultVoiceID, speed: 1, text: text); return Self(text: text)
+        }
+        let v2 = data.starts(with: magicV2)
+        guard data.count >= 8 else { throw NKError.framing }
+        let voiceCount = Int(data[5]), voiceStart = 6, voiceEnd = voiceStart + voiceCount
+        guard voiceCount > 0, voiceCount <= 32, data.count >= voiceEnd + (v2 ? 6 : 2) else { throw NKError.framing }
+        let voiceRange = voiceStart..<voiceEnd
+        let speed: Float = v2 ? Float(bitPattern: data.nkInteger(voiceEnd, as: UInt32.self)) : 1
+        let textStart = voiceEnd + (v2 ? 4 : 0)
+        let textCount = Int(data.nkInteger(textStart, as: UInt16.self))
+        guard data.count == textStart + 2 + textCount,
+              let voiceID = String(data: data[voiceRange], encoding: .utf8),
+              let text = String(data: data.suffix(textCount), encoding: .utf8) else { throw NKError.framing }
+        try validate(voiceID: voiceID, speed: speed, text: text)
+        return Self(voiceID: voiceID, speed: speed, text: text)
+    }
+    private static func validate(voiceID: String, speed: Float, text: String) throws {
+        guard NKVoiceCatalog.entry(voiceID) != nil, [Float(0.75), 1, 1.25, 1.75].contains(speed),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              text.utf8.count <= 1024, text.split(whereSeparator: { $0.isWhitespace }).count <= 64,
+              text.split(whereSeparator: { $0.isWhitespace }).allSatisfy({ $0.count <= 62 }),
+              !text.unicodeScalars.contains(where: { $0.value < 32 && !$0.properties.isWhitespace }) else { throw NKError.framing }
+    }
+}
+
 public struct NKFrame: Equatable {
     public var kind: NKKind
     public var session: UInt64

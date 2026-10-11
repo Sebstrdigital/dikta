@@ -295,19 +295,35 @@ struct AdvancedMenu: View {
                 }
             }
 
-            Menu("Voice: \(viewModel.ttsVoice.displayName)") {
+            Menu("Voice: \(viewModel.ttsVoiceDisplayName)") {
                 ForEach(KokoroVoice.allCases, id: \.self) { voice in
-                    Button(action: {
-                        viewModel.setTtsVoice(voice)
-                    }) {
-                        HStack {
-                            Text(voice.displayName)
-                            if viewModel.ttsVoice == voice {
-                                Spacer()
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
+                    voiceButton(voice)
+                }
+                if viewModel.unsupportedTtsVoiceID != nil {
+                    Divider()
+                    Text("\(viewModel.ttsVoiceDisplayName) is unavailable")
+                        .foregroundColor(.secondary)
+                    Text("Your saved voice was kept. Choose one of the bundled voices to read aloud.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            Menu("Speed: \(viewModel.ttsSpeed.displayName)") {
+                ForEach(TextToSpeechSpeed.allCases, id: \.self) { speed in
+                    Button(speed.displayName) { viewModel.setTtsSpeed(speed) }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func voiceButton(_ voice: KokoroVoice) -> some View {
+        Button(action: { viewModel.setTtsVoice(voice) }) {
+            HStack {
+                Text(voice.displayName)
+                if viewModel.isTtsVoiceSelected(voice) {
+                    Spacer()
+                    Image(systemName: "checkmark")
                 }
             }
         }

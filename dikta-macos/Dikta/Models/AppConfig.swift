@@ -43,6 +43,12 @@ struct AppConfig: Codable {
     /// Whether the one-time "Recording call audio" consent notice has been
     /// shown. Set the first time `.microphoneAndSystemAudio` is selected.
     var callRecordingNoticeShown: Bool
+    /// Raw selected Read Aloud voice. This intentionally remains a string so
+    /// a newer catalogue value survives an older build's unrelated save.
+    var ttsVoiceRawValue: String
+    /// Raw speed preserves a future value through unrelated saves; callers use
+    /// `.normal` when this build cannot offer it.
+    var ttsSpeedRawValue: Double
     /// Inactive compatibility view of the persisted speech-to-text engine.
     /// The original raw string is kept separately so a newer/removed value is
     /// not destroyed when this build performs an unrelated routine save.
@@ -104,6 +110,8 @@ struct AppConfig: Codable {
         case ollamaModel = "ollama_model"
         case debriefSource = "debrief_source"
         case callRecordingNoticeShown = "call_recording_notice_shown"
+        case ttsVoiceRawValue = "tts_voice"
+        case ttsSpeedRawValue = "tts_speed"
         case persistedEngineRawValue = "engine"
     }
 
@@ -135,6 +143,8 @@ struct AppConfig: Codable {
         ollamaModel: defaultOllamaModel,
         debriefSource: .microphone,
         callRecordingNoticeShown: false,
+        ttsVoiceRawValue: KokoroVoice.af_heart.rawValue,
+        ttsSpeedRawValue: TextToSpeechSpeed.normal.rawValue,
         engine: .whisper
     )
 
@@ -142,7 +152,7 @@ struct AppConfig: Codable {
     static let historyLimit = 5
 
     /// Memberwise initializer
-    init(version: Int, hotkeys: HotkeyConfigs, outputMode: OutputMode, history: [HistoryItem], whisperModel: String, llmModel: String, language: Language, customPrompt: String = defaultCustomPrompt, micSensitivity: MicSensitivity = .normal, muteSounds: Bool = false, muteNotifications: Bool = false, diagnosticLogging: Bool = false, enabledLanguages: [Language] = [.english, .swedish, .indonesian], debriefModeEnabled: Bool = false, debriefEngine: DebriefEngineKind = .auto, ollamaModel: String = defaultOllamaModel, debriefSource: DebriefSource = .microphone, callRecordingNoticeShown: Bool = false, engine: TranscriptionEngineKind = .whisper) {
+    init(version: Int, hotkeys: HotkeyConfigs, outputMode: OutputMode, history: [HistoryItem], whisperModel: String, llmModel: String, language: Language, customPrompt: String = defaultCustomPrompt, micSensitivity: MicSensitivity = .normal, muteSounds: Bool = false, muteNotifications: Bool = false, diagnosticLogging: Bool = false, enabledLanguages: [Language] = [.english, .swedish, .indonesian], debriefModeEnabled: Bool = false, debriefEngine: DebriefEngineKind = .auto, ollamaModel: String = defaultOllamaModel, debriefSource: DebriefSource = .microphone, callRecordingNoticeShown: Bool = false, ttsVoiceRawValue: String = KokoroVoice.af_heart.rawValue, ttsSpeedRawValue: Double = TextToSpeechSpeed.normal.rawValue, engine: TranscriptionEngineKind = .whisper) {
         self.version = version
         self.hotkeys = hotkeys
         self.outputMode = outputMode
@@ -161,6 +171,8 @@ struct AppConfig: Codable {
         self.ollamaModel = ollamaModel
         self.debriefSource = debriefSource
         self.callRecordingNoticeShown = callRecordingNoticeShown
+        self.ttsVoiceRawValue = ttsVoiceRawValue
+        self.ttsSpeedRawValue = ttsSpeedRawValue
         self.persistedEngineRawValue = engine.rawValue
     }
 
@@ -202,6 +214,8 @@ struct AppConfig: Codable {
         ollamaModel = try container.decodeIfPresent(String.self, forKey: .ollamaModel) ?? Self.defaultOllamaModel
         debriefSource = try container.decodeIfPresent(DebriefSource.self, forKey: .debriefSource) ?? .microphone
         callRecordingNoticeShown = try container.decodeIfPresent(Bool.self, forKey: .callRecordingNoticeShown) ?? false
+        ttsVoiceRawValue = try container.decodeIfPresent(String.self, forKey: .ttsVoiceRawValue) ?? KokoroVoice.af_heart.rawValue
+        ttsSpeedRawValue = try container.decodeIfPresent(Double.self, forKey: .ttsSpeedRawValue) ?? TextToSpeechSpeed.normal.rawValue
         // Preserve the exact inactive compatibility value even when this build
         // does not recognize it. `engine` exposes the historical `.whisper`
         // fallback without normalizing the raw string on the next save.

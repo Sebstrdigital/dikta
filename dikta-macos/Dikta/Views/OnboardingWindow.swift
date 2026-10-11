@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import AVFoundation
 import ServiceManagement
+import Security
 
 /// Window controller for first-launch onboarding
 @MainActor
@@ -71,7 +72,79 @@ extension Notification.Name {
     static let appModelLoaded = Notification.Name("appModelLoaded")
 }
 
+@MainActor
+final class NativeKokoroVoiceAvailability: ObservableObject {
+    enum State: Equatable { case unknown, checking, ready, unavailable(String) }
+
+    typealias ReadinessProvider = @Sendable () async throws -> NativeKokoroInstaller.Readiness
+
+    static let shared = NativeKokoroVoiceAvailability()
+    @Published private(set) var state: State = .unknown
+    @Published private(set) var installedVoices = Set<String>()
+
+    private let readinessProvider: ReadinessProvider
+    private var refreshTask: Task<Void, Never>?
+    private var generation = UUID()
+
+    init(readinessProvider: @escaping ReadinessProvider = {
+        let installer = try await NativeKokoroInstaller.production()
+        return try await installer.readiness()
+    }) {
+        self.readinessProvider = readinessProvider
+    }
+
+    func update(_ readiness: NativeKokoroInstaller.Readiness) {
+        generation = UUID() // invalidate an older read-only refresh before publishing
+        installedVoices = readiness.installedVoices
+        state = readiness.baseInstalled ? .ready : .unavailable("The verified voice engine is not installed.")
+    }
+
+    func markUnavailable(_ error: Error) {
+        generation = UUID()
+        installedVoices = []
+        state = .unavailable(error.localizedDescription)
+    }
+
+    func markUnknown() {
+        generation = UUID()
+        installedVoices = []
+        state = .unknown
+    }
+
+    /// A read-only, verified refresh. It never installs assets or changes the
+    /// user's selected voice. Its generation guard prevents a pre-install probe
+    /// from overwriting the newer post-activation verification result.
+    func refresh() {
+        guard refreshTask == nil else { return }
+        let job = UUID()
+        generation = job
+        state = .checking
+        refreshTask = Task { [weak self] in
+            defer { self?.refreshTask = nil }
+            do {
+                guard let self else { return }
+                let readiness = try await self.readinessProvider()
+                guard !Task.isCancelled, self.generation == job else { return }
+                self.installedVoices = readiness.installedVoices
+                self.state = readiness.baseInstalled ? .ready : .unavailable("The verified voice engine is not installed.")
+            } catch is CancellationError {
+                guard let self, self.generation == job else { return }
+                self.state = .unknown
+            } catch {
+                guard let self, self.generation == job else { return }
+                self.markUnavailable(error)
+            }
+        }
+    }
+
+    func isSelectable(_ voice: KokoroVoice) -> Bool {
+        guard state == .ready else { return false }
+        return voice == .af_heart || installedVoices.contains(voice.rawValue)
+    }
+}
+
 enum TTSSetupStatus: Equatable {
+    case checking
     case notInstalled
     case installing(step: String)
     case startingServer
@@ -88,191 +161,412 @@ enum TTSSetupStatus: Equatable {
 @MainActor
 final class TTSSetupManager: ObservableObject {
     @Published var status: TTSSetupStatus = .notInstalled
+    @Published private(set) var installedVoices = Set<String>()
+    @Published var maintenanceNotice: String?
+    private var installTask: Task<Void, Never>?
+    private var baseJob: UUID?
+    private var readinessJob: UUID?
+    private var installer: NativeKokoroInstaller?
+    private let productionFactory: @Sendable () async throws -> NativeKokoroInstaller
 
-    private static let appSupportDir = AppPaths.appSupport
-    private static let venvPython = AppPaths.venvPython
-    private static let serverScript = AppPaths.kokoroServerScript
-
-    init() {
-        checkExisting()
+    init(installer: NativeKokoroInstaller? = nil,
+         productionFactory: @escaping @Sendable () async throws -> NativeKokoroInstaller = { try await .production() }) {
+        self.installer = installer
+        self.productionFactory = productionFactory
+        status = .checking
     }
 
-    func checkExisting() {
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: Self.venvPython) && fm.fileExists(atPath: Self.serverScript) else { return }
+    /// Explicit UI-lifecycle entry point. Signature validation, helper describe and
+    /// the complete readiness hash pass happen only after the view appears, never
+    /// synchronously in this MainActor initializer.
+    func prepare() async {
+        let job = UUID()
+        readinessJob = job
+        status = .checking
+        do {
+            let resolved = if let installer { installer } else { try await productionFactory() }
+            let readiness = try await resolved.readiness()
+            try Task.checkCancellation()
+            guard readinessJob == job else { return }
+            installer = resolved
+            installedVoices = readiness.installedVoices
+            NativeKokoroVoiceAvailability.shared.update(readiness)
+            status = readiness.baseInstalled ? .installed : .notInstalled
+            readinessJob = nil
+        } catch is CancellationError {
+            guard readinessJob == job else { return }
+            NativeKokoroVoiceAvailability.shared.markUnknown()
+            status = .notInstalled
+            readinessJob = nil
+        } catch {
+            guard readinessJob == job else { return }
+            NativeKokoroVoiceAvailability.shared.markUnavailable(error)
+            status = .failed(error.localizedDescription)
+            readinessJob = nil
+        }
+    }
 
-        // Files exist — verify server is actually ready
-        status = .startingServer
-        Task {
-            let ready = await waitForServer(timeout: 120)
-            status = ready ? .installed : .failed("Voice engine failed to start. Try restarting.")
+    func checkExisting() async {
+        guard let installer else { await prepare(); return }
+        do {
+            let readiness = try await installer.readiness()
+            guard !Task.isCancelled else { return }
+            installedVoices = readiness.installedVoices
+            NativeKokoroVoiceAvailability.shared.update(readiness)
+            status = readiness.baseInstalled ? .installed : .notInstalled
+        } catch is CancellationError {
+            // Preserve the last verified snapshot while this read-only probe is
+            // cancelled; it did not establish that installed packs vanished.
+        } catch {
+            guard !Task.isCancelled else { return }
+            NativeKokoroVoiceAvailability.shared.markUnavailable(error)
+            status = .failed(error.localizedDescription)
         }
     }
 
     func install() {
-        guard !status.isInstalling else { return }
-        status = .installing(step: "Preparing...")
-
-        Task {
+        guard installTask == nil else { return }
+        let job = UUID(); baseJob = job; maintenanceNotice = nil
+        status = .installing(step: "Preparing verified native assets…")
+        installTask = Task { [weak self] in
+            guard let self else { return }
             do {
-                try await runSetup()
-                status = .installing(step: "Starting voice engine...")
-
-                // Signal TextToSpeechService to start the server
-                NotificationCenter.default.post(name: .ttsInstallCompleted, object: nil)
-
-                // Wait for server to actually respond
-                let ready = await waitForServer(timeout: 120)
-                if ready {
-                    status = .installed
+                guard let installer else { throw NativeKokoroInstaller.InstallError.identity }
+                let outcome = try await installer.installBase { [weak self] completed, total in
+                    Task { @MainActor in
+                        guard let self, self.baseJob == job else { return }
+                        self.status = .installing(step: "Verifying \(completed) of \(total)…")
+                    }
+                }
+                guard baseJob == job else { return }
+                let readiness = try await installer.readiness()
+                guard baseJob == job else { return }
+                installedVoices = readiness.installedVoices
+                NativeKokoroVoiceAvailability.shared.update(readiness)
+                status = readiness.baseInstalled ? .installed : .notInstalled
+                if outcome.retentionWarning { maintenanceNotice = "Installed. The previous verified version remains safely retained in staging." }
+            } catch is CancellationError {
+                guard baseJob == job else { return }
+                if let installer, let readiness = try? await installer.readiness(), !Task.isCancelled {
+                    status = readiness.baseInstalled ? .installed : .notInstalled
+                    installedVoices = readiness.installedVoices
+                    NativeKokoroVoiceAvailability.shared.update(readiness)
                 } else {
-                    status = .failed("Voice engine timed out. Try restarting Dikta.")
+                    NativeKokoroVoiceAvailability.shared.markUnknown()
+                    status = .notInstalled
                 }
             } catch {
+                guard baseJob == job else { return }
+                NativeKokoroVoiceAvailability.shared.markUnavailable(error)
                 status = .failed(error.localizedDescription)
             }
+            guard baseJob == job else { return }
+            installTask = nil; baseJob = nil
         }
     }
 
-    private func runSetup() async throws {
-        let fm = FileManager.default
-        let dir = Self.appSupportDir
-
-        // Create app support dir if needed
-        if !fm.fileExists(atPath: dir) {
-            try fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        }
-
-        // Select a verified interpreter before touching an existing installation.
-        let pythonPath = try await TTSSetupCommands.findPython()
-
-        // Copy kokoro_server.py from bundle
-        if let bundledScript = Bundle.main.path(forResource: "kokoro_server", ofType: "py") {
-            let dest = Self.serverScript
-            try Data(contentsOf: URL(fileURLWithPath: bundledScript))
-                .write(to: URL(fileURLWithPath: dest), options: .atomic)
-        }
-
-        // Never reuse an incomplete or incompatible venv, and never delete it.
-        let venvPath = dir + "/venv"
-        try TTSSetupCommands.preserveVenv(at: venvPath)
-        status = .installing(step: "Preparing...")
-        _ = try await TTSSetupCommands.run(pythonPath, arguments: ["-m", "venv", venvPath], timeout: 60)
-
-        status = .installing(step: "Downloading voice engine...")
-        let python = venvPath + "/bin/python3"
-        _ = try await TTSSetupCommands.run(python, arguments: ["-m", "pip", "install", "--upgrade", "pip", "--timeout", "30", "--retries", "2"])
-        _ = try await TTSSetupCommands.run(python, arguments: ["-m", "pip", "install", "--timeout", "30", "--retries", "2", "kokoro", "soundfile", "numpy"])
-        _ = try await TTSSetupCommands.run(python, arguments: ["-c", "import kokoro, soundfile, numpy"], timeout: 60)
-    }
-
-    private func waitForServer(timeout: Int) async -> Bool {
-        let attempts = timeout * 2  // 500ms intervals
-        for _ in 0..<attempts {
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            if await pingServer() { return true }
-        }
-        return false
-    }
-
-    private func pingServer() async -> Bool {
-        guard let url = URL(string: "http://127.0.0.1:59123/ping") else { return false }
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 1.0
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            return (response as? HTTPURLResponse)?.statusCode == 200
-        } catch {
-            return false
-        }
-    }
-
-    enum SetupError: LocalizedError {
-        case pythonNotFound
-        case commandFailed(String)
-
-        var errorDescription: String? {
-            switch self {
-            case .pythonNotFound:
-                return "Python 3.11 is required for Kokoro. Install Python 3.11 from python.org or Homebrew, then retry."
-            case .commandFailed(let msg):
-                return msg
-            }
-        }
+    func cancel() { installTask?.cancel() }
+    func retry() {
+        if installer == nil { Task { await prepare() } }
+        else { install() }
     }
 }
 
-/// Installer commands run off the cooperative pool with file-backed output:
-/// a verbose pip child cannot fill a pipe while we wait for it to terminate.
-/// Logs are retained locally so failures have diagnostics beyond the About row.
-enum TTSSetupCommands {
-    static func findPython(candidates: [String] = [
-        "/opt/homebrew/bin/python3.11", "/usr/local/bin/python3.11",
-        "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3",
-        "/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"
-    ]) async throws -> String {
-        for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
-            if let version = try? await run(path, arguments: ["-c", "import sys; print('%d.%d' % sys.version_info[:2])"], timeout: 5),
-               version.trimmingCharacters(in: .whitespacesAndNewlines) == "3.11" {
-                return path
+enum NativeKokoroLayoutDescriptor {
+    static let productionIdentifier = "com.duatalk.app.NativeKokoroHelper"
+    static let productionTeam = "UUM29335B4"
+    static func productionHome() throws -> URL {
+        let executable = NativeKokoroSession.packagedURL()
+        var staticCode: SecStaticCode?, requirement: SecRequirement?
+        guard SecStaticCodeCreateWithPath(executable as CFURL, [], &staticCode) == errSecSuccess,
+              let staticCode,
+              SecRequirementCreateWithString("anchor apple generic and identifier \"\(productionIdentifier)\" and certificate leaf[subject.OU] = \"\(productionTeam)\" and certificate leaf[field.1.2.840.113635.100.6.1.13] exists" as CFString, [], &requirement) == errSecSuccess,
+              let requirement,
+              SecStaticCodeCheckValidity(staticCode, SecCSFlags(rawValue: kSecCSCheckAllArchitectures), requirement) == errSecSuccess else {
+            throw NativeKokoroInstaller.InstallError.identity
+        }
+        let child = try NativeKokoroChild(executable: executable)
+        defer { child.closeControl(); child.signal(force: true); child.closeResults() }
+        var outbox = NKOutbox(), decoder = NKDecoder(), received: [NKFrame] = []
+        func transact(_ frame: NKFrame, terminal: NKKind) throws -> [NKFrame] {
+            received.removeAll(); try outbox.enqueue(frame)
+            let deadline = ProcessInfo.processInfo.systemUptime + 5
+            while ProcessInfo.processInfo.systemUptime < deadline {
+                try Task.checkCancellation()
+                try outbox.flush { try child.write($0) }
+                if let bytes = try child.read() { try decoder.feed(bytes) { received.append($0) } }
+                if received.contains(where: { $0.kind == terminal }) { return received }
+                if child.exited() { break }
+                usleep(1_000)
+            }
+            throw NativeKokoroInstaller.InstallError.identity
+        }
+        guard try transact(NKFrame(.hello, session: 0x4b32444553435249), terminal: .ready) ==
+                [NKFrame(.ready, session: 0x4b32444553435249)] else { throw NativeKokoroInstaller.InstallError.identity }
+        let frames = try transact(NKFrame(.describe, session: 0x4b32444553435249, request: 1), terminal: .complete)
+        guard frames.count == 2, frames[0].kind == .layout, frames[0].request == 1,
+              let paths = try JSONSerialization.jsonObject(with: frames[0].payload) as? [String], paths.count == 4 else {
+            throw NativeKokoroInstaller.InstallError.identity
+        }
+        let home = URL(fileURLWithPath: paths[0]).standardizedFileURL
+        let layout = NKAssetLayout(home: home)
+        guard home.path.hasSuffix("/Library/Containers/\(productionIdentifier)/Data"),
+              paths[1] == layout.modelsRoot.path, paths[2] == layout.frontend.path, paths[3] == layout.chain.path else {
+            throw NativeKokoroInstaller.InstallError.identity
+        }
+        return home
+    }
+}
+
+private final class NativeKokoroRedirectPolicy: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    static let allowedHosts = Set(["huggingface.co", "cdn-lfs.huggingface.co", "cdn-lfs-us-1.hf.co", "cas-bridge.xethub.hf.co"])
+    let origin: URL
+    init(origin: URL) { self.origin = origin }
+    static func allows(_ url: URL) -> Bool { url.scheme == "https" && url.port == nil && allowedHosts.contains(url.host ?? "") }
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) {
+        guard let next = request.url, Self.allows(origin), Self.allows(next) else { completionHandler(nil); return }
+        completionHandler(request)
+    }
+}
+
+enum NativeKokoroPinnedTransport {
+    static func fetch(_ url: URL, expectedBytes: Int) async throws -> Data {
+        guard expectedBytes > 0, expectedBytes <= 50_000_000,
+              NativeKokoroRedirectPolicy.allows(url), url.host == "huggingface.co" else {
+            throw NativeKokoroInstaller.InstallError.manifest
+        }
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 60)
+        request.httpMethod = "GET"
+        let (stream, response) = try await URLSession.shared.bytes(for: request, delegate: NativeKokoroRedirectPolicy(origin: url))
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+              http.url.map(NativeKokoroRedirectPolicy.allows) == true,
+              http.expectedContentLength < 0 || http.expectedContentLength == Int64(expectedBytes) else {
+            throw NativeKokoroInstaller.InstallError.transport
+        }
+        var result = Data(); result.reserveCapacity(expectedBytes)
+        for try await byte in stream {
+            try Task.checkCancellation()
+            guard result.count < expectedBytes else { throw NativeKokoroInstaller.InstallError.transport }
+            result.append(byte)
+        }
+        guard result.count == expectedBytes else { throw NativeKokoroInstaller.InstallError.transport }
+        return result
+    }
+}
+
+struct NativeKokoroActivation: Sendable {
+    typealias Exists = @Sendable (URL) -> Bool
+    typealias Move = @Sendable (URL, URL) throws -> Void
+    typealias Swap = @Sendable (URL, URL) -> Bool
+    var exists: Exists = { FileManager.default.fileExists(atPath: $0.path) }
+    var move: Move = { try FileManager.default.moveItem(at: $0, to: $1) }
+    var swap: Swap = { staged, active in
+        renameatx_np(AT_FDCWD, staged.path, AT_FDCWD, active.path, UInt32(RENAME_SWAP)) == 0
+    }
+    func commit(staged: URL, active: URL, retained: URL) throws -> NativeKokoroInstaller.Outcome {
+        if exists(active) {
+            guard swap(staged, active) else { throw NativeKokoroInstaller.InstallError.activation }
+            do {
+                try move(staged, retained)
+                return .init(activated: true, retainedPrevious: true, retentionWarning: false)
+            } catch {
+                // Atomic commit already succeeded; never misreport the prior tree as active.
+                return .init(activated: true, retainedPrevious: true, retentionWarning: true)
             }
         }
-        throw TTSSetupManager.SetupError.pythonNotFound
+        try move(staged, active)
+        return .init(activated: true, retainedPrevious: false, retentionWarning: false)
     }
+}
 
-    @discardableResult
-    static func preserveVenv(at path: String) throws -> String? {
-        guard FileManager.default.fileExists(atPath: path) else { return nil }
-        let backup = path + ".backup-" + UUID().uuidString
-        try FileManager.default.moveItem(atPath: path, toPath: backup)
-        return backup
+/// Verified, cancellable installer boundary. Downloads only manifest-pinned HTTPS
+/// files into a fresh sibling staging tree, verifies the complete SDK layout, then
+/// atomically swaps the single Models directory. A valid prior tree is retained.
+final class NativeKokoroInstaller: @unchecked Sendable {
+    struct SourceManifest: Decodable {
+        struct File: Decodable { let bytes: Int; let localPath: String; let sha256: String; let sourceURL: URL }
+        let files: [File]
     }
-
-    static func run(_ path: String, arguments: [String], timeout: TimeInterval = 600) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                do {
-                    let log = FileManager.default.temporaryDirectory
-                        .appendingPathComponent("dikta-tts-setup-\(UUID().uuidString).log")
-                    guard FileManager.default.createFile(atPath: log.path, contents: nil) else {
-                        throw TTSSetupManager.SetupError.commandFailed("Cannot create installer log.")
-                    }
-                    let output = try FileHandle(forWritingTo: log)
-                    defer { try? output.close() }
-                    let process = Process()
-                    process.executableURL = URL(fileURLWithPath: path)
-                    process.arguments = arguments
-                    process.standardOutput = output
-                    process.standardError = output
-                    try process.run()
-                    let deadline = ProcessInfo.processInfo.systemUptime + timeout
-                    while process.isRunning && ProcessInfo.processInfo.systemUptime < deadline {
-                        Thread.sleep(forTimeInterval: 0.05)
-                    }
-                    let timedOut = process.isRunning
-                    if timedOut {
-                        process.terminate()
-                        let grace = ProcessInfo.processInfo.systemUptime + 2
-                        while process.isRunning && ProcessInfo.processInfo.systemUptime < grace {
-                            Thread.sleep(forTimeInterval: 0.05)
-                        }
-                        if process.isRunning { kill(process.processIdentifier, SIGKILL) }
-                    }
-                    process.waitUntilExit()
-                    let input = try FileHandle(forReadingFrom: log)
-                    defer { try? input.close() }
-                    let end = try input.seekToEnd()
-                    try input.seek(toOffset: end > 8192 ? end - 8192 : 0)
-                    let text = String(decoding: try input.readToEnd() ?? Data(), as: UTF8.self)
-                    if timedOut || process.terminationStatus != 0 {
-                        let reason = timedOut ? "Timed out after \(Int(timeout))s" : "Exit code \(process.terminationStatus)"
-                        throw TTSSetupManager.SetupError.commandFailed("\(reason): \(text.suffix(1000))\nLog: \(log.path)")
-                    }
-                    continuation.resume(returning: text)
-                } catch {
-                    continuation.resume(throwing: error)
-                }
+    enum InstallError: LocalizedError, Equatable {
+        case manifest, disk, transport, busy, activation, identity
+        var errorDescription: String? {
+            switch self {
+            case .manifest: return "The signed voice asset manifest is invalid."
+            case .disk: return "Not enough disk space to prepare the voice engine safely."
+            case .transport: return "A voice asset download failed verification. Retry to repair it."
+            case .busy: return "Read Aloud is currently using these assets. Stop it and retry."
+            case .activation: return "The verified voice engine could not be activated; the previous installation was preserved."
+            case .identity: return "The signed native voice helper identity or private asset layout could not be verified."
             }
+        }
+    }
+    struct Outcome: Equatable, Sendable {
+        let activated: Bool
+        let retainedPrevious: Bool
+        let retentionWarning: Bool
+        static let unchanged = Outcome(activated: false, retainedPrevious: false, retentionWarning: false)
+    }
+    struct Readiness: Equatable, Sendable {
+        let baseInstalled: Bool
+        let installedVoices: Set<String>
+    }
+    typealias Fetch = @Sendable (URL, Int) async throws -> Data
+    typealias LeaseFactory = @Sendable () throws -> NKAssetLease
+    private let home: URL
+    private let manifestData: Data
+    private let fetch: Fetch
+    private let available: @Sendable (URL) throws -> Int64
+    private let acquireShared: LeaseFactory
+    private let acquireExclusive: LeaseFactory
+    private let preflightFailure: InstallError?
+    private let activation: NativeKokoroActivation
+    private let willVerifyUnderSharedLease: @Sendable () -> Void
+    private let willCommitUnderExclusiveLease: @Sendable () -> Void
+    private let fm = FileManager.default
+
+    init(home: URL, manifestData: Data,
+         fetch: @escaping Fetch,
+         available: @escaping @Sendable (URL) throws -> Int64,
+         acquireShared: LeaseFactory? = nil,
+         acquireExclusive: LeaseFactory? = nil,
+         preflightFailure: InstallError? = nil,
+         activation: NativeKokoroActivation = .init(),
+         willVerifyUnderSharedLease: @escaping @Sendable () -> Void = {},
+         willCommitUnderExclusiveLease: @escaping @Sendable () -> Void = {}) {
+        self.home = home.standardizedFileURL; self.manifestData = manifestData; self.fetch = fetch
+        self.available = available; self.preflightFailure = preflightFailure; self.activation = activation
+        self.willVerifyUnderSharedLease = willVerifyUnderSharedLease
+        self.willCommitUnderExclusiveLease = willCommitUnderExclusiveLease
+        self.acquireShared = acquireShared ?? { try NKAssetLease(home: home, mode: .shared) }
+        self.acquireExclusive = acquireExclusive ?? { try NKAssetLease(home: home, mode: .exclusive) }
+    }
+    static func production() async throws -> NativeKokoroInstaller {
+        let worker = Task.detached(priority: .userInitiated) { () throws -> NativeKokoroInstaller in
+            let home: URL
+            do { home = try NativeKokoroLayoutDescriptor.productionHome() }
+            catch { throw (error as? InstallError) ?? .identity }
+            try Task.checkCancellation()
+            return NativeKokoroInstaller(home: home, manifestData: NKEmbeddedManifest.data,
+                fetch: { url, expectedBytes in try await NativeKokoroPinnedTransport.fetch(url, expectedBytes: expectedBytes) },
+                available: { url in
+                    let values = try url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+                    return values.volumeAvailableCapacityForImportantUsage ?? 0
+                })
+        }
+        return try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+    }
+    func readiness() async throws -> Readiness {
+        guard preflightFailure == nil else { throw preflightFailure! }
+        let worker = Task.detached(priority: .userInitiated) { try self.readinessWork() }
+        return try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+    }
+    private func readinessWork() throws -> Readiness {
+        if let preflightFailure { throw preflightFailure }
+        let lease: NKAssetLease
+        do { lease = try acquireShared() } catch { return Readiness(baseInstalled: false, installedVoices: []) }
+        return try withExtendedLifetime(lease) {
+            try Task.checkCancellation()
+            willVerifyUnderSharedLease()
+            let layout = NKAssetLayout(home: home)
+            guard let manifest = try? NKAssetManifest.decodePinned(manifestData),
+                  (try? Data(contentsOf: layout.modelsRoot.appendingPathComponent("COMPLETE"))) == Data("revision=\(NKAssetManifest.revision)\n".utf8),
+                  (try? NKAssetVerifier.verify(manifest, layout: layout)) != nil else {
+                return Readiness(baseInstalled: false, installedVoices: [])
+            }
+            guard NKVoiceCatalog.entries.allSatisfy({ (try? NKVoiceCatalog.verify($0.id, layout: layout)) != nil }) else {
+                return Readiness(baseInstalled: false, installedVoices: [])
+            }
+            return Readiness(baseInstalled: true, installedVoices: Set(NKVoiceCatalog.entries.map(\.id)))
+        }
+    }
+    func isBaseInstalled() async throws -> Bool { try await readiness().baseInstalled }
+    func installBase(progress: @escaping @Sendable (Int, Int) -> Void) async throws -> Outcome {
+        let worker = Task.detached(priority: .userInitiated) { try await self.installBaseWork(progress: progress) }
+        return try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+    }
+    private func installBaseWork(progress: @escaping @Sendable (Int, Int) -> Void) async throws -> Outcome {
+        if let preflightFailure { throw preflightFailure }
+        let pinned = try NKAssetManifest.decodePinned(manifestData)
+        let sources = try JSONDecoder().decode(SourceManifest.self, from: manifestData)
+        guard sources.files.count == pinned.files.count else { throw InstallError.manifest }
+        let required = Int64(pinned.files.reduce(0) { $0 + $1.bytes }) * 2 + 16_777_216
+        guard try available(capacityURL()) >= required else { throw InstallError.disk }
+        let stage = home.deletingLastPathComponent().appendingPathComponent(".NativeKokoro-stage-\(NKAssetManifest.revision)")
+        try validateOrCreateStage(stage)
+        let stageLayout = NKAssetLayout(home: stage), activeLayout = NKAssetLayout(home: home)
+        var readLease: NKAssetLease? = try? acquireShared() // first install has no lock parent yet
+        defer { withExtendedLifetime(readLease) {} }
+        for (index, source) in sources.files.enumerated() {
+            try Task.checkCancellation()
+            let file = pinned.files[index]
+            guard source.bytes == file.bytes, source.sha256 == file.sha256,
+                  source.localPath == file.localPath, source.sourceURL.scheme == "https",
+                  source.sourceURL.host == "huggingface.co" else { throw InstallError.manifest }
+            let destination = try stageLayout.fileURL(file)
+            try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if (try? NKAssetVerifier.verifyFile(file, layout: stageLayout)) != nil {
+                progress(index + 1, sources.files.count); continue // genuine verified partial-stage reuse
+            }
+            if fm.fileExists(atPath: destination.path) { try fm.removeItem(at: destination) }
+            if readLease != nil, (try? NKAssetVerifier.verifyFile(file, layout: activeLayout)) != nil,
+               let existing = try? activeLayout.fileURL(file) {
+                try fm.copyItem(at: existing, to: destination)
+            } else {
+                let data = try await fetch(source.sourceURL, source.bytes)
+                try Task.checkCancellation()
+                guard data.count == source.bytes, NKAssetManifest.hash(data) == source.sha256 else { throw InstallError.transport }
+                try data.write(to: destination, options: .atomic)
+            }
+            try NKAssetVerifier.verifyFile(file, layout: stageLayout)
+            progress(index + 1, sources.files.count)
+        }
+        try NKAssetVerifier.verify(pinned, layout: stageLayout)
+        readLease = nil
+        let lease: NKAssetLease
+        do { lease = try acquireExclusive() } catch NKLeaseFailure.busy { throw InstallError.busy }
+        defer { withExtendedLifetime(lease) {} }
+        willCommitUnderExclusiveLease()
+        // Fixed voice packs are signed app resources, not downloaded assets.
+        // Verify each resource before placing it into the exclusively leased staged tree.
+        for entry in NKVoiceCatalog.entries {
+            guard let source = Bundle.main.url(forResource: entry.id, withExtension: "bin", subdirectory: "Voices") else { throw InstallError.manifest }
+            let data = try Data(contentsOf: source, options: .mappedIfSafe)
+            guard data.count == entry.bytes, NKAssetManifest.hash(data) == entry.derivedSHA256 else { throw InstallError.manifest }
+            let destination = stageLayout.chain.appendingPathComponent("\(entry.id).bin")
+            if fm.fileExists(atPath: destination.path) { try fm.removeItem(at: destination) }
+            try data.write(to: destination, options: .atomic)
+            try NKVoiceCatalog.verify(entry.id, layout: stageLayout)
+        }
+        try NKAssetVerifier.verify(pinned, layout: stageLayout)
+        let stagedModels = stageLayout.modelsRoot
+        try Data("revision=\(NKAssetManifest.revision)\n".utf8).write(to: stagedModels.appendingPathComponent("COMPLETE"), options: [.atomic])
+        try Task.checkCancellation() // immediately before commit while exclusively leased
+        let active = activeLayout.modelsRoot
+        try fm.createDirectory(at: active.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let retained = home.appendingPathComponent(".cache/fluidaudio/Retained-\(UUID().uuidString)")
+        return try activation.commit(staged: stagedModels, active: active, retained: retained)
+    }
+    private func isVoiceInstalledUnderHeldLease(_ id: String) -> Bool {
+        (try? NKVoiceCatalog.verify(id, layout: NKAssetLayout(home: home))) != nil
+    }
+    private func capacityURL() throws -> URL {
+        var candidate = home
+        while !fm.fileExists(atPath: candidate.path) {
+            let parent = candidate.deletingLastPathComponent()
+            guard parent.path != candidate.path else { throw InstallError.disk }
+            candidate = parent
+        }
+        return candidate
+    }
+    private func validateOrCreateStage(_ stage: URL) throws {
+        var info = stat()
+        if lstat(stage.path, &info) == 0 {
+            guard (info.st_mode & S_IFMT) == S_IFDIR else { throw InstallError.activation }
+        } else {
+            try fm.createDirectory(at: stage, withIntermediateDirectories: true)
         }
     }
 }
@@ -378,6 +672,14 @@ struct OnboardingView: View {
 
             Spacer()
 
+            Button("Third-Party Notices") {
+                if let notices = Bundle.main.url(forResource: "ThirdPartyNotices", withExtension: "txt") {
+                    NSWorkspace.shared.open(notices)
+                }
+            }
+            .buttonStyle(.link)
+            .font(.caption)
+
             // Tip
             Text("Look for the mic icon in your menu bar. Reopen this window by launching Dikta again.")
                 .font(.caption)
@@ -417,6 +719,7 @@ struct OnboardingView: View {
             isAppReady = true
         }
         .task {
+            await ttsSetup.prepare()
             // Poll permissions every 5 seconds until all granted
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
@@ -492,6 +795,11 @@ struct OnboardingView: View {
     @ViewBuilder
     private var ttsStatusView: some View {
         switch ttsSetup.status {
+        case .checking:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Checking voice assets…").font(.caption).foregroundColor(.secondary)
+            }
         case .notInstalled:
             Button("Set Up") { ttsSetup.install() }
                 .controlSize(.small)
@@ -504,6 +812,8 @@ struct OnboardingView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
+                    Button("Cancel") { ttsSetup.cancel() }
+                        .controlSize(.mini)
                 }
             }
         case .startingServer:
@@ -516,12 +826,15 @@ struct OnboardingView: View {
                     .lineLimit(1)
             }
         case .installed:
-            Label("Ready", systemImage: "checkmark.circle.fill")
-                .foregroundColor(.green)
-                .font(.caption)
+            HStack(spacing: 6) {
+                Label("Ready", systemImage: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+                    .font(.caption)
+                Text("4 bundled voices ready").font(.caption).foregroundColor(.secondary)
+            }
         case .failed(let msg):
             VStack(alignment: .trailing, spacing: 2) {
-                Button("Retry") { ttsSetup.install() }
+                Button("Retry") { ttsSetup.retry() }
                     .controlSize(.small)
                 Text(msg)
                     .font(.caption2)

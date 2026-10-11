@@ -20,7 +20,7 @@ Download the latest DMG from [Releases](https://github.com/Sebstrdigital/dikta/r
 - **Formatting** — select pasted text and press the Format hotkey to turn a run-on dictation into paragraphs, greetings and lists, deterministically and offline
 - **Call Debrief** — record a call (your mic plus the audio you hear), get a Me/Them transcript and a rolling summary with decisions, action items and open questions. Summaries come from Apple's on-device Foundation Models, a local Ollama model, or a built-in heuristic, never a cloud service.
 - **Debrief mode** — the same summary pipeline for a single microphone recording or an audio file you drop in
-- **Text-to-Speech** — select text and have it read aloud via Kokoro TTS (optional, installed separately)
+- **Text-to-Speech** — select text and have it read aloud via native Kokoro TTS, with four bundled voices and selectable reading speed
 - **History** — access your last 5 dictations from the menu bar
 - **Automatic European-language transcription** — Ultra detects its language from audio without a hint. Formatting infers supported language behavior from the selected text; Debrief infers English or Swedish from its transcript and falls back to English when uncertain. Indonesian is not supported.
 - **Mic Sensitivity** — tune speech detection sensitivity for Normal or Headset use
@@ -101,7 +101,7 @@ If you get "No Speech" errors with AirPods or Bluetooth headsets, switch to **He
 
 ## Text-to-Speech
 
-Select text in any app and press the Read Aloud hotkey. Set up the TTS engine from the About window — it downloads Kokoro TTS into a local Python venv automatically. Requires Python 3 installed on your system.
+Select text in any app and press the Read Aloud hotkey. Set up native Kokoro from the About window: one-time setup downloads and verifies the base model and English frontend, then stages the bundled Heart, Nicole, Adam, and George voices under Dikta's Application Support data. Choose a voice and Slow (0.75×), Normal (1×), Fast (1.25×), or Speedy (1.75×) from Advanced. Reading is fully offline after setup and has no Python dependency, hidden download, or Python fallback. Voice and speed changes apply to the next read. All voices use the native US-English frontend; British-labelled voices are timbres, not a separate British-English frontend.
 
 ## Building from Source
 
@@ -152,7 +152,7 @@ cd dikta-macos/bench
 
 **"No Speech" notifications** — Try switching to **Headset** in the Audio > Mic Sensitivity menu. Also ensure the correct input device is selected in System Settings > Sound > Input before recording.
 
-**Text-to-speech not working** — Open the About window and click "Set Up" next to Text-to-Speech. Requires Python 3 (`/usr/bin/python3` or Homebrew).
+**Text-to-speech not working** — Open the About window and click "Set Up" next to Text-to-Speech. Setup verifies the native base assets and stages the bundled Heart, Nicole, Adam, and George voices. Python is not required.
 
 **Model loading is slow** — Ultra downloads and Core ML may compile on first use; the menu shows download progress. Subsequent launches are fast because the model stays cached.
 

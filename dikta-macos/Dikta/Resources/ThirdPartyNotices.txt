@@ -1,0 +1,66 @@
+DIKTA THIRD-PARTY NOTICES — NATIVE READ ALOUD CANDIDATE
+
+This distribution includes third-party software and model assets. This file is
+an attribution inventory, not a warranty or a claim that upstream provenance
+gaps have been independently resolved. The full Apache License 2.0 is bundled
+next to this file as Apache-2.0.txt.
+
+Native runtime and frontend
+---------------------------
+FluidAudio 0.17.4
+  Revision: 21493f8dac5a97e65742e6ff26f42f164c2fda0f
+  License: Apache-2.0
+  Copyright and attribution notices remain those of its contributors.
+
+NemoTextProcessing.xcframework / text-processing-rs 0.3.1
+  Package checksum:
+  5fa8c10d4ec26c1bb2413125f351a7222a4c68a23b74476680fbada7e26fc6aa
+  Source tag tree: 46ebddcea5e1ff673c2cb5256a1b6b0e6c4ff527
+  The unchanged upstream notice and inventory are bundled as
+  NativeKokoroNemo-NOTICE.txt and NativeKokoroNemo-ThirdParty-Licenses.txt.
+  The upstream Apache license is NativeKokoroNemo-Apache-2.0.txt. Full selected
+  license texts and attributions for the corrected 41-entry, version-qualified
+  release-lock closure are in NativeKokoroNemo-Dependency-Licenses.txt: 39
+  MIT selections, Apache-2.0 for superslice and r-efi, and the additional
+  Unicode-3.0 terms required by unicode-ident.
+  The grammars/fixtures identify NVIDIA source commit
+  1f1263579fe57ba7ed783cad3dddee710fcc5064.
+  The closure conservatively includes build, proc-macro and target-specific
+  dependencies (including r-efi and WASI); it is not a claim that every entry
+  is linked into the macOS binary or an exact historical binary SBOM because
+  the retained upstream build does not use --locked. The package source's
+  older “0.3.0” label is not substituted for the pinned 0.3.1 artifact.
+
+Native Kokoro assets
+--------------------
+FluidInference kokoro-82m-coreml ANE conversion
+  Revision: 006395f65025af251858b1ab0a7178a6a1e73f9f
+  License file: Apache-2.0
+  Copyright 2026 laishere.
+  The same revision's README mentions MIT and Lai Yongkang 2025; that
+  conflicting/stale statement is recorded here and is not treated as a grant.
+
+Original conversion project, laishere/kokoro-coreml
+  Revision: 484907db6a8347a6afb6e7b86850ea2878c6a3fb
+  License: Apache-2.0
+
+Kokoro-82M acoustic weights and original voices, hexgrad/Kokoro-82M
+  Revision: f3ff3571791e39611d31c381e3a41a3af07b4987
+  License declared by upstream metadata: Apache-2.0.
+  No independent speaker-rights assessment is implied.
+
+English BART G2P, PeterReid/graphemes_to_phonemes_en_us
+  Inspected upstream revision: a5631b285d18d59483c32c0c3379cb9fac924f4b
+  License declared by upstream metadata: Apache-2.0.
+  The converter did not pin the historical checkpoint revision, so exact
+  linkage of the compiled artifact remains unverified.
+
+English lexicon derived from Misaki
+  Inspected Misaki revision: fba1236595f2d2bf21d414ba6e57d25256afada3
+  License: Apache-2.0.
+  The compiled cache has no provenance header and does not independently prove
+  its exact dictionary-source revision or all incorporated data notices.
+
+Dikta preserves the signed asset manifest and immutable hashes used to verify
+the native candidate. Downloading an asset directly from upstream does not
+remove these notice obligations.

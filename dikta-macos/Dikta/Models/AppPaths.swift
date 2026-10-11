@@ -16,16 +16,9 @@ enum AppPaths {
     /// Full path to the GGUF model file
     static let llmModelPath = modelsDir + "/gemma-3-4b-it-Q4_K_M.gguf"
 
-    // MARK: - TTS (Kokoro)
-
-    /// ~/Library/Application Support/Dikta/kokoro_server.py
-    static let kokoroServerScript = appSupport + "/kokoro_server.py"
-
-    /// ~/Library/Application Support/Dikta/venv/bin/python
-    static let venvPython = appSupport + "/venv/bin/python"
-
-    /// ~/Library/Application Support/Dikta/venv/
-    static let venvDir = appSupport + "/venv"
+    // Legacy Python TTS paths intentionally have no production accessors.
+    // Old files remain on disk for downgrade compatibility; the native-only
+    // candidate neither reads, rewrites, launches nor deletes them.
 
     // MARK: - Migration
 

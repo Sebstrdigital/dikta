@@ -6,6 +6,21 @@ All notable changes to Dikta will be documented in this file.
 - 2026-09-28: `ConfigService.save()` now uses a single atomic-write strategy (temp file + `replaceItemAt`), removing the duplicate approach that had carried as unresolved tech debt for 14 sprints.
 - 2026-04-17: DiagnosticLogger (Windows) now correctly gated behind `[Conditional("DIAGNOSTICS")]` compile flag — release builds produce no log output
 
+## [1.5.5] - 2026-10-11 — Read Aloud, Simplified
+
+### Changed
+
+- Read Aloud now uses native Kokoro synthesis after one-time base setup. The bundled Heart (`af_heart`), Nicole (`af_nicole`), Adam (`am_adam`), and George (`bm_george`) voices are staged and verified locally; reading is fully offline after setup.
+- Added persisted native reading speeds: Slow (0.75×), Normal (1×), Fast (1.25×), and Speedy (1.75×). Voice and speed are captured for a read, so changes apply to the next request, including during progressive reading.
+
+### Removed
+
+- Optional voice downloads and their installer controls. An existing Heart-only base setup upgrades locally with no additional base fetch.
+
+### Notes
+
+- Requires macOS 15 or later.
+
 ## [1.5.4] - 2026-10-09 — Simpler Dictation
 
 ### Changed

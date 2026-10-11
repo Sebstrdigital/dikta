@@ -2,10 +2,9 @@ import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Migrate from old "Dua Talk" directory if needed
+        // Migrate from old "Dua Talk" directory if needed. Existing legacy TTS
+        // files are compatibility data and are deliberately left untouched.
         AppPaths.migrateIfNeeded()
-        // Copy bundled kokoro_server.py to Application Support if missing
-        copyBundledServerScript()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -13,25 +12,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    private func copyBundledServerScript() {
-        let fm = FileManager.default
-        let dest = AppPaths.kokoroServerScript
-
-        guard !fm.fileExists(atPath: dest),
-              let bundled = Bundle.main.path(forResource: "kokoro_server", ofType: "py") else {
-            return
-        }
-
-        do {
-            let dir = AppPaths.appSupport
-            if !fm.fileExists(atPath: dir) {
-                try fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
-            }
-            try fm.copyItem(atPath: bundled, toPath: dest)
-        } catch {
-            AppLogger.general.error("Failed to copy kokoro_server.py: \(error.localizedDescription)")
-        }
-    }
 }
 
 /// No-op `TranscriptionEngine` used only when `Dikta.app` itself is acting as

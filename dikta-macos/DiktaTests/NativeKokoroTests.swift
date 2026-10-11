@@ -5,6 +5,24 @@ import NativeKokoroShared
 #endif
 
 final class NativeKokoroProtocolTests: XCTestCase {
+    func testVersionedVoiceRequestLegacyDefaultAndUnknownRejection() throws {
+        let legacy = try NKSynthesisRequest.decode(Data("Hello from Heart.".utf8))
+        XCTAssertEqual(legacy, NKSynthesisRequest(voiceID: "af_heart", text: "Hello from Heart."))
+        for entry in NKVoiceCatalog.entries {
+            for speed: Float in [0.75, 1, 1.25, 1.75] {
+                let request = NKSynthesisRequest(voiceID: entry.id, speed: speed, text: "Public synthetic voice check.")
+                XCTAssertEqual(try NKSynthesisRequest.decode(request.encoded()), request)
+                try NKControl.validate(NKFrame(.synthesize, session: 1, request: 2, payload: request.encoded()))
+            }
+        }
+        XCTAssertThrowsError(try NKSynthesisRequest(voiceID: "unknown_voice", text: "No fallback.").encoded())
+        for speed: Float in [0, 0.5, 2, .nan, .infinity] {
+            XCTAssertThrowsError(try NKSynthesisRequest(voiceID: "af_heart", speed: speed, text: "No fallback.").encoded())
+        }
+        var malformed = try NKSynthesisRequest(voiceID: "af_nicole", text: "Hello.").encoded()
+        malformed[4] = 3
+        XCTAssertThrowsError(try NKSynthesisRequest.decode(malformed))
+    }
     func testFragmentedAndCoalescedFrames() throws {
         let frames = [NKFrame(.hello, session: 1), NKFrame(.cancel, session: 1, request: 2, sequence: 1)]
         let bytes = try frames.reduce(into: Data()) { $0.append(try $1.encoded()) }
@@ -184,6 +202,53 @@ final class NativeKokoroLifecycleTests: XCTestCase {
             if work { try s.beginBlockedWork(request: 2) }
             now = work ? 31 : 121; s.tick(); XCTAssertEqual(s.state, .retiring)
         }
+    }
+    func testSynthesisCreditsAllowOnePlayingAndOneLookaheadAndIdleOnlyAfterBothDrain() throws {
+        now = 0
+        let child = NativeKokoroFakeChild(), s = owner(child)
+        try ready(s, child)
+        try s.begin(.synthesize, request: 2, payload: try NKSynthesisRequest(text: "Playing fixture.").encoded())
+        try child.frame(NKFrame(.audio, session: 1, request: 2, payload: wav()))
+        try child.frame(NKFrame(.complete, session: 1, request: 2, sequence: 1))
+        s.tick()
+        XCTAssertEqual(s.state, .working, "the first tick consumes only the queued audio frame")
+        s.tick()
+        XCTAssertEqual(s.state, .ready)
+        _ = s.takeResults()
+
+        try s.begin(.synthesize, request: 3, payload: try NKSynthesisRequest(text: "Lookahead fixture.").encoded())
+        XCTAssertEqual(s.markPlaybackDrained(), .pending,
+                       "draining playing audio while lookahead generates cannot start idle")
+        try child.frame(NKFrame(.audio, session: 1, request: 3, payload: wav()))
+        try child.frame(NKFrame(.complete, session: 1, request: 3, sequence: 1))
+        s.tick(); s.tick()
+        XCTAssertEqual(s.state, .ready)
+        _ = s.takeResults()
+
+        now = 500
+        s.tick()
+        XCTAssertEqual(s.state, .ready, "lookahead audio retains helper ownership")
+        XCTAssertEqual(s.markPlaybackDrained(), .drained,
+                       "the final consumed buffer makes the session fully drained")
+        now = 619
+        s.tick()
+        XCTAssertEqual(s.state, .ready)
+        now = 621
+        s.tick()
+        XCTAssertEqual(s.state, .retiring)
+    }
+
+    func testAtomicDrainObservesTerminalTransitionWithoutConsumingCredit() throws {
+        let child = NativeKokoroFakeChild(), s = owner(child)
+        try ready(s, child)
+        try s.begin(.synthesize, request: 2, payload: try NKSynthesisRequest(text: "Crash fixture.").encoded())
+        try child.frame(NKFrame(.audio, session: 1, request: 2, payload: wav()))
+        try child.frame(NKFrame(.complete, session: 1, request: 2, sequence: 1))
+        s.tick(); s.tick(); _ = s.takeResults()
+        child.dead = true
+        s.tick()
+        XCTAssertEqual(s.state, .failed)
+        XCTAssertEqual(s.markPlaybackDrained(), .terminal)
     }
 }
 final class NativeKokoroRuntimeControlTests: XCTestCase {

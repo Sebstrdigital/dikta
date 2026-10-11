@@ -64,6 +64,55 @@ public struct NKAssetLayout: Equatable {
         return home.appendingPathComponent(String(file.localPath.dropFirst(5)))
     }
 }
+/// The four fixed voice packs shipped in the signed app. Setup copies these
+/// verified resources into its staged base tree; no voice is downloaded later.
+public enum NKVoiceCatalog {
+    public struct Entry: Equatable, Sendable {
+        public let id: String
+        public let bytes: Int
+        public let derivedSHA256: String
+    }
+    public static let entries: [Entry] = [
+        Entry(id: "af_heart", bytes: 522_240, derivedSHA256: "d583ccff3cdca2f7fae535cb998ac07e9fcb90f09737b9a41fa2734ec44a8f0b"),
+        Entry(id: "af_nicole", bytes: 522_240, derivedSHA256: "cd2191ab31b914ed7b318416b0e4440fdf392ddad9106a060819aa600a64f59a"),
+        Entry(id: "am_adam", bytes: 522_240, derivedSHA256: "162b035ed91cfc48b6046982184c645f72edcdd1b82843347f605d7bf7b15716"),
+        Entry(id: "bm_george", bytes: 522_240, derivedSHA256: "c4b235a4c1f2cd3b939fed08b899ce9385638b763f7b73a59616c4fc9bd6c9bc")
+    ]
+    public static func entry(_ id: String) -> Entry? { entries.first { $0.id == id } }
+    public static func verify(_ id: String, layout: NKAssetLayout) throws {
+        guard let entry = entry(id) else { throw NKRuntimeFailure.input }
+        let url = layout.chain.appendingPathComponent("\(id).bin")
+        try NKAssetVerifier.verifyRegularFile(url, under: layout.home, bytes: entry.bytes, sha256: entry.derivedSHA256)
+    }
+}
+
+public enum NKLeaseFailure: Error, Equatable { case busy, unsafePath }
+
+/// Cross-process lifetime lease for the active asset tree. Helpers/K3 sessions
+/// retain a shared token from pre-verification through SDK/audio use; Setup uses
+/// a nonblocking exclusive token for final verification and atomic activation.
+public final class NKAssetLease: @unchecked Sendable {
+    public enum Mode { case shared, exclusive }
+    private var fd: Int32 = -1
+    public init(home: URL, mode: Mode) throws {
+        let directory = home.appendingPathComponent(".cache/fluidaudio", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var info = stat()
+        guard lstat(directory.path, &info) == 0, (info.st_mode & S_IFMT) == S_IFDIR else { throw NKLeaseFailure.unsafePath }
+        let path = directory.appendingPathComponent(".dikta-assets.lock").path
+        let opened = Darwin.open(path, O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC, S_IRUSR | S_IWUSR)
+        guard opened >= 0 else { throw NKLeaseFailure.unsafePath }
+        let operation = (mode == .shared ? LOCK_SH : LOCK_EX) | LOCK_NB
+        guard flock(opened, operation) == 0 else {
+            Darwin.close(opened)
+            if errno == EWOULDBLOCK { throw NKLeaseFailure.busy }
+            throw NKLeaseFailure.unsafePath
+        }
+        fd = opened
+    }
+    deinit { if fd >= 0 { _ = flock(fd, LOCK_UN); Darwin.close(fd) } }
+}
+
 public enum NKAssetVerifier {
     // Read-only checks. The caller must retain this private tree unchanged throughout SDK work.
     public static func verify(_ manifest: NKAssetManifest, layout: NKAssetLayout) throws {
@@ -82,20 +131,22 @@ public enum NKAssetVerifier {
     }
     public static func verifyFile(_ file: NKAssetManifest.File, layout: NKAssetLayout) throws {
         guard file.bytes > 0, file.bytes <= 50_000_000 else { throw NKRuntimeFailure.size }
-        let url = try layout.fileURL(file)
-        try checkPath(url, under: layout.home)
+        try verifyRegularFile(try layout.fileURL(file), under: layout.home, bytes: file.bytes, sha256: file.sha256)
+    }
+    public static func verifyRegularFile(_ url: URL, under root: URL, bytes expectedBytes: Int, sha256 expectedSHA256: String) throws {
+        try checkPath(url, under: root)
         do {
             let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
             guard attributes[.type] as? FileAttributeType == .typeRegular else { throw NKRuntimeFailure.layout }
-            guard (attributes[.size] as? NSNumber)?.intValue == file.bytes else { throw NKRuntimeFailure.size }
+            guard (attributes[.size] as? NSNumber)?.intValue == expectedBytes else { throw NKRuntimeFailure.size }
             let handle = try FileHandle(forReadingFrom: url); defer { try? handle.close() }
             var digest = SHA256(), count = 0
             while let bytes = try handle.read(upToCount: 65536), !bytes.isEmpty {
-                count += bytes.count; guard count <= file.bytes else { throw NKRuntimeFailure.size }
+                count += bytes.count; guard count <= expectedBytes else { throw NKRuntimeFailure.size }
                 digest.update(data: bytes)
             }
-            guard count == file.bytes else { throw NKRuntimeFailure.size }
-            guard digest.finalize().map({ String(format: "%02x", $0) }).joined() == file.sha256 else { throw NKRuntimeFailure.digest }
+            guard count == expectedBytes else { throw NKRuntimeFailure.size }
+            guard digest.finalize().map({ String(format: "%02x", $0) }).joined() == expectedSHA256 else { throw NKRuntimeFailure.digest }
         } catch let failure as NKRuntimeFailure { throw failure }
         catch { throw NKRuntimeFailure.missing }
     }
@@ -121,20 +172,23 @@ public struct NKEngineSamples {
 public protocol NKEngineBackend: AnyObject {
     func initialize(modelsRoot: URL) async throws
     func phonemes(text: String) async throws -> String
-    func synthesize(phonemes: String) async throws -> NKEngineSamples
+    func synthesize(phonemes: String, voiceID: String, speed: Float) async throws -> NKEngineSamples
     func wav(samples: [Float]) throws -> Data
 }
 public final class NKVerifiedEngine {
     private let backend: NKEngineBackend
     private let policy: () -> Void
     private let verify: () throws -> Void
+    private let verifyVoice: (String) throws -> Void
     private let layout: NKAssetLayout
     private let os: OperatingSystemVersion
     private var ready = false
     // One serial work owner is required; this seam does not provide its own scheduler.
     public init(backend: NKEngineBackend, layout: NKAssetLayout, os: OperatingSystemVersion,
-                policy: @escaping () -> Void, verify: @escaping () throws -> Void) {
+                policy: @escaping () -> Void, verify: @escaping () throws -> Void,
+                verifyVoice: ((String) throws -> Void)? = nil) {
         self.backend = backend; self.layout = layout; self.os = os; self.policy = policy; self.verify = verify
+        self.verifyVoice = verifyVoice ?? { try NKVoiceCatalog.verify($0, layout: layout) }
     }
     public func initialize() async throws {
         ready = false
@@ -144,17 +198,20 @@ public final class NKVerifiedEngine {
         do { try await backend.initialize(modelsRoot: layout.modelsRoot); ready = true }
         catch { throw NKRuntimeFailure.synthesis }
     }
-    public func synthesize(text: String) async throws -> Data {
+    public func synthesize(text: String, voiceID: String = NKSynthesisRequest.defaultVoiceID, speed: Float = 1) async throws -> Data {
         guard ready else { throw NKRuntimeFailure.notReady }
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.utf8.count <= 1024,
+        guard NKVoiceCatalog.entry(voiceID) != nil, [Float(0.75), 1, 1.25, 1.75].contains(speed),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.utf8.count <= 1024,
               text.split(whereSeparator: { $0.isWhitespace }).count <= 64,
               text.split(whereSeparator: { $0.isWhitespace }).allSatisfy({ $0.count <= 62 }) else { throw NKRuntimeFailure.input }
-        try checkedAssets(); policy()
+        try checkedAssets()
+        try verifyVoice(voiceID) // exact pack immediately before SDK entry
+        policy()
         do {
             let phonemes = try await backend.phonemes(text: text)
             guard !phonemes.isEmpty, phonemes.unicodeScalars.count <= 510, phonemes.utf8.count <= 4096 else { throw NKRuntimeFailure.input }
             try Task.checkCancellation()
-            let result = try await backend.synthesize(phonemes: phonemes)
+            let result = try await backend.synthesize(phonemes: phonemes, voiceID: voiceID, speed: speed)
             try Task.checkCancellation()
             guard result.sampleRate == 24000, !result.samples.isEmpty, result.samples.count <= 480000,
                   result.samples.allSatisfy({ $0.isFinite }), result.samples.contains(where: { $0 != 0 }) else { throw NKRuntimeFailure.samples }

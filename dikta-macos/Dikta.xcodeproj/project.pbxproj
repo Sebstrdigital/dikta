@@ -128,11 +128,16 @@
 
 		/* Resources */
 		100000000000000000000051 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000051 /* Assets.xcassets */; };
-		100000000000000000000052 /* kokoro_server.py in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000054 /* kokoro_server.py */; };
-		100000000000000000000053 /* setup.sh in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000055 /* setup.sh */; };
+		K50000000000000000000001 /* ThirdPartyNotices.txt in Resources */ = {isa = PBXBuildFile; fileRef = K50000000000000000000003 /* ThirdPartyNotices.txt */; };
+		K50000000000000000000002 /* Apache-2.0.txt in Resources */ = {isa = PBXBuildFile; fileRef = K50000000000000000000004 /* Apache-2.0.txt */; };
+		K50000000000000000000005 /* NativeKokoroNemo-NOTICE.txt in Resources */ = {isa = PBXBuildFile; fileRef = K50000000000000000000009 /* NativeKokoroNemo-NOTICE.txt */; };
+		K50000000000000000000006 /* NativeKokoroNemo-ThirdParty-Licenses.txt in Resources */ = {isa = PBXBuildFile; fileRef = K5000000000000000000000A /* NativeKokoroNemo-ThirdParty-Licenses.txt */; };
+		K50000000000000000000007 /* NativeKokoroNemo-Apache-2.0.txt in Resources */ = {isa = PBXBuildFile; fileRef = K5000000000000000000000B /* NativeKokoroNemo-Apache-2.0.txt */; };
+		K50000000000000000000008 /* NativeKokoroNemo-Dependency-Licenses.txt in Resources */ = {isa = PBXBuildFile; fileRef = K5000000000000000000000C /* NativeKokoroNemo-Dependency-Licenses.txt */; };
 		100000000000000000000091 /* SentenceEmbeddingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000091 /* SentenceEmbeddingService.swift */; };
 		100000000000000000000092 /* MiniLML12v2.mlpackage in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000092 /* MiniLML12v2.mlpackage */; };
 		100000000000000000000093 /* minilm-vocab.txt in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000093 /* minilm-vocab.txt */; };
+		F40000000000000000000001 /* NativeKokoro Voices in Resources */ = {isa = PBXBuildFile; fileRef = F40000000000000000000002 /* Voices */; };
 
 		/* Sparkle */
 		100000000000000000000062 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 300000000000000000000002 /* Sparkle */; };
@@ -158,6 +163,8 @@ F20000000000000000000005 = {isa = PBXBuildFile; fileRef = F200000000000000000000
 F20000000000000000000006 = {isa = PBXBuildFile; productRef = 300000000000000000000003; };
 F30000000000000000000001 = {isa = PBXBuildFile; fileRef = F30000000000000000000003; };
 F30000000000000000000002 = {isa = PBXBuildFile; fileRef = F30000000000000000000003; };
+K30000000000000000000001 = {isa = PBXBuildFile; fileRef = K30000000000000000000002; };
+K30000000000000000000003 = {isa = PBXBuildFile; fileRef = K30000000000000000000004; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -224,8 +231,13 @@ F30000000000000000000002 = {isa = PBXBuildFile; fileRef = F300000000000000000000
 		200000000000000000000051 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		200000000000000000000052 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		200000000000000000000053 /* Dikta.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Dikta.entitlements; sourceTree = "<group>"; };
-		200000000000000000000054 /* kokoro_server.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = kokoro_server.py; path = ../../kokoro_server.py; sourceTree = "<group>"; };
-		200000000000000000000055 /* setup.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; name = setup.sh; path = ../../setup.sh; sourceTree = "<group>"; };
+		F40000000000000000000002 /* Voices */ = {isa = PBXFileReference; lastKnownFileType = folder; path = NativeKokoro/Voices; sourceTree = "<group>"; };
+		K50000000000000000000003 /* ThirdPartyNotices.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = ThirdPartyNotices.txt; sourceTree = "<group>"; };
+		K50000000000000000000004 /* Apache-2.0.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Apache-2.0.txt"; sourceTree = "<group>"; };
+		K50000000000000000000009 /* NativeKokoroNemo-NOTICE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "NativeKokoroNemo-NOTICE.txt"; sourceTree = "<group>"; };
+		K5000000000000000000000A /* NativeKokoroNemo-ThirdParty-Licenses.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "NativeKokoroNemo-ThirdParty-Licenses.txt"; sourceTree = "<group>"; };
+		K5000000000000000000000B /* NativeKokoroNemo-Apache-2.0.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "NativeKokoroNemo-Apache-2.0.txt"; sourceTree = "<group>"; };
+		K5000000000000000000000C /* NativeKokoroNemo-Dependency-Licenses.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "NativeKokoroNemo-Dependency-Licenses.txt"; sourceTree = "<group>"; };
 		200000000000000000000091 /* SentenceEmbeddingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentenceEmbeddingService.swift; sourceTree = "<group>"; };
 		CA11DEB10000000100000001 /* SystemAudioTapRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemAudioTapRecorder.swift; sourceTree = "<group>"; };
 		CA11DEB10000000A00000003 /* AudioFeedbackPlaying.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFeedbackPlaying.swift; sourceTree = "<group>"; };
@@ -307,6 +319,8 @@ F20000000000000000000012 = {isa = PBXFileReference; lastKnownFileType = sourceco
 F20000000000000000000013 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DiktaTests/NativeKokoroAssetTests.swift"; sourceTree = SOURCE_ROOT; };
 F20000000000000000000014 = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Dikta/Resources/NativeKokoro/candidate-base-manifest.json"; sourceTree = SOURCE_ROOT; };
 F30000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeKokoroShared/NativeKokoroEmbeddedManifest.swift"; sourceTree = SOURCE_ROOT; };
+K30000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeTTSPlayback.swift; sourceTree = "<group>"; };
+K30000000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Dikta/Services/NativeKokoro/NativeKokoroRuntimeClient.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -461,6 +475,7 @@ F20000000000000000000021 = {isa = PBXFrameworksBuildPhase; buildActionMask = 214
 				200000000000000000000017 /* HotkeyManager.swift */,
 				200000000000000000000018 /* Logger.swift */,
 				200000000000000000000019 /* TextToSpeechService.swift */,
+				K30000000000000000000002 /* NativeTTSPlayback.swift */,
 				153000000000000000000011 /* TextToSpeechSpeaking.swift */,
 				153000000000000000000012 /* TextSelectionProviding.swift */,
 				200000000000000000000020 /* TextSelectionService.swift */,
@@ -526,8 +541,13 @@ F20000000000000000000021 = {isa = PBXFrameworksBuildPhase; buildActionMask = 214
 				200000000000000000000051 /* Assets.xcassets */,
 				200000000000000000000052 /* Info.plist */,
 				200000000000000000000053 /* Dikta.entitlements */,
-				200000000000000000000054 /* kokoro_server.py */,
-				200000000000000000000055 /* setup.sh */,
+				F40000000000000000000002 /* Voices */,
+				K50000000000000000000003 /* ThirdPartyNotices.txt */,
+				K50000000000000000000004 /* Apache-2.0.txt */,
+				K50000000000000000000009 /* NativeKokoroNemo-NOTICE.txt */,
+				K5000000000000000000000A /* NativeKokoroNemo-ThirdParty-Licenses.txt */,
+				K5000000000000000000000B /* NativeKokoroNemo-Apache-2.0.txt */,
+				K5000000000000000000000C /* NativeKokoroNemo-Dependency-Licenses.txt */,
 				200000000000000000000092 /* MiniLML12v2.mlpackage */,
 				200000000000000000000093 /* minilm-vocab.txt */,
 			);
@@ -543,7 +563,7 @@ F20000000000000000000021 = {isa = PBXFrameworksBuildPhase; buildActionMask = 214
 			name = Products;
 			sourceTree = "<group>";
 		};
-F1000000000000000000001E = {isa = PBXGroup; name = NativeKokoroBoundary; children = (F20000000000000000000011,F30000000000000000000003,F20000000000000000000012,F20000000000000000000013,F20000000000000000000014,F1000000000000000000000A,F1000000000000000000000B,F1000000000000000000000C,F1000000000000000000000D,F1000000000000000000000E,F1000000000000000000000F,); sourceTree = "<group>"; };
+F1000000000000000000001E = {isa = PBXGroup; name = NativeKokoroBoundary; children = (F20000000000000000000011,F30000000000000000000003,F20000000000000000000012,F20000000000000000000013,F20000000000000000000014,F1000000000000000000000A,F1000000000000000000000B,F1000000000000000000000C,K30000000000000000000004,F1000000000000000000000D,F1000000000000000000000E,F1000000000000000000000F,); sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -654,10 +674,15 @@ F1000000000000000000002C = {isa = PBXTargetDependency; target = F100000000000000
 			files = (
 				F20000000000000000000005,
                 100000000000000000000051 /* Assets.xcassets in Resources */,
-				100000000000000000000052 /* kokoro_server.py in Resources */,
-				100000000000000000000053 /* setup.sh in Resources */,
+				K50000000000000000000001 /* ThirdPartyNotices.txt in Resources */,
+				K50000000000000000000002 /* Apache-2.0.txt in Resources */,
+				K50000000000000000000005 /* NativeKokoroNemo-NOTICE.txt in Resources */,
+				K50000000000000000000006 /* NativeKokoroNemo-ThirdParty-Licenses.txt in Resources */,
+				K50000000000000000000007 /* NativeKokoroNemo-Apache-2.0.txt in Resources */,
+				K50000000000000000000008 /* NativeKokoroNemo-Dependency-Licenses.txt in Resources */,
 				100000000000000000000092 /* MiniLML12v2.mlpackage in Resources */,
 				100000000000000000000093 /* minilm-vocab.txt in Resources */,
+				F40000000000000000000001 /* NativeKokoro Voices in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -738,6 +763,8 @@ F1000000000000000000002C = {isa = PBXTargetDependency; target = F100000000000000
 				100000000000000000000008 /* MicSensitivity.swift in Sources */,
 				100000000000000000000018 /* Logger.swift in Sources */,
 				100000000000000000000019 /* TextToSpeechService.swift in Sources */,
+				K30000000000000000000001 /* NativeTTSPlayback.swift in Sources */,
+				K30000000000000000000003 /* NativeKokoroRuntimeClient.swift in Sources */,
 				153000000000000000000001 /* TextToSpeechSpeaking.swift in Sources */,
 				153000000000000000000002 /* TextSelectionProviding.swift in Sources */,
 				100000000000000000000020 /* TextSelectionService.swift in Sources */,
@@ -924,7 +951,7 @@ F1000000000000000000002D = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1.5.4;
+				CURRENT_PROJECT_VERSION = 1.5.5;
 				DEVELOPMENT_TEAM = UUM29335B4;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -937,7 +964,7 @@ F1000000000000000000002D = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.5.4;
+				MARKETING_VERSION = 1.5.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app;
 				PRODUCT_NAME = Dikta;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -954,7 +981,7 @@ F1000000000000000000002D = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1.5.4;
+				CURRENT_PROJECT_VERSION = 1.5.5;
 				DEVELOPMENT_TEAM = UUM29335B4;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -967,7 +994,7 @@ F1000000000000000000002D = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.5.4;
+				MARKETING_VERSION = 1.5.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app;
 				PRODUCT_NAME = Dikta;
 				SWIFT_EMIT_LOC_STRINGS = YES;
