@@ -7,6 +7,20 @@
         <description>Dikta app updates</description>
         <language>en</language>
         <item>
+            <title>Dikta v1.5.6 — Faster Read Aloud</title>
+            <pubDate>Sun, 11 Oct 2026 08:48:46 +0000</pubDate>
+            <sparkle:version>1.5.6</sparkle:version>
+            <sparkle:shortVersionString>1.5.6</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink>https://github.com/Sebstrdigital/dikta/releases/tag/v1.5.6</sparkle:releaseNotesLink>
+            <enclosure
+                url="https://github.com/Sebstrdigital/dikta/releases/download/v1.5.6/Dikta-1.5.6.dmg"
+                sparkle:edSignature="xiiEgsO78ixP2eMcPof8In77uNwsBKKFb/DGeUkDmBYFT+cshhx7vdxbVSySZtpO3y75UIo/ZrtAyzTHstwhDQ=="
+                length="76101239"
+                type="application/octet-stream"
+            />
+        </item>
+        <item>
             <title>Dikta v1.5.5 — Read Aloud, Simplified</title>
             <pubDate>Sun, 11 Oct 2026 05:36:56 +0000</pubDate>
             <sparkle:version>1.5.5</sparkle:version>
