@@ -1533,6 +1533,22 @@ final class MenuBarViewModel: ObservableObject {
             notifyReadAloud("Empty Selection", "Selected text is empty")
             return
         }
+        // Enforce the existing source bound before any rendering can reduce size.
+        guard text.lengthOfBytes(using: .utf8) <= ReadAloudTextPreparer.maximumInputBytes else {
+            notifyReadAloud("TTS Error", "This selection is outside the native voice engine's bounded input limits. Dikta did not truncate it.")
+            return
+        }
+        let prepared = ReadAloudTextPreparer().prepare(text)
+        switch prepared.kind {
+        case .ready:
+            break
+        case .empty:
+            notifyReadAloud("Empty Selection", "Selected text contains no readable text")
+            return
+        case .unsupported:
+            notifyReadAloud("TTS Error", "This selection is outside the native voice engine's bounded input limits. Dikta did not truncate it.")
+            return
+        }
 
         // Verify configured native assets, not whether the helper is already loaded.
         // The accepted first request remains owned below while lazy startup runs.
@@ -1555,7 +1571,7 @@ final class MenuBarViewModel: ObservableObject {
         appState = .speaking
         audioFeedback.readAloudStart() // Accepted speech, not audible playback.
         let task = Task { @MainActor in
-            try await self.ttsService.speak(text, request: speechRequest) { [weak self] in
+            try await self.ttsService.speak(prepared.text, request: speechRequest) { [weak self] in
                 guard let self, self.readAloudRequest == id, self.appState == .speaking else { return }
                 self.readAloudPhase = .playbackScheduled
                 ReadAloudTiming.$trace.withValue(trace) {

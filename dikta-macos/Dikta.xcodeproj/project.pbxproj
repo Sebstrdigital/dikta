@@ -14,6 +14,8 @@
 		153000000000000000000005 /* MenuBarViewModelReadAloudTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 153000000000000000000015; };
 		153000000000000000000006 /* TextToSpeechCancellationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 153000000000000000000016; };
 		153000000000000000000007 /* AudioFeedbackCueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 153000000000000000000017; };
+		5A1A10000000000000000001 /* ReadAloudTextPreparer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1A10000000000000000002; };
+		5A1A10000000000000000003 /* ReadAloudTextPreparerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1A10000000000000000004; };
 		/* Models */
 		100000000000000000000001 /* OutputMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000001 /* OutputMode.swift */; };
 		100000000000000000000002 /* HotkeyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000002 /* HotkeyConfig.swift */; };
@@ -175,6 +177,8 @@ K30000000000000000000003 = {isa = PBXBuildFile; fileRef = K300000000000000000000
 		153000000000000000000015 /* MenuBarViewModelReadAloudTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModelReadAloudTests.swift; sourceTree = "<group>"; };
 		153000000000000000000016 /* TextToSpeechCancellationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextToSpeechCancellationTests.swift; sourceTree = "<group>"; };
 		153000000000000000000017 /* AudioFeedbackCueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFeedbackCueTests.swift; sourceTree = "<group>"; };
+		5A1A10000000000000000002 /* ReadAloudTextPreparer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadAloudTextPreparer.swift; sourceTree = "<group>"; };
+		5A1A10000000000000000004 /* ReadAloudTextPreparerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadAloudTextPreparerTests.swift; sourceTree = "<group>"; };
 		/* Models */
 		200000000000000000000001 /* OutputMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputMode.swift; sourceTree = "<group>"; };
 		200000000000000000000002 /* HotkeyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyConfig.swift; sourceTree = "<group>"; };
@@ -427,6 +431,7 @@ F20000000000000000000021 = {isa = PBXFrameworksBuildPhase; buildActionMask = 214
 				153000000000000000000015 /* MenuBarViewModelReadAloudTests.swift */,
 				153000000000000000000016 /* TextToSpeechCancellationTests.swift */,
 				153000000000000000000017 /* AudioFeedbackCueTests.swift */,
+				5A1A10000000000000000004 /* ReadAloudTextPreparerTests.swift */,
 				CA11DEB10000000200000004 /* StreamingWavWriterTests.swift */,
 				CA11DEB10000000100000003 /* FakeSystemAudioCapture.swift */,
 				CA11DEB10000000A00000009 /* CallDebriefRealSessionTests.swift */,
@@ -478,6 +483,7 @@ F20000000000000000000021 = {isa = PBXFrameworksBuildPhase; buildActionMask = 214
 				K30000000000000000000002 /* NativeTTSPlayback.swift */,
 				153000000000000000000011 /* TextToSpeechSpeaking.swift */,
 				153000000000000000000012 /* TextSelectionProviding.swift */,
+				5A1A10000000000000000002 /* ReadAloudTextPreparer.swift */,
 				200000000000000000000020 /* TextSelectionService.swift */,
 				200000000000000000000027 /* UpdateChecker.swift */,
 				200000000000000000000028 /* DiagnosticLogger.swift */,
@@ -721,6 +727,7 @@ F1000000000000000000002C = {isa = PBXTargetDependency; target = F100000000000000
 				153000000000000000000005 /* MenuBarViewModelReadAloudTests.swift in Sources */,
 				153000000000000000000006 /* TextToSpeechCancellationTests.swift in Sources */,
 				153000000000000000000007 /* AudioFeedbackCueTests.swift in Sources */,
+				5A1A10000000000000000003 /* ReadAloudTextPreparerTests.swift in Sources */,
 				CA11DEB10000000200000003 /* StreamingWavWriterTests.swift in Sources */,
 				CA11DEB10000000100000004 /* FakeSystemAudioCapture.swift in Sources */,
 				CA11DEB10000000A00000010 /* CallDebriefRealSessionTests.swift in Sources */,
@@ -767,6 +774,7 @@ F1000000000000000000002C = {isa = PBXTargetDependency; target = F100000000000000
 				K30000000000000000000003 /* NativeKokoroRuntimeClient.swift in Sources */,
 				153000000000000000000001 /* TextToSpeechSpeaking.swift in Sources */,
 				153000000000000000000002 /* TextSelectionProviding.swift in Sources */,
+				5A1A10000000000000000001 /* ReadAloudTextPreparer.swift in Sources */,
 				100000000000000000000020 /* TextSelectionService.swift in Sources */,
 				100000000000000000000027 /* UpdateChecker.swift in Sources */,
 				100000000000000000000028 /* DiagnosticLogger.swift in Sources */,

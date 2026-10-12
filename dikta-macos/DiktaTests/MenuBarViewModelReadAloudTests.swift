@@ -579,6 +579,28 @@ final class MenuBarViewModelReadAloudTests: XCTestCase {
         XCTAssertEqual(tts.requests.map(\.speed), [.normal, .speedy])
     }
 
+    func testSelectedTextIsPreparedOnlyAtSpeechBoundary() async {
+        let vm = await makeViewModel()
+        let raw = "# Heading\n| Name | Value |\n|---|---|\n| Voice | Heart |"
+        selection.selectedText = raw
+        await vm.speakSelectedText()
+        XCTAssertEqual(selection.selectedText, raw)
+        XCTAssertEqual(tts.texts, ["Heading\nName; Value\nVoice; Heart"])
+        assertCues(1, 1)
+    }
+
+    func testFormattingOnlyAndOversizedSelectionsRejectBeforeAssetsAndCues() async {
+        let vm = await makeViewModel()
+        selection.selectedText = "# \n* "
+        await vm.speakSelectedText()
+        selection.selectedText = String(repeating: "a", count: ReadAloudTextPreparer.maximumInputBytes + 1)
+        await vm.speakSelectedText()
+        XCTAssertTrue(tts.availabilityRequests.isEmpty)
+        XCTAssertTrue(tts.texts.isEmpty)
+        XCTAssertEqual(notifications, ["Empty Selection", "TTS Error"])
+        assertCues(0, 0)
+    }
+
     func testClipboardFallbackAcceptsUsableCurrentText() async {
         let vm = await makeViewModel()
         selection.selectedText = nil

@@ -27,6 +27,8 @@ Scope note (2026-09-28): Dikta stays a macOS tool. Linux/Omarchy is covered by V
 
 ## Features
 
+- [ ] Release follow-up: diagnose the Read Aloud crash reported while reading a Markdown table on the 1.5.7 preview (2026-10-12). Exact captured input and cause are unconfirmed; successful later wrapper tests do not prove the crash fixed. Resolve before recommending another release; crash-report/private-data access requires explicit permission.
+- [ ] Read Aloud selection support in Neovim (reported 2026-10-12): user observes selected text does not appear to reach the clipboard for Read Aloud. Defer investigation and improvement; selection mode, terminal environment, clipboard integration, and cause are unconfirmed. Do not assume the existing pi terminal-selection issue has the same cause. No implementation authorized.
 - [ ] Export history to file (markdown or plain text)
 - [ ] Customizable history length (currently hardcoded to 5)
 - [ ] Per-document-type formatter follow-up (see `docs/formatter-spec.md`)
