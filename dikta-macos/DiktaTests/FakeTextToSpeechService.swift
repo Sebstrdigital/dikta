@@ -36,6 +36,7 @@ final class FakeTextToSpeechService: TextToSpeechSpeaking {
         texts.append(text)
         requests.append(request)
         if let failure { throw failure }
+        if automaticCompletion { starts[index]?() }
         if !automaticCompletion {
             // Deliberately ignores cancellation, to exercise stale ViewModel returns.
             try await withCheckedThrowingContinuation { completions[index] = $0 }

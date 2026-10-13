@@ -32,10 +32,11 @@ final class SparkleController: NSObject, ObservableObject, SPUUpdaterDelegate {
 
     /// Trigger an immediate, user-visible update check (shown in menu as "Check for Updates...").
     func checkForUpdates() {
+        guard updater.canCheckForUpdates else { return }
         updaterController.checkForUpdates(nil)
     }
 
-    /// Whether Sparkle will automatically check for updates on launch.
+    /// Whether Sparkle schedules automatic checks (daily by default, when due at launch).
     var automaticallyChecksForUpdates: Bool {
         get { updater.automaticallyChecksForUpdates }
         set { updater.automaticallyChecksForUpdates = newValue }

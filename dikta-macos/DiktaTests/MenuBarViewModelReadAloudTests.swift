@@ -283,21 +283,47 @@ final class MenuBarViewModelReadAloudTests: XCTestCase {
         assertCues(0, 0)
     }
 
-    func testAcceptedRequestHasOneDedicatedStartBeforeSynthesisAndOneNaturalStop() async {
+    func testFirstPlaybackPublishesSpeakerPhaseBeforeOneDedicatedCueAndNaturalStop() async {
         tts.automaticCompletion = false
         let vm = await makeViewModel()
+        var phasesAtCue: [ReadAloudPhase?] = []
+        feedback.onReadAloudStart = { [weak vm] in phasesAtCue.append(vm?.readAloudPhase) }
         let task = await begin(vm)
         XCTAssertEqual(vm.appState, .speaking)
         XCTAssertEqual(vm.readAloudPhase, .generating)
-        assertCues(1, 0)
+        assertCues(0, 0)
         tts.startPlayback(0)
+        tts.startPlayback(0) // Repeated/chunk callbacks cannot replay the cue.
+        XCTAssertEqual(phasesAtCue, [.playbackScheduled])
+        assertCues(1, 0)
         XCTAssertEqual(vm.readAloudPhase, .playbackScheduled)
         XCTAssertEqual(vm.readAloudPhase?.status, "Read Aloud: playback scheduled")
         tts.finish(0)
         await task.value
         XCTAssertNil(vm.readAloudPhase)
+        tts.startPlayback(0) // Even a completed request cannot re-enter speaker state.
+        XCTAssertNil(vm.readAloudPhase)
         assertCues(1, 1)
         XCTAssertEqual(vm.appState, .idle)
+        XCTAssertTrue(notifications.isEmpty)
+    }
+
+    func testExplicitStopDuringPlaybackPreservesOneStopAndRejectsLateCallbacks() async {
+        tts.automaticCompletion = false
+        let vm = await makeViewModel()
+        let task = await begin(vm)
+        tts.startPlayback(0)
+        assertCues(1, 0)
+        vm.stopSpeaking()
+        vm.stopSpeaking()
+        tts.startPlayback(0)
+        XCTAssertNil(vm.readAloudPhase)
+        XCTAssertEqual(vm.appState, .idle)
+        XCTAssertEqual(tts.stopCount, 1)
+        assertCues(1, 1)
+        tts.finish(0)
+        await task.value
+        assertCues(1, 1)
         XCTAssertTrue(notifications.isEmpty)
     }
 
@@ -307,12 +333,14 @@ final class MenuBarViewModelReadAloudTests: XCTestCase {
         let task = await begin(vm)
         vm.stopSpeaking()
         vm.stopSpeaking()
-        assertCues(1, 1)
+        assertCues(0, 1)
         XCTAssertEqual(tts.stopCount, 1)
         XCTAssertEqual(vm.appState, .idle)
+        tts.startPlayback(0) // Stopped generation cannot emit a late start cue.
+        XCTAssertNil(vm.readAloudPhase)
         tts.finish(0)
         await task.value
-        assertCues(1, 1)
+        assertCues(0, 1)
         XCTAssertTrue(notifications.isEmpty)
     }
 
@@ -327,16 +355,18 @@ final class MenuBarViewModelReadAloudTests: XCTestCase {
         tts.finish(0)
         await old.value
         XCTAssertEqual(vm.appState, .speaking)
-        assertCues(2, 1)
+        assertCues(0, 1)
         await vm.speakSelectedText()
         XCTAssertEqual(tts.texts.count, 2)
+        tts.startPlayback(1)
+        assertCues(1, 1)
         tts.finish(1)
         await newer.value
-        assertCues(2, 2)
+        assertCues(1, 2)
         tts.automaticCompletion = true
         await vm.speakSelectedText() // A completed request must release its guard.
         XCTAssertEqual(tts.texts.count, 3)
-        assertCues(3, 3)
+        assertCues(2, 3)
     }
 
     func testOldFailureCannotNotifyOrResetNewRequest() async {
@@ -349,7 +379,7 @@ final class MenuBarViewModelReadAloudTests: XCTestCase {
         await old.value
         XCTAssertTrue(notifications.isEmpty)
         XCTAssertEqual(vm.appState, .speaking)
-        assertCues(2, 1)
+        assertCues(0, 1)
         tts.finish(1)
         await newer.value
     }
@@ -363,7 +393,7 @@ final class MenuBarViewModelReadAloudTests: XCTestCase {
         tts.finish(0, error: CancellationError())
         await old.value
         XCTAssertEqual(vm.appState, .speaking)
-        assertCues(2, 1)
+        assertCues(0, 1)
         XCTAssertTrue(notifications.isEmpty)
         tts.finish(1)
         await newer.value
@@ -378,14 +408,14 @@ final class MenuBarViewModelReadAloudTests: XCTestCase {
         tts.finish(0)
         await task.value
         XCTAssertEqual(vm.appState, .recording)
-        assertCues(1, 1)
+        assertCues(0, 1)
     }
 
     func testAcceptedFailureHasNoStopCueAndReportsError() async {
         tts.failure = TextToSpeechService.TTSError.playbackFailed
         let vm = await makeViewModel()
         await vm.speakSelectedText()
-        assertCues(1, 0)
+        assertCues(0, 0)
         XCTAssertEqual(notifications, ["TTS Error"])
         XCTAssertNil(vm.readAloudPhase)
         XCTAssertEqual(vm.appState, .idle)
@@ -395,7 +425,7 @@ final class MenuBarViewModelReadAloudTests: XCTestCase {
         tts.failure = CancellationError()
         let vm = await makeViewModel()
         await vm.speakSelectedText()
-        assertCues(1, 0)
+        assertCues(0, 0)
         XCTAssertTrue(notifications.isEmpty)
         XCTAssertEqual(vm.appState, .idle)
     }
@@ -405,9 +435,12 @@ final class MenuBarViewModelReadAloudTests: XCTestCase {
         let vm = await makeViewModel()
         let task = await begin(vm)
         task.cancel()
+        tts.startPlayback(0) // Ownership alone is insufficient once the caller cancels.
+        XCTAssertEqual(vm.readAloudPhase, .generating)
+        assertCues(0, 0)
         tts.finish(0, error: CancellationError())
         await task.value
-        assertCues(1, 0)
+        assertCues(0, 0)
         XCTAssertTrue(notifications.isEmpty)
         XCTAssertEqual(vm.appState, .idle)
     }
@@ -457,7 +490,7 @@ final class MenuBarViewModelReadAloudTests: XCTestCase {
         XCTAssertEqual(vm.appState, .speaking)
         await vm.speakSelectedText()
         XCTAssertEqual(tts.texts.count, 1)
-        assertCues(1, 0)
+        assertCues(0, 0)
         tts.finish(0)
         await newer.value
     }

@@ -1604,11 +1604,15 @@ final class MenuBarViewModel: ObservableObject {
         readAloudAccepted = true
         readAloudPhase = .generating
         appState = .speaking
-        audioFeedback.readAloudStart() // Accepted speech, not audible playback.
         let task = Task { @MainActor in
             try await self.ttsService.speak(prepared.text, request: speechRequest) { [weak self] in
-                guard let self, self.readAloudRequest == id, self.appState == .speaking else { return }
+                guard let self, self.readAloudRequest == id, self.appState == .speaking,
+                      self.readAloudPhase == .generating, !Task.isCancelled,
+                      self.readAloudTask?.isCancelled != true else { return }
+                // Publish the speaker phase before the cue, once per owned request.
+                // Scheduling is not a measurement of audible onset or a rendered frame.
                 self.readAloudPhase = .playbackScheduled
+                self.audioFeedback.readAloudStart()
                 ReadAloudTiming.$trace.withValue(trace) {
                     ReadAloudTiming.log("request_to_playback_scheduled", ReadAloudTiming.now - onsetStart)
                 }

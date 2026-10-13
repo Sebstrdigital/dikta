@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		5A1A20000000000000000001 /* AboutUpdatePresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A1A20000000000000000002; };
 		153000000000000000000001 /* TextToSpeechSpeaking.swift in Sources */ = {isa = PBXBuildFile; fileRef = 153000000000000000000011; };
 		153000000000000000000002 /* TextSelectionProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 153000000000000000000012; };
 		153000000000000000000003 /* FakeTextToSpeechService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 153000000000000000000013; };
@@ -159,6 +160,7 @@ K30000000000000000000003 = {isa = PBXBuildFile; fileRef = K300000000000000000000
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		5A1A20000000000000000002 /* AboutUpdatePresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutUpdatePresentationTests.swift; sourceTree = "<group>"; };
 		153000000000000000000011 /* TextToSpeechSpeaking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextToSpeechSpeaking.swift; sourceTree = "<group>"; };
 		153000000000000000000012 /* TextSelectionProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextSelectionProviding.swift; sourceTree = "<group>"; };
 		153000000000000000000013 /* FakeTextToSpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeTextToSpeechService.swift; sourceTree = "<group>"; };
@@ -374,6 +376,7 @@ F20000000000000000000021 = {isa = PBXFrameworksBuildPhase; buildActionMask = 214
 				200000000000000000000127 /* FakeParakeetBackend.swift */,
 				200000000000000000000128 /* ParakeetEngineTests.swift */,
 				AA0000000000000000000006 /* TextLanguageInferenceTests.swift */,
+				5A1A20000000000000000002 /* AboutUpdatePresentationTests.swift */,
 				200000000000000000000130 /* ConfigServiceAtomicWriteTests.swift */,
 				200000000000000000000108 /* TTSStaleServerPIDTests.swift */,
 				200000000000000000000114 /* DebriefSummaryTests.swift */,
@@ -669,6 +672,7 @@ F1000000000000000000002C = {isa = PBXTargetDependency; target = F100000000000000
 				100000000000000000000127 /* FakeParakeetBackend.swift in Sources */,
 				100000000000000000000128 /* ParakeetEngineTests.swift in Sources */,
 				AA0000000000000000000005 /* TextLanguageInferenceTests.swift in Sources */,
+				5A1A20000000000000000001 /* AboutUpdatePresentationTests.swift in Sources */,
 				100000000000000000000130 /* ConfigServiceAtomicWriteTests.swift in Sources */,
 				100000000000000000000108 /* TTSStaleServerPIDTests.swift in Sources */,
 				100000000000000000000114 /* DebriefSummaryTests.swift in Sources */,

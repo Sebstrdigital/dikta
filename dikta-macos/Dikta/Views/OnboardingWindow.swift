@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import AppKit
 import AVFoundation
 import ServiceManagement
@@ -573,6 +574,25 @@ final class NativeKokoroInstaller: @unchecked Sendable {
 
 // MARK: - Onboarding View
 
+/// Pure About-link state; testing it never starts setup, permissions, or Sparkle.
+struct AboutUpdatePresentation {
+    let updateAvailable: Bool
+    let pendingVersion: String?
+    let canCheckForUpdates: Bool
+
+    var title: String {
+        guard updateAvailable, let pendingVersion else { return "Check for Updates…" }
+        return "v\(pendingVersion) available…"
+    }
+
+    var isEnabled: Bool { canCheckForUpdates }
+
+    func checkForUpdates(_ action: () -> Void) {
+        guard isEnabled else { return }
+        action()
+    }
+}
+
 struct OnboardingView: View {
     let onDismiss: () -> Void
 
@@ -583,6 +603,15 @@ struct OnboardingView: View {
     @State private var isAppReady: Bool = false
     @State private var launchAtLogin: Bool = false
     @State private var autoCheckForUpdates: Bool = true
+    @State private var canCheckForUpdates: Bool = false
+
+    private var updatePresentation: AboutUpdatePresentation {
+        AboutUpdatePresentation(
+            updateAvailable: sparkle.updateAvailable,
+            pendingVersion: sparkle.pendingVersion,
+            canCheckForUpdates: canCheckForUpdates
+        )
+    }
 
     enum PermissionStatus {
         case unknown, granted, denied
@@ -611,13 +640,14 @@ struct OnboardingView: View {
                         .foregroundColor(.secondary)
                 }
 
-                if sparkle.updateAvailable, let newVersion = sparkle.pendingVersion {
-                    Button(action: { sparkle.checkForUpdates() }) {
-                        Label("v\(newVersion) available — install", systemImage: "arrow.down.circle.fill")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.link)
+                Button(action: {
+                    updatePresentation.checkForUpdates { sparkle.checkForUpdates() }
+                }) {
+                    Label(updatePresentation.title, systemImage: "arrow.down.circle.fill")
+                        .font(.caption)
                 }
+                .buttonStyle(.link)
+                .disabled(!updatePresentation.isEnabled)
             }
             .padding(.top, 28)
             .padding(.bottom, 20)
@@ -664,7 +694,7 @@ struct OnboardingView: View {
                 setupRow(
                     icon: "arrow.triangle.2.circlepath",
                     title: "Automatic Updates",
-                    subtitle: "Check for new versions on launch"
+                    subtitle: "Automatically check for new versions daily"
                 ) { autoUpdateToggle }
             }
             .padding(.horizontal, 32)
@@ -714,6 +744,11 @@ struct OnboardingView: View {
             checkLaunchAtLogin()
             autoCheckForUpdates = sparkle.automaticallyChecksForUpdates
             isAppReady = MenuBarViewModel.isModelLoaded
+        }
+        // Sparkle's KVO availability changes during an active update session.
+        // Observe it without starting a check or altering scheduling/consent.
+        .onReceive(sparkle.updater.publisher(for: \.canCheckForUpdates).receive(on: RunLoop.main)) {
+            canCheckForUpdates = $0
         }
         .onReceive(NotificationCenter.default.publisher(for: .appModelLoaded)) { _ in
             isAppReady = true
