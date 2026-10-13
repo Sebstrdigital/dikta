@@ -7,7 +7,6 @@ protocol HotkeyManagerDelegate: AnyObject {
     func hotkeyPressed(mode: HotkeyMode)
     func hotkeyReleased(mode: HotkeyMode)
     func hotkeyRecorded(modifiers: [ModifierKey], key: String?)
-    func formatHotkeyPressed()
     func ttsHotkeyPressed(trigger: ReadAloudTrace)
     func hotkeyManagerDidFailToStart(_ error: String)
 }
@@ -30,9 +29,6 @@ final class HotkeyManager {
     private var ttsHotkeyConfig: HotkeyConfig = .defaultTextToSpeech
     private var isTtsHotkeyActive = false
 
-    // Format selection hotkey (trigger-based)
-    private var formatHotkeyConfig: HotkeyConfig = .defaultFormatSelection
-    private var isFormatHotkeyActive = false
 
     // Hotkey recording state
     private var isRecordingHotkey = false
@@ -52,10 +48,6 @@ final class HotkeyManager {
         self.ttsHotkeyConfig = config
     }
 
-    /// Update the format selection hotkey configuration
-    func updateFormatConfig(_ config: HotkeyConfig) {
-        self.formatHotkeyConfig = config
-    }
 
     /// Start listening for global hotkeys
     func start() {
@@ -251,16 +243,6 @@ final class HotkeyManager {
             return
         }
         
-        // Check format selection hotkey (key-based, trigger-based)
-        if let formatKey = formatHotkeyConfig.key,
-            pressedKey.lowercased() == formatKey.lowercased(),
-            formatHotkeyConfig.matchesModifiers(flags),
-            type == .keyDown {
-                DispatchQueue.main.async { [weak self] in
-                    self?.delegate?.formatHotkeyPressed()    
-                }
-                return
-        }
 
         // Check toggle hotkey (key-based, trigger on each keyDown)
         if let toggleKey = toggleHotkeyConfig.key,

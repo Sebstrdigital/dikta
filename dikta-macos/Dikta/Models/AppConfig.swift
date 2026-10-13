@@ -63,22 +63,19 @@ struct AppConfig: Codable {
         var pushToTalk: HotkeyConfig
         var textToSpeech: HotkeyConfig
         var languageToggle: HotkeyConfig
-        var formatSelection: HotkeyConfig
 
         enum CodingKeys: String, CodingKey {
             case toggle
             case pushToTalk = "push_to_talk"
             case textToSpeech = "text_to_speech"
             case languageToggle = "language_toggle"
-            case formatSelection = "format_selection"
         }
 
-        init(toggle: HotkeyConfig, pushToTalk: HotkeyConfig, textToSpeech: HotkeyConfig = .defaultTextToSpeech, languageToggle: HotkeyConfig = .defaultLanguageToggle, formatSelection: HotkeyConfig = .defaultFormatSelection) {
+        init(toggle: HotkeyConfig, pushToTalk: HotkeyConfig, textToSpeech: HotkeyConfig = .defaultTextToSpeech, languageToggle: HotkeyConfig = .defaultLanguageToggle) {
             self.toggle = toggle
             self.pushToTalk = pushToTalk
             self.textToSpeech = textToSpeech
             self.languageToggle = languageToggle
-            self.formatSelection = formatSelection
         }
 
         init(from decoder: Decoder) throws {
@@ -87,7 +84,6 @@ struct AppConfig: Codable {
             pushToTalk = try container.decode(HotkeyConfig.self, forKey: .pushToTalk)
             textToSpeech = try container.decodeIfPresent(HotkeyConfig.self, forKey: .textToSpeech) ?? .defaultTextToSpeech
             languageToggle = try container.decodeIfPresent(HotkeyConfig.self, forKey: .languageToggle) ?? .defaultLanguageToggle
-            formatSelection = try container.decodeIfPresent(HotkeyConfig.self, forKey: .formatSelection) ?? .defaultFormatSelection
         }
     }
 

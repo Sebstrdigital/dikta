@@ -281,27 +281,55 @@ final class AppConfigDecodingTests: XCTestCase {
         XCTAssertEqual(config.outputMode, .custom)
     }
 
-    /// The hand-copied AppConfig type this file used to define was missing `formatSelection`
-    /// entirely (see docs/review-2026-09/mac-code-review.md). Decoding straight from the real
-    /// production type closes that gap: this asserts `hotkeys.format_selection` round-trips.
-    func test_decode_includesFormatSelectionHotkey() throws {
-        let json = """
-        {
-            "version": 3,
-            "hotkeys": {
-                "toggle": {"modifiers": ["shift", "ctrl"]},
-                "push_to_talk": {"modifiers": ["cmd", "shift"]},
-                "format_selection": {"modifiers": ["cmd", "shift"], "key": "f"}
-            },
-            "output_mode": "general",
-            "history": [],
-            "whisper_model": "small",
-            "llm_model": "gemma3"
+    func test_legacyFormatSelectionIsIgnoredAndDroppedWithoutDisturbingSurvivingConfig() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("config.json")
+        let cases: [(name: String, obsoleteValue: String?)] = [
+            ("omitted", nil),
+            ("valid custom", "{\"modifiers\":[\"cmd\",\"shift\"],\"key\":\"f\"}"),
+            ("malformed", "{\"modifiers\":\"malformed\"}")
+        ]
+
+        for testCase in cases {
+            let obsoleteEntry = testCase.obsoleteValue.map { ",\n                    \"format_selection\": \($0)" } ?? ""
+            let json = """
+            {
+                "version": 3,
+                "hotkeys": {
+                    "toggle": {"modifiers": ["shift", "ctrl"]},
+                    "push_to_talk": {"modifiers": ["cmd", "shift"]},
+                    "text_to_speech": {"modifiers": ["cmd", "shift"], "key": "f"}\(obsoleteEntry)
+                },
+                "output_mode": "general",
+                "history": [{"text":"synthetic history","timestamp":"2026-10-13T00:00:00Z","output_mode":"general"}],
+                "whisper_model": "small",
+                "llm_model": "gemma3",
+                "mute_sounds": false
+            }
+            """
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            try json.data(using: .utf8)!.write(to: file)
+
+            let service = ConfigService(configFile: file)
+            XCTAssertEqual(service.getHotkey(for: .textToSpeech), HotkeyConfig(modifiers: [.cmd, .shift], key: "f"), testCase.name)
+            XCTAssertEqual(service.config.history.map(\.text), ["synthetic history"], testCase.name)
+            XCTAssertFalse(service.muteSounds, testCase.name)
+            service.muteSounds = true
+
+            let reloaded = ConfigService(configFile: file)
+            XCTAssertEqual(reloaded.getHotkey(for: .textToSpeech), HotkeyConfig(modifiers: [.cmd, .shift], key: "f"), testCase.name)
+            XCTAssertEqual(reloaded.config.history.map(\.text), ["synthetic history"], testCase.name)
+            XCTAssertTrue(reloaded.muteSounds, testCase.name)
+            reloaded.muteNotifications = true
+
+            let encoded = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as! [String: Any]
+            let hotkeys = encoded["hotkeys"] as! [String: Any]
+            XCTAssertNil(hotkeys["format_selection"], testCase.name)
+            XCTAssertEqual((encoded["history"] as? [[String: Any]])?.first?["text"] as? String, "synthetic history", testCase.name)
+            XCTAssertEqual(encoded["mute_sounds"] as? Bool, true, testCase.name)
+            XCTAssertEqual(encoded["mute_notifications"] as? Bool, true, testCase.name)
         }
-        """.data(using: .utf8)!
-        let config = try JSONDecoder().decode(AppConfig.self, from: json)
-        XCTAssertEqual(config.hotkeys.formatSelection,
-                       HotkeyConfig(modifiers: [.cmd, .shift], key: "f"))
     }
 }
 

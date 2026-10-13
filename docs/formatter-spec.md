@@ -1,5 +1,7 @@
 # Dikta Deterministic Formatter — Feature Specification
 
+> **Historical / retired (2026-10):** Format Selection and its exclusive formatter implementation were removed. This document is retained as engineering history, not an active specification.
+
 **Version:** Draft 2
 **Author:** Claude (analyst), Sebastian (implementer)
 **Date:** 2026-03-28

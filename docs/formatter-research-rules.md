@@ -1,5 +1,7 @@
 # Deterministic Formatter — Research-Backed Detection Rules
 
+> **Historical / retired (2026-10):** Format Selection and its exclusive formatter implementation were removed. This research is retained as engineering history.
+
 Research compiled 2026-03-29 from linguistics literature (Schiffrin, Maschler), Purdue OWL, Google Developer Style Guide, Wikipedia (discourse markers, conversation analysis, filler words, valediction, salutation, postscript).
 
 ---

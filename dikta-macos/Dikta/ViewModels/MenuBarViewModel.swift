@@ -54,7 +54,8 @@ final class MenuBarViewModel: ObservableObject {
     let audioRecorder: any AudioRecording
     /// Builds the system-audio capture used by a call recording. Injected so
     /// tests substitute `FakeSystemAudioCapture` for the real CoreAudio tap.
-    private let systemAudioCaptureFactory: () -> any SystemAudioCapturing
+    // Internal for fake-factory invariant checks without reflection or starting capture.
+    let systemAudioCaptureFactory: () -> any SystemAudioCapturing
     private let audioFeedback: any AudioFeedbackPlaying
     private let clipboardManager: ClipboardManager
     private let hotkeyManager: HotkeyManager
@@ -68,6 +69,7 @@ final class MenuBarViewModel: ObservableObject {
     private var readAloudAccepted = false
     private var readAloudTask: Task<Void, Error>?
     private let readAloudNotification: ((String, String) -> Void)?
+    private let outputNotification: ((String, String) -> Void)?
     private let muterRegistry: any MuterRegistering
 
     // Debrief services. Injected ones win; otherwise they are built lazily —
@@ -155,7 +157,8 @@ final class MenuBarViewModel: ObservableObject {
         audioFeedback: (any AudioFeedbackPlaying)? = nil,
         ttsService: (any TextToSpeechSpeaking)? = nil,
         textSelectionService: (any TextSelectionProviding)? = nil,
-        readAloudNotification: ((String, String) -> Void)? = nil
+        readAloudNotification: ((String, String) -> Void)? = nil,
+        outputNotification: ((String, String) -> Void)? = nil
     ) {
         let configService = configService ?? .shared
         self.configService = configService
@@ -184,6 +187,7 @@ final class MenuBarViewModel: ObservableObject {
         self.ttsService.speed = TextToSpeechSpeed(rawValue: configService.ttsSpeedRawValue) ?? .normal
         self.textSelectionService = textSelectionService ?? TextSelectionService(clipboardManager: resolvedClipboardManager)
         self.readAloudNotification = readAloudNotification
+        self.outputNotification = outputNotification
         self.muterRegistry = muterRegistry ?? MuterRegistry()
 
         // Sync mute state from config. `self.` is required: the initializer
@@ -538,31 +542,51 @@ final class MenuBarViewModel: ObservableObject {
         // Add to history
         configService.addHistoryItem(text: text)
 
-        // Paste text
-        paste(text)
-
-        // Beep and notify
+        paste(text) { [weak self] result in
+            guard let self else { return }
+            if result == .pasteRequested {
+                let preview = text.count > 50 ? String(text.prefix(50)) + "..." : text
+                self.sendNotification(title: "Pasted", body: preview, isRoutine: true)
+            } else {
+                self.reportPasteInterruption(result)
+            }
+        }
         audioFeedback.beepOff()
-
-        let preview = text.count > 50 ? String(text.prefix(50)) + "..." : text
-        sendNotification(title: "Pasted", body: preview, isRoutine: true)
     }
 
     /// Routes `text` through `pasteMultiline` when it contains a newline,
     /// preserving structure (e.g. a re-pasted, rendered debrief summary);
     /// otherwise through `pasteText`, whose keystroke simulation flattens
     /// newlines to spaces.
-    private func paste(_ text: String) {
+    private func paste(_ text: String, completion: @escaping (MultilinePasteResult) -> Void = { _ in }) {
         if text.contains("\n") || text.contains("\r") {
-            clipboardManager.pasteMultiline(text)
+            clipboardManager.pasteMultiline(text, completion: completion)
         } else {
             clipboardManager.pasteText(text)
+            // Preserve the existing single-line typing/reporting convention.
+            completion(.pasteRequested)
         }
     }
 
-    /// Paste a history item
+    private func interruptionReason(_ result: MultilinePasteResult) -> String {
+        switch result {
+        case .skippedBecauseClipboardChanged: return "the clipboard changed"
+        case .skippedBecauseOriginalFormatCouldNotBeSafelySnapshotted: return "the original clipboard could not be safely preserved"
+        case .skippedBecausePasteboardWriteFailed: return "the clipboard could not be written"
+        case .pasteRequested: return ""
+        }
+    }
+
+    private func reportPasteInterruption(_ result: MultilinePasteResult) {
+        sendNotification(title: "Paste Skipped", body: "Available in History; paste was skipped because \(interruptionReason(result)).")
+    }
+
+    /// History re-paste stays silent on normal success.
     func pasteHistoryItem(_ item: HistoryItem) {
-        paste(item.text)
+        paste(item.text) { [weak self] result in
+            guard result != .pasteRequested else { return }
+            self?.reportPasteInterruption(result)
+        }
     }
 
     // MARK: - Debrief Mode
@@ -1242,7 +1266,7 @@ final class MenuBarViewModel: ObservableObject {
     /// History, paste, sound and notification for a finished debrief — shared
     /// by the mic path (`runClaimedDebrief`) and the call path
     /// (`runCallDebrief`) so both behave identically.
-    private func reportDebriefSuccess(_ result: DebriefResult) {
+    func reportDebriefSuccess(_ result: DebriefResult) {
         lastDebriefEngineName = result.engineName
         DiagnosticLogger.shared.log(
             "DEBRIEF | engine=\(result.engineName) | chars=\(result.renderedText.count)"
@@ -1252,13 +1276,25 @@ final class MenuBarViewModel: ObservableObject {
         // Same history bookkeeping as a normal transcript (see outputText),
         // but pasted through the multi-line path so the headings survive.
         configService.addHistoryItem(text: result.renderedText)
-        clipboardManager.pasteMultiline(result.renderedText)
+        clipboardManager.pasteMultiline(result.renderedText) { [weak self] pasteResult in
+            guard let self else { return }
+            let hasIssues = !result.issues.isEmpty
+            if pasteResult == .pasteRequested && !hasIssues {
+                let preview = result.renderedText.count > 50
+                    ? String(result.renderedText.prefix(50)) + "..."
+                    : result.renderedText
+                self.sendNotification(title: "Debrief Pasted", body: preview, isRoutine: true)
+                return
+            }
+            // Issues include failed chunks, timeouts and summarizer processing
+            // problems. Do not infer missing audio or expose raw error text.
+            let qualification = hasIssues ? "Completed with processing warnings. " : ""
+            let output = pasteResult == .pasteRequested
+                ? "Paste requested; the available result is saved to History."
+                : "The available result is saved to History; paste was skipped because \(self.interruptionReason(pasteResult))."
+            self.sendNotification(title: hasIssues ? "Debrief Completed with Warnings" : "Debrief Ready", body: qualification + output)
+        }
         audioFeedback.beepOff()
-
-        let preview = result.renderedText.count > 50
-            ? String(result.renderedText.prefix(50)) + "..."
-            : result.renderedText
-        sendNotification(title: "Debrief Pasted", body: preview, isRoutine: true)
     }
 
     private func reportDebriefFailure(_ error: Error) {
@@ -1477,7 +1513,6 @@ final class MenuBarViewModel: ObservableObject {
             pushToTalk: configService.getHotkey(for: .pushToTalk)
         )
         hotkeyManager.updateTtsConfig(configService.ttsHotkey)
-        hotkeyManager.updateFormatConfig(configService.getHotkey(for: .formatSelection))
     }
 
     // MARK: - Text-to-Speech
@@ -1651,6 +1686,10 @@ final class MenuBarViewModel: ObservableObject {
 
     private func sendNotification(title: String, body: String, isRoutine: Bool = false) {
         if isRoutine && configService.muteNotifications { return }
+        if let outputNotification {
+            outputNotification(title, body)
+            return
+        }
         guard canUseNotifications else {
             AppLogger.general.info("[\(title)] \(body)")
             return
@@ -1765,12 +1804,7 @@ extension MenuBarViewModel: HotkeyManagerDelegate {
             applyHotkey(hotkey, for: mode)
         }
     }
-    
-    nonisolated func formatHotkeyPressed() {
-        Task { @MainActor in
-            clipboardManager.formatSelection(style: .message)
-        }
-    }
+
 
     /// Find another mode that uses the same hotkey, if any
     private func findConflictingMode(for hotkey: HotkeyConfig, excluding mode: HotkeyMode) -> HotkeyMode? {

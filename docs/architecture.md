@@ -17,9 +17,9 @@ pinned FluidAudio Ultra model. Ultra receives no language hint.
   - `AppConfig.swift` — Full persisted config. Legacy engine/model/language
     values remain compatibility data and continue to round-trip.
   - `TranscriptionEngineKind.swift` — Stable legacy engine raw values only.
-  - `HotkeyConfig.swift` — Hotkey matching and the four active modes;
+  - `HotkeyConfig.swift` — Hotkey matching and the three active modes;
     `languageToggle` remains decodable but inactive.
-  - `Language.swift` — Compatibility values and formatter capabilities.
+  - `Language.swift` — Compatibility values used by transcription and Debrief.
 - **Services/**
   - `TranscriptionEngine.swift` — Testable speech-to-text protocol.
   - `ParakeetEngine.swift` — The sole production STT implementation, fixed
@@ -37,9 +37,11 @@ pinned FluidAudio Ultra model. Ultra receives no language hint.
 ## Hotkeys
 
 `HotkeyManager` uses a CGEvent tap for key and modifier events. Active modes
-are Record, Push-to-Talk, Read Aloud, and Format Selection. The old language
-hotkey remains in decoded config so upgrades preserve data, but it is not
-registered, displayed, or considered by collision detection.
+are Record, Push-to-Talk, and Read Aloud. The old language hotkey remains in
+decoded config so upgrades preserve data, but it is not registered, displayed,
+or considered by collision detection. A legacy `hotkeys.format_selection` key
+is an unknown config field: decoding ignores it (including malformed values)
+and the next normal successful save omits it.
 
 ## Config compatibility
 
@@ -57,7 +59,7 @@ scheme also sets `DIKTA_CONFIG_FILE` for the app test host and
 ```
 Dikta
 ├── History
-├── Hotkeys: Record / Push-to-Talk / Read Aloud / Format Selection
+├── Hotkeys: Record / Push-to-Talk / Read Aloud
 ├── Audio
 ├── Debrief: mode / source / import / summary engine / folder
 ├── Advanced: login / updates / diagnostics / TTS voice
@@ -75,10 +77,6 @@ model caches.
 
 Language-sensitive work happens only after text exists:
 
-- Format Selection infers from the selected text. Confident English, Spanish,
-  French, German, Portuguese, Italian, and Dutch preserve embedding eligibility;
-  Swedish remains heuristic-only. Short, ambiguous, mixed, and unsupported
-  text uses heuristic-only splitting.
 - Debrief infers English or Swedish from the transcript. Uncertain, mixed, and
   unsupported transcripts fall back to English prompts and rendering.
 - Ultra code-switching is best-effort. Public qualification showed that short

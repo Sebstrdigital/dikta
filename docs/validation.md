@@ -2,29 +2,40 @@
 
 This document defines mandatory validation steps for each area of the codebase. **Before proposing any fix or change**, run the relevant test suite first to establish a baseline. **After every change**, re-run to confirm no regressions.
 
-## Formatter (MessageFormatter, StructuredTextFormatter, FormatterEngine, TextHelpers)
+## Standard isolated signed Release validation
 
-**Files**: `dikta-macos/Dikta/Formatter/*.swift`
-**Tests**: `dikta-macos/DiktaTests/FormatterTests.swift` (68 tests as of v1.2)
-**Test classes**: `BodyParagraphSplittingTests`, `ListDetectionTests`, `GreetingSignOffTests`, `EdgeCaseTests`, `CombinedScenarioTests`, `SplitSentencesTests`, `TrimItemTests`, `FindPreambleTests`
-
-**Run command**:
+Run this effective-host isolation proof first; it must execute a positive test count before any sensitive test:
 ```bash
-cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta -only-testing:DiktaTests -destination 'platform=macOS' CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" DEVELOPMENT_TEAM=UUM29335B4 2>&1 | grep 'Executed.*test'
+cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta-UltraValidation -only-testing:DiktaTests/TestHostIsolationTests -destination 'platform=macOS' CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" DEVELOPMENT_TEAM=UUM29335B4 ENABLE_TESTABILITY=YES
 ```
 
-**Rules**:
-1. Run tests BEFORE analyzing bugs — get the green baseline first
-2. Run tests AFTER every code change — confirm no regressions
-3. If adding a new behavior or fixing a bug, add a test case for it
-4. Never propose a formatter fix without evidence from the test suite
+For an integrated filtered target run, use the signed Release validation scheme and only the four approved real-muter exclusions. `ENABLE_TESTABILITY=YES` is a test-only build override required for `@testable import Dikta`; it does not change the product Release setting. Preserve the unfiltered command output and its true `xcodebuild` exit rather than piping it through `grep`.
+```bash
+cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta-UltraValidation -only-testing:DiktaTests -skip-testing:DiktaTests/MicMutingTests/testTeamsMuterReturnsNilWhenTeamsNotRunning -skip-testing:DiktaTests/MicMutingTests/testSlackMuterReturnsNilWhenSlackNotRunning -skip-testing:DiktaTests/MicMutingTests/testWhatsAppMuterReturnsNilWhenWhatsAppNotRunning -skip-testing:DiktaTests/MicMutingTests/testUvenMuterReturnsNilWhenUvenNotRunning -destination 'platform=macOS' CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" DEVELOPMENT_TEAM=UUM29335B4 ENABLE_TESTABILITY=YES
+```
+
+## Retired Format Selection feature
+
+Format Selection and its exclusive `Dikta/Formatter/` module were removed in
+2026-10. The retired `FormatterTests` and `EmbeddingParagraphSplitterTests`
+classes are not a validation gate. Historical formatter documents remain for
+provenance only.
+
+The replacement regressions are in the signed Release `DiktaTests` target:
+`AppConfigDecodingTests` proves valid and malformed legacy
+`hotkeys.format_selection` values are ignored and dropped by a normal save
+without disturbing surviving history/settings; `HotkeyModeAvailabilityTests`
+and fake-backed `MenuBarViewModelReadAloudTests` prove only the three surviving
+modes are configurable and Cmd-Shift-F can be assigned to a surviving mode
+(specifically Record in this regression) without installing an event tap. Retain the Config, isolation, ClipboardManager, Read
+Aloud, Debrief, `SentenceEmbeddingService`, and integrated gates below.
 
 ## Config (AppConfig, ConfigService)
 
 **Files**: `dikta-macos/Dikta/Models/AppConfig.swift`, `dikta-macos/Dikta/Services/ConfigService.swift`
 **Tests**: `AppConfigDecodingTests`, `AppConfigEnabledLanguagesDecodingTests`, `ConfigServiceAtomicWriteTests`
 
-**Run command**: same as above (all in DiktaTests target)
+**Run command**: use the signed Release integrated command in **Standard isolated signed Release validation** above; retain the Config test classes in the target filter.
 
 ## Transcription Engine (Parakeet Ultra)
 
@@ -37,7 +48,7 @@ Legacy config compatibility also covers `TranscriptionEngineKind.swift`, `AppCon
 `TranscriptionSupportSanitizeAndDropEmptyTests`, `TranscriptionSupportSortMonotonicTests`,
 `TextLanguageInferenceTests`, `HotkeyModeAvailabilityTests`, and config tests above.
 
-**Run command**: same signed Release `DiktaTests` target as above.
+**Run command**: use the signed Release integrated command in **Standard isolated signed Release validation** above.
 
 **Rules**:
 1. Unit tests must inject `FakeParakeetBackend` or `FakeTranscriptionEngine`; they must never load or download a real model.
@@ -77,7 +88,7 @@ single piece by hand and the first-load ANE-compile caveat (a cold Parakeet load
 **Run command** — run the full target. `-only-testing:` takes a *class* name, not a file name, so
 `-only-testing:DiktaTests/DebriefSummaryTests` matches nothing and silently runs zero tests:
 ```bash
-cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta -only-testing:DiktaTests -destination 'platform=macOS' CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" DEVELOPMENT_TEAM=UUM29335B4 2>&1 | grep -E 'Executed.*test|error:|Downloading model:'
+cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta-UltraValidation -only-testing:DiktaTests -destination 'platform=macOS' CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" DEVELOPMENT_TEAM=UUM29335B4 ENABLE_TESTABILITY=YES
 ```
 
 To run a single class, use its class name, e.g.
@@ -121,7 +132,7 @@ repo (see `.gitignore`); the known-defect regression tests in that file use synt
 
 **Run command**:
 ```bash
-cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta -only-testing:DiktaTests -destination 'platform=macOS' CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" DEVELOPMENT_TEAM=UUM29335B4 2>&1 | grep -E 'Executed.*test|error:|failed'
+cd dikta-macos && xcodebuild test -project Dikta.xcodeproj -scheme Dikta-UltraValidation -only-testing:DiktaTests -destination 'platform=macOS' CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Developer ID Application" DEVELOPMENT_TEAM=UUM29335B4 ENABLE_TESTABILITY=YES
 ```
 
 To run a single class, use its class name, e.g. `-only-testing:DiktaTests/RollingDebriefSummarizerTests`.

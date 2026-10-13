@@ -8,8 +8,14 @@ final class FakeClipboardManager: ClipboardManager {
     private(set) var pastedMultiline: [String] = []
     private(set) var pastedText: [String] = []
 
-    override func pasteMultiline(_ text: String) {
+    var multilinePasteResult: MultilinePasteResult = .pasteRequested
+    var delayCompletion = false
+    var pendingCompletion: ((MultilinePasteResult) -> Void)?
+
+    override func pasteMultiline(_ text: String, completion: @escaping (MultilinePasteResult) -> Void = { _ in }) {
         pastedMultiline.append(text)
+        if delayCompletion { pendingCompletion = completion }
+        else { completion(multilinePasteResult) }
     }
 
     override func pasteText(_ text: String) {
@@ -150,7 +156,8 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
         recorder: FakeAudioRecorder? = nil,
         audioFileLoader: (@Sendable (URL) throws -> [Float])? = nil,
         systemAudioCaptureFactory: (() -> any SystemAudioCapturing)? = nil,
-        debriefStore: DebriefStore? = nil
+        debriefStore: DebriefStore? = nil,
+        outputNotification: ((String, String) -> Void)? = nil
     ) -> (MenuBarViewModel, FakeTranscriptionEngine) {
         let engine = FakeTranscriptionEngine()
         engine.transcriptToReturn = transcript
@@ -162,9 +169,10 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
             clipboardManager: clipboard,
             audioFileLoader: audioFileLoader,
             muterRegistry: muterRegistry ?? FakeMuterRegistry(),
-            systemAudioCaptureFactory: systemAudioCaptureFactory,
+            systemAudioCaptureFactory: systemAudioCaptureFactory ?? { FakeSystemAudioCapture() },
             audioRecorder: recorder ?? FakeAudioRecorder(),
-            audioFeedback: FakeAudioFeedback()
+            audioFeedback: FakeAudioFeedback(),
+            outputNotification: outputNotification
         )
         recordingViewModels.append(viewModel)
         return (viewModel, engine)
@@ -201,6 +209,121 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
         let paths = try sourceStore.createSession()
         try sourceStore.writeAudio(silence(), to: paths)
         return paths.audio
+    }
+
+    // MARK: - Synthetic result and feedback regressions (no pipeline/model/audio)
+
+    private func syntheticResult(issues: [String] = []) -> DebriefResult {
+        DebriefResult(transcript: "Synthetic transcript", summary: summary(),
+            renderedText: "SUMMARY\nUseful synthetic result", paths: DebriefSessionPaths(folder: tempDir.appendingPathComponent("synthetic")),
+            engineName: "Fake", issues: issues)
+    }
+
+    private func assertDebriefFeedback(issues: [String], outcome: MultilinePasteResult, file: StaticString = #filePath, line: UInt = #line) {
+        configService.muteNotifications = false
+        var notices: [(String, String)] = []
+        clipboard.multilinePasteResult = outcome
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeViewModel(summarizer: summarizer, outputNotification: { notices.append(($0, $1)) })
+        let result = syntheticResult(issues: issues)
+        viewModel.reportDebriefSuccess(result)
+        XCTAssertEqual(notices.count, 1, file: file, line: line)
+        XCTAssertEqual(configService.history.first?.text, result.renderedText, file: file, line: line)
+        XCTAssertEqual(clipboard.pastedMultiline, [result.renderedText], file: file, line: line)
+        XCTAssertEqual(viewModel.lastDebriefEngineName, "Fake", file: file, line: line)
+        XCTAssertEqual(summarizer.summarizeCallCount, 0, file: file, line: line)
+        let notice = notices.first ?? ("", "")
+        if issues.isEmpty && outcome == .pasteRequested {
+            XCTAssertEqual(notice.0, "Debrief Pasted", file: file, line: line)
+        } else {
+            XCTAssertFalse(notice.0.contains("Pasted"), file: file, line: line)
+            XCTAssertFalse(notice.1.contains(result.transcript), file: file, line: line)
+            XCTAssertFalse(notice.1.contains(result.renderedText), file: file, line: line)
+            for issue in issues { XCTAssertFalse(notice.1.contains(issue), file: file, line: line) }
+            XCTAssertEqual(notice.0.contains("Warnings"), !issues.isEmpty, file: file, line: line)
+            XCTAssertEqual(notice.1.contains("paste was skipped"), outcome != .pasteRequested, file: file, line: line)
+            XCTAssertFalse(notice.1.contains("missing audio"), file: file, line: line)
+        }
+    }
+    func test_feedback_cleanResultRetainsNormalSuccess() {
+        assertDebriefFeedback(issues: [], outcome: .pasteRequested)
+    }
+    func test_feedback_timeoutFailedChunkAndOtherIssuesAreQualifiedWithoutContent() {
+        // Different meanings must not all be described as missing audio.
+        for issue in ["chunk 2 timeout PRIVATE", "chunk 1 failed PRIVATE", "rolling summary processing PRIVATE"] {
+            assertDebriefFeedback(issues: [issue], outcome: .pasteRequested)
+            clipboard = FakeClipboardManager()
+        }
+    }
+    func test_feedback_cleanSkippedPasteHasOneRecoveryNotice() {
+        for outcome: MultilinePasteResult in [.skippedBecauseClipboardChanged, .skippedBecauseOriginalFormatCouldNotBeSafelySnapshotted, .skippedBecausePasteboardWriteFailed] {
+            assertDebriefFeedback(issues: [], outcome: outcome)
+            clipboard = FakeClipboardManager()
+        }
+    }
+    func test_feedback_issueAndSkippedPasteProduceOneCoherentQualifiedNotice() {
+        for outcome: MultilinePasteResult in [.skippedBecauseClipboardChanged, .skippedBecauseOriginalFormatCouldNotBeSafelySnapshotted, .skippedBecausePasteboardWriteFailed] {
+            assertDebriefFeedback(issues: ["PRIVATE synthetic error"], outcome: outcome)
+            clipboard = FakeClipboardManager()
+        }
+    }
+    func test_feedback_waitsForDelayedPasteOutcomeAndKeepsHistoryReady() {
+        configService.muteNotifications = false
+        clipboard.delayCompletion = true
+        var notices: [String] = []
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeViewModel(summarizer: summarizer, outputNotification: { notices.append($0 + $1) })
+        let result = syntheticResult(issues: ["Synthetic issue"])
+        viewModel.reportDebriefSuccess(result)
+        XCTAssertTrue(notices.isEmpty)
+        XCTAssertEqual(configService.history.first?.text, result.renderedText)
+        clipboard.pendingCompletion?(.skippedBecauseClipboardChanged)
+        XCTAssertEqual(notices.count, 1)
+        XCTAssertTrue(notices[0].contains("paste was skipped"))
+        XCTAssertFalse(notices[0].contains("Pasted"))
+    }
+    func test_feedback_notificationPreferencesSuppressRoutineButNotExistingWarningRoute() {
+        var notices: [String] = []
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeViewModel(summarizer: summarizer, outputNotification: { notices.append($0 + $1) })
+        XCTAssertTrue(configService.muteNotifications)
+        viewModel.reportDebriefSuccess(syntheticResult())
+        XCTAssertTrue(notices.isEmpty)
+        viewModel.reportDebriefSuccess(syntheticResult(issues: ["Synthetic processing issue"]))
+        XCTAssertEqual(notices.count, 1, "Existing non-routine warning route remains visible")
+    }
+    func test_feedback_historyCleanPasteSilentAndInterruptedPasteAvailableForRecovery() {
+        var notices: [String] = []
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeViewModel(summarizer: summarizer, outputNotification: { notices.append($0 + $1) })
+        let item = HistoryItem(text: "Heading\nSynthetic history", outputMode: .general)
+        configService.addHistoryItem(text: item.text)
+        viewModel.pasteHistoryItem(item)
+        XCTAssertTrue(notices.isEmpty)
+        clipboard.multilinePasteResult = .skippedBecauseClipboardChanged
+        viewModel.pasteHistoryItem(item)
+        XCTAssertEqual(notices.count, 1)
+        XCTAssertTrue(notices[0].contains("Paste Skipped"))
+        XCTAssertEqual(configService.history.first?.text, item.text)
+    }
+    func test_feedback_multilineDictationWaitsForOutcomeInsteadOfUnconditionalSuccess() async {
+        configService.muteNotifications = false
+        clipboard.delayCompletion = true
+        var notices: [String] = []
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let text = "Synthetic first line\nSecond line"
+        let (viewModel, _) = makeViewModel(summarizer: summarizer, transcript: text, outputNotification: { if $0 != "Ready" { notices.append($0 + $1) } })
+        await viewModel.processAudio(silence())
+        XCTAssertTrue(notices.isEmpty)
+        XCTAssertEqual(configService.history.first?.text, text)
+        clipboard.pendingCompletion?(.skippedBecauseClipboardChanged)
+        XCTAssertEqual(notices.count, 1)
+        XCTAssertTrue(notices[0].contains("Paste Skipped"))
+    }
+    func test_makeViewModel_defaultSystemCaptureFactoryIsFakeWithoutStartingIt() throws {
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (viewModel, _) = makeViewModel(summarizer: summarizer)
+        XCTAssertTrue(viewModel.systemAudioCaptureFactory() is FakeSystemAudioCapture)
     }
 
     // MARK: - processAudio routing

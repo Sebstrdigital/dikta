@@ -1,5 +1,7 @@
 # Phase 2 — Message Formatter
 
+> **Historical / retired (2026-10):** Format Selection and its exclusive formatter implementation were removed. This phase record is retained as engineering history.
+
 **Goal:** Take dictated text intended for person-to-person communication (email, Slack, chat) and add proper structure.
 
 **Depends on:** Phase 1 (engine + helpers must be working)

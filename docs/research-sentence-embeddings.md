@@ -1,5 +1,7 @@
 # Research: Sentence Embeddings for Topic-Shift Detection in Dikta
 
+> **Historical / retired for Format Selection (2026-10):** the formatter use case was removed. `SentenceEmbeddingService` remains active for Debrief semantic deduplication; this research is retained as engineering history.
+
 **Date:** 2026-03-31
 **Goal:** Evaluate options for computing sentence-level similarity to detect topic shifts in short dictated messages (5-15 sentences), fully offline on macOS.
 

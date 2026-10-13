@@ -12,8 +12,8 @@
   </BuildAction>
   <TestAction buildConfiguration="Release" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.DebuggerFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv="NO">
     <EnvironmentVariables>
-      <EnvironmentVariable key="DIKTA_REAL_SESSIONS_DIR" value="/tmp/dikta-parakeet-ultra-isolated-empty-sessions" isEnabled="YES"/>
-      <EnvironmentVariable key="DIKTA_CONFIG_FILE" value="/tmp/dikta-parakeet-ultra-isolated-config/config.json" isEnabled="YES"/>
+      <EnvironmentVariable key="DIKTA_REAL_SESSIONS_DIR" value="/tmp/dikta-team-polish-validation/empty-real-sessions" isEnabled="YES"/>
+      <EnvironmentVariable key="DIKTA_CONFIG_FILE" value="/tmp/dikta-team-polish-validation/config/config.json" isEnabled="YES"/>
     </EnvironmentVariables>
     <Testables>
       <TestableReference skipped="NO"><BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="700000000000000000000002" BuildableName="DiktaTests.xctest" BlueprintName="DiktaTests" ReferencedContainer="container:Dikta.xcodeproj"/></TestableReference>

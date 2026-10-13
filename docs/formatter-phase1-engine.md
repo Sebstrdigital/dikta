@@ -1,5 +1,7 @@
 # Phase 1 — Formatter Engine
 
+> **Historical / retired (2026-10):** Format Selection and its exclusive formatter implementation were removed. This phase record is retained as engineering history.
+
 **Goal:** Build the skeleton that all formatters plug into, plus the shared helper functions that every formatter needs.
 
 **When done:** You can call `engine.format(text, style: .message)` and it returns the text unchanged (stub). All helpers work and are tested.

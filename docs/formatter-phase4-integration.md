@@ -1,5 +1,7 @@
 # Phase 4 — Integration
 
+> **Historical / retired (2026-10):** Format Selection and its exclusive formatter implementation were removed. This phase record is retained as engineering history.
+
 **Goal:** Wire the formatter engine into Dikta with a format hotkey, style cycling, auto-format option, and menu bar indicator.
 
 **Depends on:** Phase 1, 2, and 3 must be working and tested.

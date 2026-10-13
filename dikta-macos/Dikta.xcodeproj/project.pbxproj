@@ -109,15 +109,6 @@
 		CA11DEB10000000800000018 /* DebriefAccumulatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000800000017 /* DebriefAccumulatorTests.swift */; };
 		CA11DEB10000000800000020 /* RollingDebriefSummarizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA11DEB10000000800000019 /* RollingDebriefSummarizerTests.swift */; };
 
-		/* Formatter */
-		100000000000000000000081 /* FormatterEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000081 /* FormatterEngine.swift */; };
-		100000000000000000000082 /* FormatterStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000082 /* FormatterStyle.swift */; };
-		100000000000000000000083 /* MessageFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000083 /* MessageFormatter.swift */; };
-		100000000000000000000084 /* StructuredTextFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000084 /* StructuredTextFormatter.swift */; };
-		100000000000000000000085 /* TextHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000085 /* TextHelpers.swift */; };
-		100000000000000000000086 /* TextFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000086 /* TextFormatter.swift */; };
-		100000000000000000000094 /* EmbeddingParagraphSplitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000094 /* EmbeddingParagraphSplitter.swift */; };
-
 		/* ViewModels */
 		100000000000000000000021 /* MenuBarViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000021 /* MenuBarViewModel.swift */; };
 
@@ -147,8 +138,6 @@
 
 		/* Tests */
 		100000000000000000000071 /* DiktaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000071 /* DiktaTests.swift */; };
-		100000000000000000000073 /* FormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000072 /* FormatterTests.swift */; };
-		100000000000000000000074 /* EmbeddingParagraphSplitterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000074 /* EmbeddingParagraphSplitterTests.swift */; };
 		100000000000000000000072 /* Dikta.app in Frameworks */ = {isa = PBXBuildFile; fileRef = 400000000000000000000001 /* Dikta.app */; };
 F10000000000000000000014 = {isa = PBXBuildFile; fileRef = F1000000000000000000000A; };
 F10000000000000000000015 = {isa = PBXBuildFile; fileRef = F1000000000000000000000B; };
@@ -213,14 +202,6 @@ K30000000000000000000003 = {isa = PBXBuildFile; fileRef = K300000000000000000000
 		200000000000000000000101 /* WhatsAppMuter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsAppMuter.swift; sourceTree = "<group>"; };
 		200000000000000000000102 /* UvenMuter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UvenMuter.swift; sourceTree = "<group>"; };
 
-		/* Formatter */
-		200000000000000000000081 /* FormatterEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatterEngine.swift; sourceTree = "<group>"; };
-		200000000000000000000082 /* FormatterStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatterStyle.swift; sourceTree = "<group>"; };
-		200000000000000000000083 /* MessageFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageFormatter.swift; sourceTree = "<group>"; };
-		200000000000000000000084 /* StructuredTextFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StructuredTextFormatter.swift; sourceTree = "<group>"; };
-		200000000000000000000085 /* TextHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextHelpers.swift; sourceTree = "<group>"; };
-		200000000000000000000086 /* TextFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextFormatter.swift; sourceTree = "<group>"; };
-
 		/* ViewModels */
 		200000000000000000000021 /* MenuBarViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarViewModel.swift; sourceTree = "<group>"; };
 
@@ -254,12 +235,9 @@ K30000000000000000000003 = {isa = PBXBuildFile; fileRef = K300000000000000000000
 		CA11DEB10000000B00000001 /* SentenceEmbeddingServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentenceEmbeddingServiceTests.swift; sourceTree = "<group>"; };
 		200000000000000000000092 /* MiniLML12v2.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper.mlpackage; path = MiniLML12v2.mlpackage; sourceTree = "<group>"; };
 		200000000000000000000093 /* minilm-vocab.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "minilm-vocab.txt"; sourceTree = "<group>"; };
-		200000000000000000000094 /* EmbeddingParagraphSplitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmbeddingParagraphSplitter.swift; sourceTree = "<group>"; };
 
 		/* Tests */
 		200000000000000000000071 /* DiktaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiktaTests.swift; sourceTree = "<group>"; };
-		200000000000000000000072 /* FormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatterTests.swift; sourceTree = "<group>"; };
-		200000000000000000000074 /* EmbeddingParagraphSplitterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmbeddingParagraphSplitterTests.swift; sourceTree = "<group>"; };
 		200000000000000000000075 /* MicMutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicMutingTests.swift; sourceTree = "<group>"; };
 		200000000000000000000104 /* TranscriptionSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionSupportTests.swift; sourceTree = "<group>"; };
 		200000000000000000000105 /* FakeTranscriptionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeTranscriptionEngine.swift; sourceTree = "<group>"; };
@@ -364,7 +342,6 @@ F20000000000000000000021 = {isa = PBXFrameworksBuildPhase; buildActionMask = 214
 				600000000000000000000002 /* Models */,
 				600000000000000000000003 /* Services */,
 				600000000000000000000010 /* MicMuting */,
-				600000000000000000000008 /* Formatter */,
 				600000000000000000000004 /* ViewModels */,
 				600000000000000000000005 /* Views */,
 				600000000000000000000006 /* Resources */,
@@ -387,26 +364,10 @@ F20000000000000000000021 = {isa = PBXFrameworksBuildPhase; buildActionMask = 214
 			path = MicMuting;
 			sourceTree = "<group>";
 		};
-		600000000000000000000008 /* Formatter */ = {
-			isa = PBXGroup;
-			children = (
-				200000000000000000000081 /* FormatterEngine.swift */,
-				200000000000000000000082 /* FormatterStyle.swift */,
-				200000000000000000000083 /* MessageFormatter.swift */,
-				200000000000000000000084 /* StructuredTextFormatter.swift */,
-				200000000000000000000085 /* TextHelpers.swift */,
-				200000000000000000000086 /* TextFormatter.swift */,
-				200000000000000000000094 /* EmbeddingParagraphSplitter.swift */,
-			);
-			path = Formatter;
-			sourceTree = "<group>";
-		};
 		600000000000000000000007 /* DiktaTests */ = {
 			isa = PBXGroup;
 			children = (
 				200000000000000000000071 /* DiktaTests.swift */,
-				200000000000000000000072 /* FormatterTests.swift */,
-				200000000000000000000074 /* EmbeddingParagraphSplitterTests.swift */,
 				200000000000000000000075 /* MicMutingTests.swift */,
 				200000000000000000000104 /* TranscriptionSupportTests.swift */,
 				200000000000000000000105 /* FakeTranscriptionEngine.swift */,
@@ -701,8 +662,7 @@ F1000000000000000000002C = {isa = PBXTargetDependency; target = F100000000000000
 			files = (
 				F10000000000000000000019,F20000000000000000000004,
                 100000000000000000000071 /* DiktaTests.swift in Sources */,
-				100000000000000000000073 /* FormatterTests.swift in Sources */,
-				100000000000000000000074 /* EmbeddingParagraphSplitterTests.swift in Sources */,
+
 				100000000000000000000075 /* MicMutingTests.swift in Sources */,
 				100000000000000000000104 /* TranscriptionSupportTests.swift in Sources */,
 				100000000000000000000105 /* FakeTranscriptionEngine.swift in Sources */,
@@ -789,14 +749,7 @@ F1000000000000000000002C = {isa = PBXTargetDependency; target = F100000000000000
 				100000000000000000000102 /* UvenMuter.swift in Sources */,
 				100000000000000000000032 /* HotkeyRecordingWindow.swift in Sources */,
 				100000000000000000000033 /* OnboardingWindow.swift in Sources */,
-				100000000000000000000081 /* FormatterEngine.swift in Sources */,
-				100000000000000000000082 /* FormatterStyle.swift in Sources */,
-				100000000000000000000083 /* MessageFormatter.swift in Sources */,
-				100000000000000000000084 /* StructuredTextFormatter.swift in Sources */,
-				100000000000000000000085 /* TextHelpers.swift in Sources */,
-				100000000000000000000086 /* TextFormatter.swift in Sources */,
 				100000000000000000000091 /* SentenceEmbeddingService.swift in Sources */,
-				100000000000000000000094 /* EmbeddingParagraphSplitter.swift in Sources */,
 				100000000000000000000109 /* DebriefSummary.swift in Sources */,
 				100000000000000000000110 /* DebriefSummarizer.swift in Sources */,
 				100000000000000000000111 /* HeuristicDebriefSummarizer.swift in Sources */,
@@ -959,7 +912,7 @@ F1000000000000000000002D = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1.5.6;
+				CURRENT_PROJECT_VERSION = 1.5.7;
 				DEVELOPMENT_TEAM = UUM29335B4;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -972,7 +925,7 @@ F1000000000000000000002D = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.5.6;
+				MARKETING_VERSION = 1.5.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app;
 				PRODUCT_NAME = Dikta;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -989,7 +942,7 @@ F1000000000000000000002D = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1.5.6;
+				CURRENT_PROJECT_VERSION = 1.5.7;
 				DEVELOPMENT_TEAM = UUM29335B4;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1002,7 +955,7 @@ F1000000000000000000002D = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.5.6;
+				MARKETING_VERSION = 1.5.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app;
 				PRODUCT_NAME = Dikta;
 				SWIFT_EMIT_LOC_STRINGS = YES;

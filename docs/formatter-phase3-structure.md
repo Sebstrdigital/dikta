@@ -1,5 +1,7 @@
 # Phase 3 — Structured Text Formatter
 
+> **Historical / retired (2026-10):** Format Selection and its exclusive formatter implementation were removed. This phase record is retained as engineering history.
+
 **Goal:** Take dictated specifications, notes, or explanations and add the right structure — bullets, numbered lists, or sections — based on what the content needs.
 
 **Depends on:** Phase 1 (engine + helpers) and Phase 2 (for experience with the pattern)

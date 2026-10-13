@@ -126,10 +126,24 @@ final class MenuBarViewModelReadAloudTests: XCTestCase {
         manager.handleEvent(type: .flagsChanged, event: event) // Modifier hold does not duplicate.
         await waitUntil { delegate.snapshot.count == 1 }
         manager.updateTtsConfig(HotkeyConfig(modifiers: [.ctrl, .alt, .cmd], key: "r"))
-        let key = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 15, keyDown: true))
-        key.flags = [.maskControl, .maskAlternate, .maskCommand]
-        manager.handleEvent(type: .keyDown, event: key)
+        let ttsKey = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 15, keyDown: true))
+        ttsKey.flags = [.maskControl, .maskAlternate, .maskCommand]
+        manager.handleEvent(type: .keyDown, event: ttsKey)
         await waitUntil { delegate.snapshot.count == 2 }
+        XCTAssertEqual(delegate.snapshot.count, 2)
+
+        // Cmd-Shift-F was the retired formatter default. It remains available to
+        // a surviving mode and is dispatched through this inert, no-tap route.
+        manager.updateConfig(
+            toggle: HotkeyConfig(modifiers: [.cmd, .shift], key: "f"),
+            pushToTalk: .defaultPushToTalk
+        )
+        let formerFormatterKey = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 3, keyDown: true))
+        formerFormatterKey.flags = [.maskCommand, .maskShift]
+        manager.handleEvent(type: .keyDown, event: formerFormatterKey)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(delegate.modeSnapshot, [.toggle])
+
         let captured = delegate.snapshot
         XCTAssertNotEqual(captured[0].0.id, captured[1].0.id)
         XCTAssertTrue(captured.allSatisfy { $0.0.origin == .hotkey && $0.0.triggeredAt <= $0.1 })
@@ -647,14 +661,15 @@ private final class CorrelationFixturePlayer: NativeTTSPlayback {
 private final class ReadAloudHotkeyCapture: HotkeyManagerDelegate {
     private let lock = NSLock()
     private var triggers: [(ReadAloudTrace, TimeInterval)] = []
+    private var modes: [HotkeyMode] = []
     var snapshot: [(ReadAloudTrace, TimeInterval)] { lock.lock(); defer { lock.unlock() }; return triggers }
+    var modeSnapshot: [HotkeyMode] { lock.lock(); defer { lock.unlock() }; return modes }
     func ttsHotkeyPressed(trigger: ReadAloudTrace) {
         lock.lock(); triggers.append((trigger, ReadAloudTiming.now)); lock.unlock()
     }
-    func hotkeyPressed(mode: HotkeyMode) {}
+    func hotkeyPressed(mode: HotkeyMode) { lock.lock(); modes.append(mode); lock.unlock() }
     func hotkeyReleased(mode: HotkeyMode) {}
     func hotkeyRecorded(modifiers: [ModifierKey], key: String?) {}
-    func formatHotkeyPressed() {}
     func hotkeyManagerDidFailToStart(_ error: String) {}
 }
 

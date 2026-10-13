@@ -14,15 +14,13 @@ final class TextLanguageInferenceTests: XCTestCase {
         ]
         for (text, expected) in cases {
             XCTAssertEqual(TextLanguageInference.infer(from: text), expected)
-            XCTAssertTrue(expected.supportsEmbeddings)
         }
     }
 
-    func test_infersSwedishForDebriefButKeepsHeuristicFormatting() {
+    func test_infersSwedishForDebrief() {
         let text = "Det här är ett tydligt svenskt stycke med flera vanliga ord och en fullständig mening om morgondagens arbete."
         XCTAssertEqual(TextLanguageInference.infer(from: text), .swedish)
         XCTAssertEqual(TextLanguageInference.debriefCode(for: text), "sv")
-        XCTAssertFalse(Language.swedish.supportsEmbeddings)
     }
 
     func test_shortAndAmbiguousTextIsUncertain() {
@@ -45,23 +43,24 @@ final class TextLanguageInferenceTests: XCTestCase {
 
 @MainActor
 final class TestHostIsolationTests: XCTestCase {
-    func test_sharedConfigAndRealSessionsAreSchemeIsolated() {
-        XCTAssertEqual(
-            ConfigService.shared.storageURLForTesting.path,
-            "/tmp/dikta-parakeet-ultra-isolated-config/config.json"
-        )
-        XCTAssertEqual(
-            ProcessInfo.processInfo.environment["DIKTA_REAL_SESSIONS_DIR"],
-            "/tmp/dikta-parakeet-ultra-isolated-empty-sessions"
-        )
+    func test_sharedConfigAndRealSessionsAreSchemeIsolated() throws {
+        let isolated = URL(fileURLWithPath: "/tmp/dikta-team-polish-validation", isDirectory: true)
+        let config = isolated.appendingPathComponent("config/config.json")
+        let sessions = isolated.appendingPathComponent("empty-real-sessions")
+        XCTAssertEqual(ConfigService.shared.storageURLForTesting.standardizedFileURL, config)
+        XCTAssertEqual(ProcessInfo.processInfo.environment["DIKTA_CONFIG_FILE"], config.path)
+        XCTAssertEqual(ProcessInfo.processInfo.environment["DIKTA_REAL_SESSIONS_DIR"], sessions.path)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: config.path))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: sessions.path), [])
     }
 }
 
 final class HotkeyModeAvailabilityTests: XCTestCase {
-    func test_languageToggleRemainsDecodableButIsNotConfigurableOrCollisionActive() throws {
-        let data = "\"language_toggle\"".data(using: .utf8)!
-        XCTAssertEqual(try JSONDecoder().decode(HotkeyMode.self, from: data), .languageToggle)
+    func test_onlySurvivingModesAreConfigurableAndFormerFormatShortcutIsNotReserved() throws {
+        let legacy = "\"language_toggle\"".data(using: .utf8)!
+        XCTAssertEqual(try JSONDecoder().decode(HotkeyMode.self, from: legacy), .languageToggle)
+        XCTAssertEqual(Set(HotkeyMode.userConfigurableCases), [.toggle, .pushToTalk, .textToSpeech])
         XCTAssertFalse(HotkeyMode.userConfigurableCases.contains(.languageToggle))
-        XCTAssertEqual(Set(HotkeyMode.userConfigurableCases), [.toggle, .pushToTalk, .textToSpeech, .formatSelection])
+        XCTAssertFalse(HotkeyMode.userConfigurableCases.map(\.rawValue).contains("format_selection"))
     }
 }

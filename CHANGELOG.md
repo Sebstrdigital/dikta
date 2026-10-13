@@ -6,6 +6,25 @@ All notable changes to Dikta will be documented in this file.
 - 2026-09-28: `ConfigService.save()` now uses a single atomic-write strategy (temp file + `replaceItemAt`), removing the duplicate approach that had carried as unresolved tech debt for 14 sprints.
 - 2026-04-17: DiagnosticLogger (Windows) now correctly gated behind `[Conditional("DIAGNOSTICS")]` compile flag — release builds produce no log output
 
+## [1.5.7] - 2026-10-13 — Streamlined Hotkeys
+
+### Changed
+
+- Multi-line output, including Debrief summaries, snapshots and restores supported clipboard representations only while Dikta retains ownership. A changed or unsupported clipboard skips the paste and leaves the output in History.
+- Debrief completion messaging distinguishes a requested paste from an available result with processing warnings or a skipped paste.
+
+### Removed
+
+- Format Selection and its formatter hotkey, menu surface, and clipboard action. Cmd-Shift-F is no longer reserved and can be assigned to Record, Push-to-Talk, or Read Aloud.
+
+### Compatibility
+
+- Older `hotkeys.format_selection` settings are ignored, including malformed values, and are omitted by a normal subsequent settings save.
+
+### Notes
+
+- Requires macOS 15 or later. Native Read Aloud remains unavailable on macOS 26.4–26.5.
+
 ## [1.5.6] - 2026-10-11 — Faster Read Aloud
 
 ### Changed

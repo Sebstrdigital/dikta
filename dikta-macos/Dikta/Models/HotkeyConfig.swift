@@ -38,12 +38,11 @@ enum HotkeyMode: String, Codable, CaseIterable {
     case pushToTalk = "push_to_talk"
     case textToSpeech = "text_to_speech"
     case languageToggle = "language_toggle"
-    case formatSelection = "format_selection"
 
     /// Modes still exposed and registered. `languageToggle` remains decodable
     /// so existing config round-trips without making the old hotkey active.
     static let userConfigurableCases: [HotkeyMode] = [
-        .toggle, .pushToTalk, .textToSpeech, .formatSelection
+        .toggle, .pushToTalk, .textToSpeech
     ]
     
     var displayName: String {
@@ -52,7 +51,6 @@ enum HotkeyMode: String, Codable, CaseIterable {
         case .pushToTalk: return "Push-to-Talk"
         case .textToSpeech: return "Read Aloud"
         case .languageToggle: return "Switch Language"
-        case .formatSelection: return "Format Selection"
         }
     }
 
@@ -62,7 +60,6 @@ enum HotkeyMode: String, Codable, CaseIterable {
         case .pushToTalk: return "Hold to record, release to stop"
         case .textToSpeech: return "Read selected text aloud"
         case .languageToggle: return "Cycle through languages"
-        case .formatSelection: return "Format selected text"
         }
     }
 }
@@ -117,6 +114,4 @@ struct HotkeyConfig: Codable, Equatable, Hashable {
     /// Default language toggle hotkey: Cmd+Ctrl
     static let defaultLanguageToggle = HotkeyConfig(modifiers: [.cmd, .ctrl], key: nil)
 
-    /// Default format selection hotkey: Cmd+Shift+F
-    static let defaultFormatSelection = HotkeyConfig(modifiers: [.cmd, .shift], key: "f")
 }
