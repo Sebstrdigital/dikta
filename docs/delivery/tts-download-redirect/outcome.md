@@ -34,7 +34,13 @@ The standard `build-release.sh --no-publish` completed with exit 0, without skip
 
 Evidence: `package-logs/`, `verify-package.log`, `pre-package-source-sha256.json`, `packaged-app-tree.json`, `verify-sparkle.log`, and `live-transport-candidate.log` under the artifact root above. Previous local build artifacts were preserved under `preexisting-build/`; the user's installed app, settings, and assets were not changed.
 
-Publication is authorized and pending at this source checkpoint. Publish this exact retained artifact, not a rebuild, before advertising it in the appcast.
+## Publication completed
+
+- Source commit and annotated release tag: `b5f76335c83832fef77a3a60d4ca2e05b0f41ba6`, `v1.5.8`. Both were pushed to origin.
+- Release: [Dikta v1.5.8 — Reliable Voice Downloads](https://github.com/Sebstrdigital/dikta/releases/tag/v1.5.8), published as latest. The retained DMG was uploaded first as a draft; GitHub's recorded digest and size matched the verified artifact before publication. No rebuild or existing-release replacement occurred.
+- Signed appcast commit: `34d31ecdc60cd2d19d3c51120691c303020f384e`, pushed to main only after the release asset was publicly available. All 18 prior entries were preserved; the new entry advertises version/build `1.5.8`, minimum macOS `15.0`, exact verified signature, and 76,133,637-byte asset.
+- At `2026-10-14T05:24:27Z`, an anonymous full download of the public release asset matched the retained DMG's SHA-256 and size. The live [Sparkle update feed](https://sebstrdigital.github.io/dikta/appcast.xml) matched the local v1.5.8 entry exactly and contained 19 entries. GitHub Pages reported the feed commit built, and GitHub's latest release was v1.5.8.
+- Receipts: `draft-release-receipt.json`, `local-appcast-validation.json`, `public-release-receipt.json`, `public-appcast.xml`, and `verify-public-release.log` under the artifact root. The installed app and local assets remain untouched.
 
 ## Gap and manual follow-up
 
