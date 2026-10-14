@@ -131,6 +131,29 @@ final class NativeKokoroAssetTests: XCTestCase {
         XCTAssertFalse(fetched)
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.path))
     }
+
+    func testPinnedRedirectPolicyAcceptsObservedHFCDNAndRefusesUnpinnedDestinations() throws {
+        let origin = try XCTUnwrap(URL(string: "https://huggingface.co/repo/resolve/main/file"))
+        let policy = NativeKokoroRedirectPolicy(origin: origin)
+        let response = try XCTUnwrap(HTTPURLResponse(url: origin, statusCode: 302, httpVersion: nil, headerFields: nil))
+        let accepted = try XCTUnwrap(URL(string: "https://us.aws.cdn.hf.co/models/file"))
+
+        XCTAssertTrue(NativeKokoroRedirectPolicy.allows(accepted))
+        let task = URLSession.shared.dataTask(with: origin)
+        var acceptedRedirect: URLRequest?
+        policy.urlSession(URLSession.shared, task: task, willPerformHTTPRedirection: response,
+                          newRequest: URLRequest(url: accepted)) { acceptedRedirect = $0 }
+        XCTAssertEqual(acceptedRedirect?.url, accepted)
+
+        for rejected in ["https://cdn.example.com/models/file", "http://us.aws.cdn.hf.co/models/file", "https://us.aws.cdn.hf.co:443/models/file"] {
+            let url = try XCTUnwrap(URL(string: rejected))
+            XCTAssertFalse(NativeKokoroRedirectPolicy.allows(url), rejected)
+            var redirect: URLRequest?
+            policy.urlSession(URLSession.shared, task: task, willPerformHTTPRedirection: response,
+                              newRequest: URLRequest(url: url)) { redirect = $0 }
+            XCTAssertNil(redirect, rejected)
+        }
+    }
 }
 @MainActor
 final class NativeKokoroVoiceAvailabilityTests: XCTestCase {

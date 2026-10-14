@@ -6,6 +6,12 @@ All notable changes to Dikta will be documented in this file.
 - 2026-09-28: `ConfigService.save()` now uses a single atomic-write strategy (temp file + `replaceItemAt`), removing the duplicate approach that had carried as unresolved tech debt for 14 sprints.
 - 2026-04-17: DiagnosticLogger (Windows) now correctly gated behind `[Conditional("DIAGNOSTICS")]` compile flag — release builds produce no log output
 
+## [1.5.8] - 2026-10-14 — Reliable Voice Downloads
+
+### Fixed
+
+- Native Read Aloud setup now accepts the observed, exact Hugging Face CDN redirect host `us.aws.cdn.hf.co` while continuing to require HTTPS, no explicit port, and a pinned host. Downloaded asset size and SHA-256 verification are unchanged.
+
 ## [1.5.7] - 2026-10-14 — Reliable Read Aloud
 
 ### Fixed

@@ -916,7 +916,7 @@ F1000000000000000000002D = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1.5.7;
+				CURRENT_PROJECT_VERSION = 1.5.8;
 				DEVELOPMENT_TEAM = UUM29335B4;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -929,7 +929,7 @@ F1000000000000000000002D = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.5.7;
+				MARKETING_VERSION = 1.5.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app;
 				PRODUCT_NAME = Dikta;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -946,7 +946,7 @@ F1000000000000000000002D = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1.5.7;
+				CURRENT_PROJECT_VERSION = 1.5.8;
 				DEVELOPMENT_TEAM = UUM29335B4;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -959,7 +959,7 @@ F1000000000000000000002D = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.5.7;
+				MARKETING_VERSION = 1.5.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.duatalk.app;
 				PRODUCT_NAME = Dikta;
 				SWIFT_EMIT_LOC_STRINGS = YES;

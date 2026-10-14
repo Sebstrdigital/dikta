@@ -319,8 +319,8 @@ enum NativeKokoroLayoutDescriptor {
     }
 }
 
-private final class NativeKokoroRedirectPolicy: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
-    static let allowedHosts = Set(["huggingface.co", "cdn-lfs.huggingface.co", "cdn-lfs-us-1.hf.co", "cas-bridge.xethub.hf.co"])
+final class NativeKokoroRedirectPolicy: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    static let allowedHosts = Set(["huggingface.co", "cdn-lfs.huggingface.co", "cdn-lfs-us-1.hf.co", "cas-bridge.xethub.hf.co", "us.aws.cdn.hf.co"])
     let origin: URL
     init(origin: URL) { self.origin = origin }
     static func allows(_ url: URL) -> Bool { url.scheme == "https" && url.port == nil && allowedHosts.contains(url.host ?? "") }
