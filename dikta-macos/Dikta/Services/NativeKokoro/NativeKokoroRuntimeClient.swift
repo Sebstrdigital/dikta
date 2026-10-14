@@ -59,8 +59,18 @@ protocol NativeKokoroRuntimeServing: AnyObject {
     func prepare(voiceID: String, speed: Float) async throws -> NativeKokoroAssetSnapshot
     /// Acquires and owns a use lease for generation through playback drain/idle.
     func synthesize(text: String, snapshot: NativeKokoroAssetSnapshot) async throws -> Data
+    /// Returns the identity of the helper session that produced the last audio.
+    /// The service captures it immediately after synthesis and returns it only
+    /// when that exact buffer finishes playback.
+    func capturePlaybackDrainToken() -> UUID?
+    func playbackDrained(token: UUID?)
     func playbackDrained()
     func stop()
+}
+
+extension NativeKokoroRuntimeServing {
+    func capturePlaybackDrainToken() -> UUID? { nil }
+    func playbackDrained(token: UUID?) { playbackDrained() }
 }
 
 @MainActor
@@ -77,6 +87,7 @@ final class NativeKokoroRuntimeClient: NativeKokoroRuntimeServing {
         let snapshot: NativeKokoroAssetSnapshot
         let lease: NKAssetLease
         var session: NativeKokoroSession?
+        var sessionID: UUID?
         var idleTask: Task<Void, Never>?
 
         init(epoch: UInt64, prepared: Prepared) {
@@ -89,6 +100,7 @@ final class NativeKokoroRuntimeClient: NativeKokoroRuntimeServing {
     private var context: Context?
     private var epoch: UInt64 = 0
     private var nextRequest: UInt64 = 1
+    private var lastPlaybackDrainToken: UUID?
     private let executable: () -> URL
     private let resolveHome: @Sendable () throws -> URL
     private let osVersion: () -> OperatingSystemVersion
@@ -154,7 +166,9 @@ final class NativeKokoroRuntimeClient: NativeKokoroRuntimeServing {
             existing.idleTask = nil
             let created = Context(epoch: operationEpoch, prepared: prepared)
             created.session = existing.session
+            created.sessionID = existing.sessionID
             existing.session = nil
+            existing.sessionID = nil
             context = created
             owned = created
         } else {
@@ -180,6 +194,7 @@ final class NativeKokoroRuntimeClient: NativeKokoroRuntimeServing {
             }
             try NKAudio.validate(frames[0].payload)
             timing("helper.first_buffer", ReadAloudTiming.now - synthesisStart)
+            lastPlaybackDrainToken = owned.sessionID
             return frames[0].payload
         } catch is CancellationError {
             retire(owned)
@@ -194,8 +209,19 @@ final class NativeKokoroRuntimeClient: NativeKokoroRuntimeServing {
         }
     }
 
+    func capturePlaybackDrainToken() -> UUID? {
+        defer { lastPlaybackDrainToken = nil }
+        return lastPlaybackDrainToken
+    }
+
+    /// Legacy callers do not carry an audio identity. Read Aloud always uses
+    /// the tokenized overload; this remains only for existing direct tests.
     func playbackDrained() {
-        guard let owned = context, let session = owned.session else { return }
+        playbackDrained(token: context?.sessionID)
+    }
+
+    func playbackDrained(token: UUID?) {
+        guard let token, let owned = context, owned.sessionID == token, let session = owned.session else { return }
         switch session.markPlaybackDrained() {
         case .terminal:
             retire(owned)
@@ -289,6 +315,7 @@ final class NativeKokoroRuntimeClient: NativeKokoroRuntimeServing {
                 try await waitUntilRetired(session, context: owned)
                 guard context === owned, owned.session === session else { throw CancellationError() }
                 owned.session = nil
+                owned.sessionID = nil
                 session = try await readySession(for: owned)
             case .terminal:
                 throw NativeKokoroReadError.helperFailed(session.runtimeFailure)
@@ -304,6 +331,7 @@ final class NativeKokoroRuntimeClient: NativeKokoroRuntimeServing {
             try NativeKokoroChild(executable: executable())
         })
         owned.session = created
+        owned.sessionID = UUID()
         do {
             let launchStart = ReadAloudTiming.now
             try created.startAsync()
@@ -322,7 +350,10 @@ final class NativeKokoroRuntimeClient: NativeKokoroRuntimeServing {
             return created
         } catch {
             created.shutdown()
-            if context === owned, owned.session === created { owned.session = nil }
+            if context === owned, owned.session === created {
+                owned.session = nil
+                owned.sessionID = nil
+            }
             throw error
         }
     }
@@ -371,6 +402,8 @@ final class NativeKokoroRuntimeClient: NativeKokoroRuntimeServing {
         owned.session?.cancel()
         owned.session?.shutdown()
         owned.session = nil
+        owned.sessionID = nil
+        lastPlaybackDrainToken = nil
     }
 
     private func retire(_ owned: Context) {

@@ -6,9 +6,18 @@ All notable changes to Dikta will be documented in this file.
 - 2026-09-28: `ConfigService.save()` now uses a single atomic-write strategy (temp file + `replaceItemAt`), removing the duplicate approach that had carried as unresolved tech debt for 14 sprints.
 - 2026-04-17: DiagnosticLogger (Windows) now correctly gated behind `[Conditional("DIAGNOSTICS")]` compile flag — release builds produce no log output
 
-## [1.5.7] - 2026-10-13 — Streamlined Hotkeys
+## [1.5.7] - 2026-10-14 — Reliable Read Aloud
+
+### Fixed
+
+- Long Read Aloud selections now recover from explicitly overlong audio by splitting unplayed chunks without dropping or replaying text. Nicole at 1.25× uses smaller planned chunks; all reads preserve the captured voice and speed while generation overlaps playback.
+- Fixed an intermittent crash in terminal-selection clipboard fallback when a copy deadline passed between clock reads. Sleep conversion and timing inputs are guarded against negative, non-finite, and unrepresentable values.
+- Read Aloud playback completion is correlated with the generating helper session, preventing stale completions from draining replacement-session audio during recovery.
 
 ### Changed
+
+- Read Aloud plays its start cue when playback is scheduled, not while selecting text or generating speech.
+- About offers “Check for Updates…” when no pending update is known.
 
 - Multi-line output, including Debrief summaries, snapshots and restores supported clipboard representations only while Dikta retains ownership. A changed or unsupported clipboard skips the paste and leaves the output in History.
 - Debrief completion messaging distinguishes a requested paste from an available result with processing warnings or a skipped paste.

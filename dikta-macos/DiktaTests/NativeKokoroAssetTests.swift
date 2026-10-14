@@ -181,6 +181,7 @@ private final class NKRuntimeTestChild: NKChild {
     private var incoming: [Data] = []
     private var dead = false
     private var synthesisCountStorage = 0
+    private var nextSynthesisFailure: NKRuntimeFailure?
     let synthesisStarted = DispatchSemaphore(value: 0)
     let completeSynthesis: Bool
 
@@ -204,7 +205,11 @@ private final class NKRuntimeTestChild: NKChild {
             case .synthesize:
                 synthesisCountStorage += 1
                 synthesisStarted.signal()
-                if completeSynthesis {
+                if let failure = nextSynthesisFailure {
+                    nextSynthesisFailure = nil
+                    try enqueue(NKFrame(.failed, session: frame.session, request: frame.request,
+                                        payload: Data([failure.rawValue])))
+                } else if completeSynthesis {
                     try enqueue(NKFrame(.audio, session: frame.session, request: frame.request,
                                         payload: nkRuntimeTestWAV()))
                     try enqueue(NKFrame(.complete, session: frame.session, request: frame.request, sequence: 1))
@@ -217,6 +222,7 @@ private final class NKRuntimeTestChild: NKChild {
         return data.count
     }
     var synthesisCount: Int { lock.lock(); defer { lock.unlock() }; return synthesisCountStorage }
+    func failNextSynthesis(_ failure: NKRuntimeFailure) { lock.lock(); nextSynthesisFailure = failure; lock.unlock() }
     func exited() -> Bool { lock.lock(); defer { lock.unlock() }; return dead }
     func crash() { lock.lock(); dead = true; lock.unlock() }
     func signal(force: Bool) { lock.lock(); dead = true; lock.unlock() }
@@ -561,6 +567,41 @@ final class NativeKokoroFinalSourceTests: XCTestCase {
     }
 
     @MainActor
+    func testOverlongLookaheadRetirementIgnoresOldDrainUntilNewBufferFinishes() async throws {
+        let owned = try makeValidHome(); defer { try? FileManager.default.removeItem(at: owned.root) }
+        let old = NKRuntimeTestChild(completeSynthesis: true)
+        let replacement = NKRuntimeTestChild(completeSynthesis: true)
+        var children = [old, replacement]
+        var sessions: [NativeKokoroSession] = []
+        let runtime = NativeKokoroRuntimeClient(
+            resolveHome: { owned.home },
+            osVersion: { OperatingSystemVersion(majorVersion: 26, minorVersion: 6, patchVersion: 0) },
+            makeSession: {
+                let session = NativeKokoroSession(factory: { children.removeFirst() })
+                sessions.append(session)
+                return session
+            }
+        )
+        let snapshot = try await runtime.prepare(voiceID: "af_nicole", speed: 1.25)
+        _ = try await runtime.synthesize(text: "Playing buffer.", snapshot: snapshot)
+        let oldToken = try XCTUnwrap(runtime.capturePlaybackDrainToken())
+        old.failNextSynthesis(.samplesTooLong)
+        do { _ = try await runtime.synthesize(text: "Overlong lookahead.", snapshot: snapshot); XCTFail("expected overlong helper failure") }
+        catch { XCTAssertEqual(error as? NativeKokoroReadError, .helperFailed(.samplesTooLong)) }
+
+        _ = try await runtime.synthesize(text: "Replacement lookahead.", snapshot: snapshot)
+        let newToken = try XCTUnwrap(runtime.capturePlaybackDrainToken())
+        XCTAssertNotEqual(oldToken, newToken)
+        XCTAssertEqual(sessions.count, 2)
+        XCTAssertEqual(sessions[1].retainedPlaybackBuffers, 1)
+        runtime.playbackDrained(token: oldToken)
+        XCTAssertEqual(sessions[1].retainedPlaybackBuffers, 1, "an old playback completion must not consume replacement audio credit")
+        runtime.playbackDrained(token: newToken)
+        XCTAssertEqual(sessions[1].retainedPlaybackBuffers, 0)
+        runtime.stop()
+    }
+
+    @MainActor
     func testFinalPlaybackDrainReleasesCrashedSessionAndNextReadUsesHealthyEpoch() async throws {
         let owned = try makeValidHome(); defer { try? FileManager.default.removeItem(at: owned.root) }
         let crashed = NKRuntimeTestChild(completeSynthesis: true)
@@ -715,14 +756,19 @@ final class NativeKokoroEngineTests: XCTestCase {
         do { _ = try await e.synthesize(text: "Hello."); XCTFail() } catch { XCTAssertEqual(error as? NKRuntimeFailure, .input) }
         XCTAssertFalse(fake.calls.contains { $0.hasPrefix("synthesize:") })
     }
-    func testInvalidSamplesNeverReachPCMConversion() async throws {
+    func testInvalidSamplesNeverReachPCMConversionAndOverlongAudioIsDistinguished() async throws {
         for output in [NKEngineSamples(samples: [], sampleRate: 24000), NKEngineSamples(samples: [.nan], sampleRate: 24000),
                        NKEngineSamples(samples: [.infinity], sampleRate: 24000), NKEngineSamples(samples: [0], sampleRate: 24000),
-                       NKEngineSamples(samples: [1], sampleRate: 16000), NKEngineSamples(samples: Array(repeating: 1, count: 480001), sampleRate: 24000)] {
+                       NKEngineSamples(samples: [1], sampleRate: 16000)] {
             let fake = NKFakeEngineBackend(); fake.output = output; let e = engine(fake); try await e.initialize()
             do { _ = try await e.synthesize(text: "Hello."); XCTFail() } catch { XCTAssertEqual(error as? NKRuntimeFailure, .samples) }
             XCTAssertFalse(fake.calls.contains("wav"))
         }
+        let fake = NKFakeEngineBackend()
+        fake.output = NKEngineSamples(samples: Array(repeating: 1, count: 480_001), sampleRate: 24_000)
+        let e = engine(fake); try await e.initialize()
+        do { _ = try await e.synthesize(text: "Hello."); XCTFail() } catch { XCTAssertEqual(error as? NKRuntimeFailure, .samplesTooLong) }
+        XCTAssertFalse(fake.calls.contains("wav"))
     }
     func testSelectedAssetFailureAfterInitializationPreventsFurtherSDKEntry() async throws {
         let fake = NKFakeEngineBackend(); var valid = true

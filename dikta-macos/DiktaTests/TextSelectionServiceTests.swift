@@ -34,6 +34,9 @@ final class TextSelectionServiceTests: XCTestCase {
     private final class Environment {
         let clipboard = Clipboard()
         var time: TimeInterval = 0
+        var nowValues: [TimeInterval] = []
+        var nowReads = 0
+        var onNow: (() -> Void)?
         var flags: CGEventFlags = []
         var focus: pid_t? = 42
         var copies = 0
@@ -49,7 +52,12 @@ final class TextSelectionServiceTests: XCTestCase {
             copy: { [unowned self] in copies += 1; onCopy?() },
             modifiers: { [unowned self] in flags },
             focusedApplication: { [unowned self] in focus },
-            now: { [unowned self] in time },
+            now: { [unowned self] in
+                if !nowValues.isEmpty { time = nowValues.removeFirst() }
+                nowReads += 1
+                onNow?()
+                return time
+            },
             pause: { [unowned self] interval in
                 time += interval
                 pauses += 1
@@ -60,8 +68,16 @@ final class TextSelectionServiceTests: XCTestCase {
             axRead: { [unowned self] _, _ in axValues.removeFirst() }
         )
 
-        func capture() async -> String? {
-            await service.getSelectedTextViaClipboard(modifierTimeout: 0.2, copyWait: 0.5, pollInterval: 0.02)
+        func capture(
+            modifierTimeout: TimeInterval = 0.2,
+            copyWait: TimeInterval = 0.5,
+            pollInterval: TimeInterval = 0.02
+        ) async -> String? {
+            await service.getSelectedTextViaClipboard(
+                modifierTimeout: modifierTimeout,
+                copyWait: copyWait,
+                pollInterval: pollInterval
+            )
         }
     }
 
@@ -96,6 +112,91 @@ final class TextSelectionServiceTests: XCTestCase {
         XCTAssertEqual(e.stages.last, .modifierDeadline)
         XCTAssertEqual(e.clipboard.contents, original)
         XCTAssertEqual(e.clipboard.changeCount, 10)
+    }
+
+    func testClockCrossingDeadlineBetweenLegacyReadsDoesNotTrap() async {
+        let e = Environment()
+        // The old `while now() < deadline` then `deadline - now()` sequence
+        // saw 0 then 0.51 here and converted a negative sleep to UInt64.
+        e.nowValues = [0, 0, 0, 0.51]
+        let result = await e.capture()
+        XCTAssertEqual(result, "stale")
+        XCTAssertEqual(e.copies, 1)
+        XCTAssertEqual(e.stages.last, .clipboardSuccess)
+    }
+
+    func testZeroAndExceededCopyDeadlinesCompleteWithoutExtraWait() async {
+        let zero = Environment()
+        zero.onCopy = { zero.clipboard.write("selected") }
+        let zeroResult = await zero.capture(copyWait: 0)
+        XCTAssertEqual(zeroResult, "selected")
+        XCTAssertEqual(zero.pauses, 1, "only the post-read stability yield should pause")
+
+        let exceeded = Environment()
+        // modifier deadline, copy deadline, then a clock already beyond copy deadline
+        exceeded.nowValues = [0, 0, 1]
+        let exceededResult = await exceeded.capture(copyWait: 0.5)
+        XCTAssertEqual(exceededResult, "stale")
+        XCTAssertEqual(exceeded.pauses, 1, "an exceeded deadline must not sleep")
+    }
+
+    func testInvalidOrUnrepresentableTimingFailsBeforeCopyOrPause() async {
+        let invalidValues: [TimeInterval] = [
+            .nan, .infinity, -0.01, .greatestFiniteMagnitude,
+            Double(UInt64.max) / 1_000_000_000
+        ]
+        for value in invalidValues {
+            let modifier = Environment()
+            let modifierResult = await modifier.capture(modifierTimeout: value)
+            XCTAssertNil(modifierResult)
+            XCTAssertEqual(modifier.copies, 0)
+            XCTAssertEqual(modifier.pauses, 0)
+            XCTAssertEqual(modifier.stages.last, .invalidTiming)
+
+            let copy = Environment()
+            let copyResult = await copy.capture(copyWait: value)
+            XCTAssertNil(copyResult)
+            XCTAssertEqual(copy.copies, 0)
+            XCTAssertEqual(copy.pauses, 0)
+            XCTAssertEqual(copy.stages.last, .invalidTiming)
+        }
+        for value in [TimeInterval.zero, -0.01, .nan, .infinity, .greatestFiniteMagnitude] {
+            let poll = Environment()
+            let pollResult = await poll.capture(pollInterval: value)
+            XCTAssertNil(pollResult)
+            XCTAssertEqual(poll.copies, 0)
+            XCTAssertEqual(poll.pauses, 0)
+            XCTAssertEqual(poll.stages.last, .invalidTiming)
+        }
+    }
+
+    func testClockRegressionFailsClosedWithoutSpinning() async {
+        let e = Environment()
+        e.nowValues = [0, 0, -1]
+        let result = await e.capture()
+        XCTAssertNil(result)
+        XCTAssertEqual(e.copies, 1)
+        XCTAssertEqual(e.pauses, 0)
+        XCTAssertEqual(e.stages.last, .invalidTiming)
+    }
+
+    func testFocusAndCancellationAtCopyDeadlineCompletionAreRejected() async {
+        let focus = Environment()
+        focus.onNow = { if focus.nowReads == 3 { focus.focus = 99 } }
+        let focusResult = await focus.capture(copyWait: 0)
+        XCTAssertNil(focusResult)
+        XCTAssertEqual(focus.copies, 1)
+        XCTAssertEqual(focus.stages.last, .focusChanged)
+
+        let cancellation = Environment()
+        cancellation.onNow = {
+            if cancellation.nowReads == 3 { withUnsafeCurrentTask { $0?.cancel() } }
+        }
+        let task = Task { @MainActor in await cancellation.capture(copyWait: 0) }
+        let cancellationResult = await task.value
+        XCTAssertNil(cancellationResult)
+        XCTAssertEqual(cancellation.copies, 1)
+        XCTAssertEqual(cancellation.stages.last, .cancelled)
     }
 
     func testDelayedCopyBeyondOldHundredMillisecondsSucceeds() async {

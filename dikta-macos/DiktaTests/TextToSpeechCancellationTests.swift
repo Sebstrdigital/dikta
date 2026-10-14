@@ -33,6 +33,7 @@ private final class FakeNativeKokoroRuntime: NativeKokoroRuntimeServing {
 private final class FakeNativeTTSPlayer: NativeTTSPlayback {
     var eventHandler: ((NativeTTSPlaybackEvent) -> Void)?
     var refusal = false
+    var automaticallyFinish = false
     private(set) var plays: [(Data, UUID)] = []
     private(set) var stopCount = 0
 
@@ -40,6 +41,7 @@ private final class FakeNativeTTSPlayer: NativeTTSPlayback {
         if refusal { throw AVNativeTTSPlayer.PlayerError.refused }
         plays.append((wav, tag))
         eventHandler?(.started(tag))
+        if automaticallyFinish { eventHandler?(.finished(tag)) }
     }
     func stop() { stopCount += 1 }
     func finish(_ index: Int) { eventHandler?(.finished(plays[index].1)) }
@@ -297,6 +299,28 @@ final class TextToSpeechCancellationTests: XCTestCase {
         XCTAssertEqual(rebuilt, source, "chunk ranges may not normalize, drop, repeat, or reorder source")
     }
 
+    func testChunkerPreservesTrailingWhitespaceWithoutWhitespaceOnlySynthesisForNicoleFast() throws {
+        let source = String(repeating: "a ", count: 240) + " "
+        let chunks = try ProgressiveTextChunker().chunks(in: source, request: TextToSpeechRequest(voice: .af_nicole, speed: .fast))
+        XCTAssertEqual(chunks.map { String(source[$0.range]) }.joined(), source)
+        XCTAssertFalse(chunks.contains { source[$0.range].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+        XCTAssertTrue(String(source[chunks.last!.range]).hasSuffix("  "))
+    }
+
+    func testTrailingWhitespaceAttachmentPreservesExactRangesOnlyWithinHelperByteBound() throws {
+        let permitted = "spoken." + String(repeating: " ", count: 600)
+        let chunks = try ProgressiveTextChunker().chunks(in: permitted)
+        XCTAssertEqual(chunks.map { String(permitted[$0.range]) }.joined(), permitted)
+        XCTAssertFalse(chunks.contains { permitted[$0.range].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+        XCTAssertLessThanOrEqual(chunks.last.map { permitted[$0.range].utf8.count } ?? .max,
+                                 ProgressiveTextChunker.maximumSynthesisUTF8Bytes)
+
+        let rejected = "spoken." + String(repeating: " ", count: ProgressiveTextChunker.maximumSynthesisUTF8Bytes)
+        XCTAssertThrowsError(try ProgressiveTextChunker().chunks(in: rejected)) {
+            XCTAssertEqual($0 as? ProgressiveTextChunker.ChunkError, .unsupportedInput)
+        }
+    }
+
     func testChunkerNeverSplitsDecimalAbbreviationOrUnicodeLexicalTokens() throws {
         let prefix = String(repeating: "alpha ", count: 47)
         for token in ["3.14159", "Dr.Smith", "e.g.word", "naïve👩🏽‍💻word"] {
@@ -453,6 +477,73 @@ final class TextToSpeechCancellationTests: XCTestCase {
         await waitUntil { player.plays.count == 2 }
         player.finish(1)
         try await healthy.value
+    }
+
+    func testNicoleFastUsesConservativePlanAndSplitsOnlyExplicitOverlongAudioInOrder() async throws {
+        let (service, runtime, player) = makeService()
+        let source = String(repeating: "Nicole's progressive synthetic fixture keeps every word in exact order. ", count: 12)
+        player.automaticallyFinish = true
+        runtime.synthesizeHandler = { text, _ in
+            if text.utf8.count > 80 { throw NativeKokoroReadError.helperFailed(.samplesTooLong) }
+            return Data(text.utf8)
+        }
+        let request = TextToSpeechRequest(voice: .af_nicole, speed: .fast)
+        try await service.speak(source, request: request)
+
+        XCTAssertGreaterThan(runtime.syntheses.count, player.plays.count, "at least one explicit overlong result must have been split")
+        XCTAssertEqual(player.plays.map { String(decoding: $0.0, as: UTF8.self) }.joined(), source)
+        XCTAssertEqual(runtime.drainedCount, player.plays.count)
+        XCTAssertTrue(runtime.syntheses.allSatisfy { $0.1.voiceID == "af_nicole" && $0.1.speed == 1.25 })
+        XCTAssertFalse(service.speaking)
+    }
+
+    func testOverlongLookaheadWithWhitespaceSuffixSplitsOnlySpokenRangesInOrderWithoutReplay() async throws {
+        let (service, runtime, player) = makeService()
+        let source = String(repeating: "ordered spoken content for retry. ", count: 22) + "   "
+        runtime.synthesizeHandler = { text, _ in
+            if runtime.syntheses.count == 2 { throw NativeKokoroReadError.helperFailed(.samplesTooLong) }
+            return Data(text.utf8)
+        }
+        let task = Task { try await service.speak(source, request: TextToSpeechRequest(voice: .af_nicole, speed: .fast)) }
+        await waitUntil { player.plays.count == 1 && runtime.syntheses.count >= 2 }
+        let first = player.plays[0].0
+        player.automaticallyFinish = true
+        player.finish(0)
+        try await task.value
+
+        XCTAssertEqual(player.plays.map { String(decoding: $0.0, as: UTF8.self) }.joined(), source)
+        XCTAssertEqual(player.plays.filter { $0.0 == first }.count, 1, "already-played audio must not replay after lookahead retry")
+        XCTAssertFalse(runtime.syntheses.contains { $0.0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+    }
+
+    func testCancellationDuringOverlongRetryRejectsLateAudioWithoutPlayback() async {
+        let (service, runtime, player) = makeService()
+        let source = String(repeating: "A retryable synthetic sentence with enough words to split safely. ", count: 4)
+        var retry: CheckedContinuation<Data, Error>?
+        runtime.synthesizeHandler = { _, _ in
+            if runtime.syntheses.count == 1 { throw NativeKokoroReadError.helperFailed(.samplesTooLong) }
+            return try await withCheckedThrowingContinuation { retry = $0 }
+        }
+        let task = Task { try await service.speak(source, request: TextToSpeechRequest(voice: .af_nicole, speed: .fast)) }
+        await waitUntil { retry != nil }
+        service.stop()
+        retry?.resume(returning: Data("late retry audio".utf8))
+        await expectCancellation(task)
+        XCTAssertTrue(player.plays.isEmpty)
+        XCTAssertEqual(runtime.stopCount, 1)
+    }
+
+    func testNonLengthHelperFailureDoesNotSplitOrRetry() async {
+        let (service, runtime, player) = makeService()
+        runtime.synthesizeHandler = { _, _ in throw NativeKokoroReadError.helperFailed(.samples) }
+        do {
+            try await service.speak("A synthetic fixture that would otherwise be splittable.", request: TextToSpeechRequest(voice: .af_nicole, speed: .fast))
+            XCTFail("Expected the non-length helper failure")
+        } catch {
+            guard case .notAvailable = error as? TextToSpeechService.TTSError else { return XCTFail("Unexpected error: \(error)") }
+        }
+        XCTAssertEqual(runtime.syntheses.count, 1)
+        XCTAssertTrue(player.plays.isEmpty)
     }
 
     func testMissingSelectedVoiceAndUnsafeOSAreActionableWithNoHeartSubstitution() async {

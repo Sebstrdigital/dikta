@@ -41,7 +41,7 @@ struct SelectionCaptureDiagnostic {
         case modifierWait, modifierDeadline, modifiersReleased, modifiersRepressed
         case snapshotUnavailable, snapshotMutation, snapshotReady, copyPosted
         case copyWaitComplete, noText, whitespace, readInterference
-        case stabilityInterference, clipboardSuccess, pauseFailed
+        case stabilityInterference, clipboardSuccess, pauseFailed, invalidTiming
     }
     let stage: Stage
     var count: Int? = nil
@@ -76,6 +76,20 @@ final class TextSelectionService {
     private let diagnostic: (SelectionCaptureDiagnostic) -> Void
     private let axRead: (AXUIElement, CFString) -> (AXError, AnyObject?)
 
+    private enum DeadlinePoll {
+        case wait(TimeInterval)
+        case expired
+        case invalid
+    }
+
+    private static func nanoseconds(for interval: TimeInterval) -> UInt64? {
+        guard interval.isFinite, interval >= 0 else { return nil }
+        let nanoseconds = interval * 1_000_000_000
+        // Double(UInt64.max) rounds up to 2^64, which UInt64 cannot represent.
+        guard nanoseconds.isFinite, nanoseconds < Double(UInt64.max) else { return nil }
+        return UInt64(nanoseconds)
+    }
+
     private static func readAX(_ element: AXUIElement, _ attribute: CFString) -> (AXError, AnyObject?) {
         var value: AnyObject?
         let status = AXUIElementCopyAttributeValue(element, attribute, &value)
@@ -97,7 +111,10 @@ final class TextSelectionService {
         modifiers = { CGEventSource.flagsState(.hidSystemState) }
         focusedApplication = { NSWorkspace.shared.frontmostApplication?.processIdentifier }
         now = { ProcessInfo.processInfo.systemUptime }
-        pause = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) }
+        pause = { interval in
+            guard let nanoseconds = Self.nanoseconds(for: interval) else { throw CancellationError() }
+            try await Task.sleep(nanoseconds: nanoseconds)
+        }
     }
 
     /// Entirely injected capture environment for offline tests (no system pasteboard/events).
@@ -183,6 +200,14 @@ final class TextSelectionService {
         emit(.clipboardStart)
         guard !capturing else { emit(.concurrent); return nil }
         guard !Task.isCancelled else { emit(.cancelled); return nil }
+        // Zero deadlines are valid immediate checks. Invalid, unrepresentable, or
+        // non-positive poll durations fail without posting Cmd+C or spinning.
+        guard Self.nanoseconds(for: modifierTimeout) != nil,
+              Self.nanoseconds(for: copyWait) != nil,
+              let pollNanoseconds = Self.nanoseconds(for: pollInterval), pollNanoseconds > 0 else {
+            emit(.invalidTiming)
+            return nil
+        }
         guard let application = focusedApplication() else { emit(.noFocus); return nil }
         capturing = true
         defer { capturing = false }
@@ -193,14 +218,38 @@ final class TextSelectionService {
             return true
         }
 
-        let modifierDeadline = now() + modifierTimeout
+        func deadline(after timeout: TimeInterval) -> (value: TimeInterval, lastClock: TimeInterval)? {
+            let current = now()
+            guard current.isFinite, timeout <= Double.greatestFiniteMagnitude - current else { return nil }
+            return (current + timeout, current)
+        }
+
+        func poll(deadline: TimeInterval, lastClock: inout TimeInterval) -> DeadlinePoll {
+            let current = now()
+            // systemUptime is monotonic. A non-finite or backward injected/system
+            // clock cannot safely establish a bounded wait, so fail closed.
+            guard current.isFinite, current >= lastClock else { return .invalid }
+            lastClock = current
+            let remaining = deadline - current
+            guard remaining.isFinite else { return .invalid }
+            guard remaining > 0 else { return .expired }
+            return .wait(min(pollInterval, remaining))
+        }
+
+        guard var modifierDeadline = deadline(after: modifierTimeout) else {
+            emit(.invalidTiming)
+            return nil
+        }
         do {
             var recordedModifierWait = false
             while !modifiers().intersection(ClipboardManager.outputBlockingModifiers).isEmpty {
                 if !recordedModifierWait { emit(.modifierWait); recordedModifierWait = true }
                 guard stillFocused() else { return nil }
-                guard now() < modifierDeadline else { emit(.modifierDeadline); return nil }
-                try await pause(pollInterval)
+                switch poll(deadline: modifierDeadline.value, lastClock: &modifierDeadline.lastClock) {
+                case .wait(let interval): try await pause(interval)
+                case .expired: emit(.modifierDeadline); return nil
+                case .invalid: emit(.invalidTiming); return nil
+                }
             }
             guard stillFocused() else { return nil }
             emit(.modifiersReleased)
@@ -222,13 +271,21 @@ final class TextSelectionService {
             emit(.snapshotReady, count: originalCount)
             copy()
             emit(.copyPosted, expectedCount: originalCount)
-            let copyDeadline = now() + copyWait
+            guard var copyDeadline = deadline(after: copyWait) else {
+                emit(.invalidTiming)
+                return nil
+            }
 
             // Wait the full copy interval even for immediate or unchanged text.
-            // Short asynchronous pauses retain responsive focus/cancellation checks.
-            while now() < copyDeadline {
+            // Read the clock once per iteration: a deadline crossed between two
+            // reads used to make the old subtraction negative and trap in UInt64.
+            copyWaitLoop: while true {
                 guard stillFocused() else { return nil }
-                try await pause(min(pollInterval, copyDeadline - now()))
+                switch poll(deadline: copyDeadline.value, lastClock: &copyDeadline.lastClock) {
+                case .wait(let interval): try await pause(interval)
+                case .expired: break copyWaitLoop
+                case .invalid: emit(.invalidTiming); return nil
+                }
             }
             guard stillFocused() else { return nil }
             let capturedCount = clipboard.changeCount

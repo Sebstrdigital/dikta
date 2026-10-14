@@ -47,6 +47,7 @@ final class NativeKokoroSession {
     private var reconciliationExceeded = false
     var runtimeFailure: NKRuntimeFailure? { queue.sync { lastFailure } }
     var phase: NKPhase? { queue.sync { lastPhase } }
+    var retainedPlaybackBuffers: Int { queue.sync { pendingPlaybackBuffers } }
     var isEngineReady: Bool { queue.sync { engineReady } }
     var exceededReconciliation: Bool { queue.sync { reconciliationExceeded } }
     private(set) var session: UInt64

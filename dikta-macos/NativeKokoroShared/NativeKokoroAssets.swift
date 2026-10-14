@@ -4,7 +4,7 @@ import Darwin
 
 // Qualification candidate only, not a production installation/readiness claim.
 public enum NKRuntimeFailure: UInt8, Error, Equatable {
-    case manifest = 1, layout, missing, size, digest, migration, unsupportedOS, notReady, input, synthesis, samples
+    case manifest = 1, layout, missing, size, digest, migration, unsupportedOS, notReady, input, synthesis, samples, samplesTooLong
 }
 public struct NKAssetManifest: Decodable {
     public struct File: Decodable {
@@ -213,8 +213,9 @@ public final class NKVerifiedEngine {
             try Task.checkCancellation()
             let result = try await backend.synthesize(phonemes: phonemes, voiceID: voiceID, speed: speed)
             try Task.checkCancellation()
-            guard result.sampleRate == 24000, !result.samples.isEmpty, result.samples.count <= 480000,
+            guard result.sampleRate == 24000, !result.samples.isEmpty,
                   result.samples.allSatisfy({ $0.isFinite }), result.samples.contains(where: { $0 != 0 }) else { throw NKRuntimeFailure.samples }
+            guard result.samples.count <= 480_000 else { throw NKRuntimeFailure.samplesTooLong }
             let data = try backend.wav(samples: result.samples)
             try NKAudio.validate(data); return data
         } catch let failure as NKRuntimeFailure { throw failure }

@@ -51,10 +51,19 @@ struct ProgressiveTextChunker {
     static let maximumChunkUTF8Bytes = 480
     static let maximumChunkWords = 48
     static let maximumWordCharacters = 62
+    /// Native helper's hard source-byte guard. Exterior whitespace may be
+    /// attached only when it remains within this independently enforced limit.
+    static let maximumSynthesisUTF8Bytes = 1_024
+
+    /// Nicole can produce unusually long acoustic output for otherwise valid
+    /// source at 1.25×. Leave a margin below the helper's 20-second limit for
+    /// that voice/speed pair; all other requests retain the qualified plan.
+    private static let nicoleFastMaximumChunkUTF8Bytes = 240
+    private static let nicoleFastMaximumChunkWords = 24
 
     enum ChunkError: Error, Equatable { case unsupportedInput }
 
-    func chunks(in text: String) throws -> [ProgressiveTextChunk] {
+    func chunks(in text: String, request: TextToSpeechRequest? = nil) throws -> [ProgressiveTextChunk] {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               text.utf8.count <= Self.maximumSourceUTF8Bytes,
               !text.unicodeScalars.contains(where: { $0.value < 32 && !$0.properties.isWhitespace }),
@@ -62,15 +71,28 @@ struct ProgressiveTextChunker {
             throw ChunkError.unsupportedInput
         }
 
+        let limits = chunkLimits(for: request)
         // Real helper measurements justify a small opening sentence for medium
         // reads that formerly waited for one whole buffer. Leave long-read chunk
         // planning and short/unsentenced selections unchanged. No text is lost.
-        let earlierSentence = earlierFirstSentence && text.utf8.count <= Self.maximumChunkUTF8Bytes
-            && text.split(whereSeparator: { $0.isWhitespace }).count <= Self.maximumChunkWords
+        let earlierSentence = earlierFirstSentence && text.utf8.count <= limits.bytes
+            && text.split(whereSeparator: { $0.isWhitespace }).count <= limits.words
             && text.split(whereSeparator: { $0.isWhitespace }).count > 16
         var chunks: [ProgressiveTextChunk] = []
         var start = text.startIndex
         while start < text.endIndex {
+            if text[start].isWhitespace,
+               text[start...].allSatisfy({ $0.isWhitespace }),
+               let last = chunks.indices.last {
+                // A sentence-preferred boundary may leave exterior whitespace
+                // behind. Attach it once, subject to the helper input ceiling.
+                let attached = text[chunks[last].range.lowerBound..<text.endIndex]
+                guard attached.utf8.count <= Self.maximumSynthesisUTF8Bytes else {
+                    throw ChunkError.unsupportedInput
+                }
+                chunks[last] = ProgressiveTextChunk(sequence: last, range: chunks[last].range.lowerBound..<text.endIndex)
+                return chunks
+            }
             var cursor = start
             var lastSentence: String.Index?
             var lastClause: String.Index?
@@ -80,7 +102,7 @@ struct ProgressiveTextChunker {
                 let next = text.index(after: cursor)
                 let candidate = text[start..<next]
                 let words = candidate.split(whereSeparator: { $0.isWhitespace }).count
-                if candidate.utf8.count > Self.maximumChunkUTF8Bytes || words > Self.maximumChunkWords { break }
+                if candidate.utf8.count > limits.bytes || words > limits.words { break }
 
                 cursor = next
                 let characterIndex = text.index(before: next)
@@ -101,6 +123,19 @@ struct ProgressiveTextChunker {
             } else {
                 end = lastSentence ?? lastClause ?? lastWhitespace ?? cursor
             }
+            if end > start, text[start..<end].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               end == text.endIndex, let last = chunks.indices.last {
+                // Preserve exterior trailing whitespace in the preceding spoken
+                // request, never as a blank request. This is an exact-range
+                // policy exception to conservative spoken-content sizing only;
+                // it remains under the helper's independent 1,024-byte guard.
+                let attached = text[chunks[last].range.lowerBound..<end]
+                guard attached.utf8.count <= Self.maximumSynthesisUTF8Bytes else {
+                    throw ChunkError.unsupportedInput
+                }
+                chunks[last] = ProgressiveTextChunk(sequence: last, range: chunks[last].range.lowerBound..<end)
+                return chunks
+            }
             guard end > start,
                   !text[start..<end].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   chunks.count < Self.maximumChunks else {
@@ -110,6 +145,47 @@ struct ProgressiveTextChunker {
             start = end
         }
         return chunks
+    }
+
+    /// Splits a helper-rejected range only at a source boundary. This is used
+    /// solely for the helper's explicit overlong-audio signal, never as a
+    /// blanket recovery for malformed input or synthesis errors.
+    func split(_ chunk: ProgressiveTextChunk, in text: String) throws -> [ProgressiveTextChunk] {
+        let source = text[chunk.range]
+        let midpoint = source.utf8.count / 2
+        var cursor = chunk.range.lowerBound
+        var bytes = 0
+        var candidates: [(index: String.Index, priority: Int, distance: Int)] = []
+        while cursor < chunk.range.upperBound {
+            let next = text.index(after: cursor)
+            bytes += text[cursor..<next].utf8.count
+            let character = text[cursor]
+            let priority: Int?
+            if isSentenceBoundary(character, at: cursor, in: text) { priority = 0 }
+            else if isClauseBoundary(character, at: cursor, in: text) { priority = 1 }
+            else if character.isWhitespace { priority = 2 }
+            else { priority = nil }
+            if let priority, next > chunk.range.lowerBound, next < chunk.range.upperBound,
+               !text[chunk.range.lowerBound..<next].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               !text[next..<chunk.range.upperBound].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                candidates.append((next, priority, abs(bytes - midpoint)))
+            }
+            cursor = next
+        }
+        guard let split = candidates.min(by: { lhs, rhs in
+            lhs.distance == rhs.distance ? lhs.priority < rhs.priority : lhs.distance < rhs.distance
+        })?.index else { throw ChunkError.unsupportedInput }
+        return [
+            ProgressiveTextChunk(sequence: chunk.sequence, range: chunk.range.lowerBound..<split),
+            ProgressiveTextChunk(sequence: chunk.sequence + 1, range: split..<chunk.range.upperBound)
+        ]
+    }
+
+    private func chunkLimits(for request: TextToSpeechRequest?) -> (bytes: Int, words: Int) {
+        guard request?.voice == .af_nicole, request?.speed == .fast else {
+            return (Self.maximumChunkUTF8Bytes, Self.maximumChunkWords)
+        }
+        return (Self.nicoleFastMaximumChunkUTF8Bytes, Self.nicoleFastMaximumChunkWords)
     }
 
     /// Punctuation is preferred only when it terminates a token. In particular,
@@ -194,11 +270,21 @@ final class TextToSpeechService: TextToSpeechSpeaking {
     private var playbackWaiter: PlaybackWaiter?
     private var pendingPlaybackIdentity: (request: UUID, chunk: Int, tag: UUID)?
     private var earlyPlaybackResult: Result<Void, Error>?
+    private struct GeneratedAudio {
+        let data: Data
+        let drainToken: UUID?
+    }
+
     private struct GenerationHandle {
         let request: UUID
         let chunk: Int
         let identity: UUID
-        let task: Task<Data, Error>
+        let task: Task<GeneratedAudio, Error>
+    }
+
+    private final class ChunkPlan {
+        var chunks: [ProgressiveTextChunk]
+        init(_ chunks: [ProgressiveTextChunk]) { self.chunks = chunks }
     }
 
     private var generationTask: GenerationHandle?
@@ -248,8 +334,8 @@ final class TextToSpeechService: TextToSpeechSpeaking {
         // cannot acquire an asset lease or helper.
         try Task.checkCancellation()
         guard activeRequest == nil else { throw TTSError.alreadySpeaking }
-        let chunks: [ProgressiveTextChunk]
-        do { chunks = try chunker.chunks(in: text) }
+        let plan: ChunkPlan
+        do { plan = ChunkPlan(try chunker.chunks(in: text, request: request)) }
         catch { throw TTSError.unsupportedText }
 
         let requestID = UUID()
@@ -265,20 +351,20 @@ final class TextToSpeechService: TextToSpeechSpeaking {
 
                 var index = 0
                 let synthesisStart = ReadAloudTiming.now
-                var audio = try await synthesize(text[chunks[0].range], snapshot: snapshot, request: requestID)
+                var audio = try await synthesizeChunk(at: index, plan: plan, text: text, snapshot: snapshot, request: requestID)
                 timing("service.first_buffer", ReadAloudTiming.now - synthesisStart)
                 while true {
                     try requireOwnership(requestID)
                     let tag = UUID() // distinct audio identity for every source range
-                    try startPlayback(audio, request: requestID, chunk: index, tag: tag)
+                    try startPlayback(audio.data, request: requestID, chunk: index, tag: tag)
                     try requireOwnership(requestID) // Scheduling observers can cancel synchronously.
 
                     let nextIndex = index + 1
-                    let lookahead: Task<Data, Error>?
-                    if nextIndex < chunks.count {
-                        let source = String(text[chunks[nextIndex].range])
-                        let task = Task { @MainActor [runtime] in
-                            try await runtime.synthesize(text: source, snapshot: snapshot)
+                    let lookahead: Task<GeneratedAudio, Error>?
+                    if nextIndex < plan.chunks.count {
+                        let task = Task { @MainActor [weak self] in
+                            guard let self else { throw CancellationError() }
+                            return try await self.synthesizeChunk(at: nextIndex, plan: plan, text: text, snapshot: snapshot, request: requestID)
                         }
                         generationTask = GenerationHandle(
                             request: requestID, chunk: nextIndex, identity: UUID(), task: task
@@ -296,7 +382,7 @@ final class TextToSpeechService: TextToSpeechSpeaking {
                     }
                     try requireOwnership(requestID)
                     // Credits follow actual playback consumption, never receipt.
-                    runtime.playbackDrained()
+                    runtime.playbackDrained(token: audio.drainToken)
 
                     guard let lookahead else { break }
                     let generationIdentity = generationTask.flatMap {
@@ -304,7 +390,7 @@ final class TextToSpeechService: TextToSpeechSpeaking {
                     }
                     audio = try await lookahead.value
                     clearGeneration(request: requestID, chunk: nextIndex, identity: generationIdentity)
-                    try validateAudio(audio)
+                    try validateAudio(audio.data)
                     try requireOwnership(requestID)
                     index = nextIndex
                 }
@@ -353,11 +439,31 @@ final class TextToSpeechService: TextToSpeechSpeaking {
         cancel(id: id)
     }
 
-    private func synthesize(_ source: Substring, snapshot: NativeKokoroAssetSnapshot, request: UUID) async throws -> Data {
+    private func synthesize(_ source: Substring, snapshot: NativeKokoroAssetSnapshot, request: UUID) async throws -> GeneratedAudio {
         let audio = try await runtime.synthesize(text: String(source), snapshot: snapshot)
+        let drainToken = runtime.capturePlaybackDrainToken()
         try requireOwnership(request)
         try validateAudio(audio)
-        return audio
+        return GeneratedAudio(data: audio, drainToken: drainToken)
+    }
+
+    private func synthesizeChunk(at index: Int, plan: ChunkPlan, text: String,
+                                 snapshot: NativeKokoroAssetSnapshot, request: UUID) async throws -> GeneratedAudio {
+        do {
+            return try await synthesize(text[plan.chunks[index].range], snapshot: snapshot, request: request)
+        } catch {
+            guard isOverlongAudio(error), plan.chunks.count < ProgressiveTextChunker.maximumChunks else { throw error }
+            let split = try chunker.split(plan.chunks[index], in: text)
+            plan.chunks.replaceSubrange(index...index, with: split)
+            for sequence in plan.chunks.indices { plan.chunks[sequence] = ProgressiveTextChunk(sequence: sequence, range: plan.chunks[sequence].range) }
+            try requireOwnership(request)
+            return try await synthesizeChunk(at: index, plan: plan, text: text, snapshot: snapshot, request: request)
+        }
+    }
+
+    private func isOverlongAudio(_ error: Error) -> Bool {
+        guard case NativeKokoroReadError.helperFailed(.samplesTooLong) = error else { return false }
+        return true
     }
 
     private func validateAudio(_ audio: Data) throws {
