@@ -7,6 +7,20 @@
         <description>Dikta app updates</description>
         <language>en</language>
         <item>
+            <title>Dikta v1.5.9 — Reliable Push-to-Talk</title>
+            <pubDate>Tue, 20 Oct 2026 07:34:07 +0000</pubDate>
+            <sparkle:version>1.5.9</sparkle:version>
+            <sparkle:shortVersionString>1.5.9</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink>https://github.com/Sebstrdigital/dikta/releases/tag/v1.5.9</sparkle:releaseNotesLink>
+            <enclosure
+                url="https://github.com/Sebstrdigital/dikta/releases/download/v1.5.9/Dikta-1.5.9.dmg"
+                sparkle:edSignature="b1hWv8z+lQzDT7eEgWTRuaBnEKe+IxLZ7/tXmrWB3NxaHm45Xwpop2qEUEOfhabslmkQMthSg/lIzkm92eDtCQ=="
+                length="76132828"
+                type="application/octet-stream"
+            />
+        </item>
+        <item>
             <title>Dikta v1.5.8 — Reliable Voice Downloads</title>
             <pubDate>Wed, 14 Oct 2026 05:22:20 +0000</pubDate>
             <sparkle:version>1.5.8</sparkle:version>
