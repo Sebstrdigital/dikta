@@ -6,6 +6,18 @@ All notable changes to Dikta will be documented in this file.
 - 2026-09-28: `ConfigService.save()` now uses a single atomic-write strategy (temp file + `replaceItemAt`), removing the duplicate approach that had carried as unresolved tech debt for 14 sprints.
 - 2026-04-17: DiagnosticLogger (Windows) now correctly gated behind `[Conditional("DIAGNOSTICS")]` compile flag — release builds produce no log output
 
+## [1.5.9] - 2026-10-20 — Reliable Push-to-Talk
+
+### Fixed
+
+- Push-to-talk remembers releases received while the microphone is starting, so releasing the hotkey cannot leave recording running without producing output. Repeated presses during startup no longer launch duplicate recording starts.
+- Holding an additional modifier no longer prematurely ends a push-to-talk hold. Key-based push-to-talk also stops correctly when its modifier is released before the regular key.
+- Removed Slack's unsafe automatic mute keystrokes, which could insert an M into a message composer when dictation started or stopped.
+
+### Changed
+
+- Automatic Slack microphone muting is disabled until a verified call-control path is available. Mute Slack manually during Huddles when needed.
+
 ## [1.5.8] - 2026-10-14 — Reliable Voice Downloads
 
 ### Fixed

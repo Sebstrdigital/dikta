@@ -89,6 +89,10 @@ final class MenuBarViewModel: ObservableObject {
 
     // Track which mode initiated a recording (nil when not recording)
     private var activeRecordingMode: HotkeyMode? = nil
+    // Reserve startup synchronously: the recorder may suspend while an audio
+    // route settles, and PTT can be released before it becomes .recording.
+    private var isStartingRecording = false
+    private var stopAfterRecordingStarts = false
     private var recordingStartDate: Date?
     private var activeMuteTokens: [MuteToken] = []
 
@@ -306,7 +310,7 @@ final class MenuBarViewModel: ObservableObject {
 
     /// Start recording
     func startRecording() {
-        guard appState == .idle else { return }
+        guard appState == .idle, !isStartingRecording else { return }
 
         // A call debrief captures two tracks straight to disk and has its own
         // start sequence; everything below is the single-track mic path.
@@ -314,6 +318,9 @@ final class MenuBarViewModel: ObservableObject {
             startCallRecording()
             return
         }
+
+        isStartingRecording = true
+        stopAfterRecordingStarts = false
 
         // Debrief mode records until the user stops it: no silence auto-stop,
         // and a 2-hour cap instead of the 5-minute dictation cap.
@@ -385,9 +392,18 @@ final class MenuBarViewModel: ObservableObject {
                 try await audioRecorder.startRecording(micSensitivity: configService.micSensitivity)
                 recordingStartDate = Date()
                 appState = .recording
-                audioFeedback.beepOn()
+                isStartingRecording = false
                 DiagnosticLogger.shared.log("START | mic=\(configService.micSensitivity.displayName) | rate=\(audioRecorder.inputSampleRate)Hz | \(diagnosticEngineContext()) | \(diagnosticMemoryTag())")
+                if stopAfterRecordingStarts {
+                    stopAfterRecordingStarts = false
+                    stopRecording()
+                } else {
+                    audioFeedback.beepOn()
+                }
             } catch {
+                isStartingRecording = false
+                stopAfterRecordingStarts = false
+                activeRecordingMode = nil
                 unmuteMicTargets()
                 // `startRecording()` threw, so no tap was installed and
                 // `onLiveSamples` cannot be firing — the mic debrief session
@@ -405,6 +421,10 @@ final class MenuBarViewModel: ObservableObject {
 
     /// Stop recording and process
     func stopRecording() {
+        if isStartingRecording {
+            stopAfterRecordingStarts = true
+            return
+        }
         guard appState == .recording else { return }
 
         if let session = activeCallSession {
@@ -1762,6 +1782,9 @@ final class MenuBarViewModel: ObservableObject {
 extension MenuBarViewModel: HotkeyManagerDelegate {
     nonisolated func hotkeyPressed(mode: HotkeyMode) {
         Task { @MainActor in
+            // Do not let a second press overwrite ownership of a pending PTT
+            // start. Its release must still be able to stop that recording.
+            if isStartingRecording { return }
             if appState == .idle {
                 // A call recording is toggle-only (decision 10: "stop only").
                 // Push-to-talk must not start one — its release would end the

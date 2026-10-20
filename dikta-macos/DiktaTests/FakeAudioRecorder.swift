@@ -34,6 +34,9 @@ final class FakeAudioRecorder: AudioRecording {
     /// for asserting what else had (or had not) started by then.
     var onStartCalled: (() -> Void)?
 
+    /// Holds startup open without a microphone or blocking the main actor.
+    var beforeStart: (() async -> Void)?
+
     // MARK: Recorded calls
 
     private(set) var recording: Bool = false
@@ -83,6 +86,7 @@ final class FakeAudioRecorder: AudioRecording {
         startCallCount += 1
         receivedMicSensitivities.append(micSensitivity)
         onStartCalled?()
+        await beforeStart?()
         if let errorToThrow {
             throw errorToThrow
         }

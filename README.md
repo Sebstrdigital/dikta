@@ -54,7 +54,7 @@ All hotkeys are customizable via **Hotkeys** in the menu bar. Collision detectio
 | **Read Aloud** | Cmd + Alt | Reads selected text aloud via TTS |
 | **Format Selection** | Cmd + Shift + F | Reformats the selected text into paragraphs and lists |
 
-While you dictate, Dikta mutes your microphone in Teams, Slack, WhatsApp, Google Meet and Uven if one of them is in a call, and unmutes it when you stop.
+While you dictate, Dikta attempts to mute your microphone in Teams, WhatsApp, Google Meet and Uven, and restores it when you stop. Automatic Slack muting is disabled: the former simulated M key could type into a message composer instead of muting a Huddle. Mute Slack manually when needed.
 
 ## Menu Structure
 

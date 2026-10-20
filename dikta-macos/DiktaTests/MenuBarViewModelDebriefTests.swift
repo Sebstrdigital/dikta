@@ -29,10 +29,11 @@ final class FakeClipboardManager: ClipboardManager {
 final class FakeMuterRegistry: MuterRegistering {
     private(set) var muteAllCallCount = 0
     private(set) var unmuteAllCallCount = 0
+    var tokensToReturn: [MuteToken] = []
 
     func muteAll() -> [MuteToken] {
         muteAllCallCount += 1
-        return []
+        return tokensToReturn
     }
 
     func unmuteAll(_ tokens: [MuteToken]) {
@@ -654,6 +655,102 @@ final class MenuBarViewModelDebriefTests: XCTestCase {
         XCTAssertFalse(result)
         XCTAssertFalse(configService.callRecordingNoticeShown)
         XCTAssertEqual(configService.debriefSource, .microphone)
+    }
+
+    // MARK: - Push-to-talk startup (fake audio only)
+
+    private func waitForPtt(_ condition: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async {
+        await waitUntil(condition)
+        XCTAssertTrue(condition(), "PTT lifecycle did not reach its expected gate", file: file, line: line)
+    }
+
+    func test_pushToTalk_releaseDuringStartupStopsAndPastesExactlyOnce() async {
+        let gate = AsyncGate()
+        defer { gate.open() }
+        let recorder = FakeAudioRecorder()
+        recorder.beforeStart = { await gate.wait() }
+        recorder.finalBuffer = [Float](repeating: 0.1, count: 16_000)
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let muter = FakeMuterRegistry()
+        muter.tokensToReturn = [MuteToken(muterID: "Synthetic")]
+        let (vm, _) = makeViewModel(summarizer: summarizer, transcript: "Synthetic PTT output.", muterRegistry: muter, recorder: recorder)
+        await waitForPtt { vm.appState == .idle }
+        vm.hotkeyPressed(mode: .pushToTalk)
+        await waitForPtt { recorder.startCallCount == 1 }
+        vm.hotkeyReleased(mode: .pushToTalk)
+        await yieldForStartRecordingTask()
+        gate.open()
+        await waitForPtt { !self.clipboard.pastedText.isEmpty }
+        XCTAssertEqual(recorder.stopCallCount, 1)
+        XCTAssertEqual(clipboard.pastedText, ["Synthetic PTT output."])
+        XCTAssertEqual(muter.muteAllCallCount, 1)
+        XCTAssertEqual(muter.unmuteAllCallCount, 1)
+    }
+
+    func test_pushToTalk_startupCannotBeDuplicatedOrTakenOverByToggle() async {
+        let gate = AsyncGate()
+        defer { gate.open() }
+        let recorder = FakeAudioRecorder()
+        recorder.beforeStart = { await gate.wait() }
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let muter = FakeMuterRegistry()
+        let (vm, _) = makeViewModel(summarizer: summarizer, muterRegistry: muter, recorder: recorder)
+        await waitForPtt { vm.appState == .idle }
+        vm.hotkeyPressed(mode: .pushToTalk)
+        await waitForPtt { recorder.startCallCount == 1 }
+        vm.hotkeyPressed(mode: .pushToTalk)
+        vm.hotkeyPressed(mode: .toggle)
+        vm.startRecording()
+        await yieldForStartRecordingTask()
+        XCTAssertEqual(recorder.startCallCount, 1)
+        XCTAssertEqual(muter.muteAllCallCount, 1)
+        gate.open()
+        await waitForPtt { vm.appState == .recording }
+        vm.hotkeyReleased(mode: .pushToTalk)
+        await waitForPtt { recorder.stopCallCount == 1 }
+    }
+
+    func test_pushToTalk_startFailureClearsPendingReleaseAndAllowsRetry() async {
+        let gate = AsyncGate()
+        defer { gate.open() }
+        let recorder = FakeAudioRecorder()
+        recorder.beforeStart = { await gate.wait() }
+        recorder.errorToThrow = NSError(domain: "SyntheticMic", code: 1)
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let muter = FakeMuterRegistry()
+        muter.tokensToReturn = [MuteToken(muterID: "Synthetic")]
+        let (vm, _) = makeViewModel(summarizer: summarizer, muterRegistry: muter, recorder: recorder)
+        await waitForPtt { vm.appState == .idle }
+        vm.hotkeyPressed(mode: .pushToTalk)
+        await waitForPtt { recorder.startCallCount == 1 }
+        vm.hotkeyReleased(mode: .pushToTalk)
+        await yieldForStartRecordingTask()
+        gate.open()
+        await waitForPtt { muter.unmuteAllCallCount == 1 }
+        recorder.errorToThrow = nil
+        vm.hotkeyPressed(mode: .pushToTalk)
+        await waitForPtt { vm.appState == .recording }
+        XCTAssertEqual(recorder.startCallCount, 2)
+        XCTAssertEqual(recorder.stopCallCount, 0)
+        vm.hotkeyReleased(mode: .pushToTalk)
+        await waitForPtt { recorder.stopCallCount == 1 }
+    }
+
+    func test_toggleRecordingStillRequiresSecondPressAndIgnoresPttRelease() async {
+        let recorder = FakeAudioRecorder()
+        recorder.finalBuffer = [Float](repeating: 0.1, count: 16_000)
+        let summarizer = FakeDebriefSummarizer(name: "Fake", available: true, result: .success(summary()))
+        let (vm, _) = makeViewModel(summarizer: summarizer, recorder: recorder)
+        await waitForPtt { vm.appState == .idle }
+        vm.hotkeyPressed(mode: .toggle)
+        await waitForPtt { vm.appState == .recording }
+        vm.hotkeyReleased(mode: .pushToTalk)
+        await yieldForStartRecordingTask()
+        XCTAssertEqual(recorder.stopCallCount, 0)
+        vm.hotkeyPressed(mode: .toggle)
+        await waitForPtt { !self.clipboard.pastedText.isEmpty }
+        XCTAssertEqual(recorder.startCallCount, 1)
+        XCTAssertEqual(recorder.stopCallCount, 1)
     }
 
     // MARK: - Muter gating (source = mic + system audio must not mute other apps)

@@ -22,6 +22,17 @@ final class MicMutingTests: XCTestCase {
         XCTAssertNil(SlackMuter().mute())
     }
 
+    func testSlackMuterFailsClosedWithoutVerifiedCallControl() {
+        // Safe even with Slack's message composer frontmost: this muter no
+        // longer discovers/activates apps, posts M, or issues an unmute token.
+        let muter = SlackMuter()
+        XCTAssertNil(muter.mute())
+        muter.unmute(MuteToken(muterID: muter.muterID))
+        XCTAssertNil(muter.mute())
+        let registry = MuterRegistry(muters: [muter])
+        XCTAssertTrue(registry.muteAll().isEmpty)
+    }
+
     func testWhatsAppMuterReturnsNilWhenWhatsAppNotRunning() {
         XCTAssertNil(WhatsAppMuter().mute())
     }

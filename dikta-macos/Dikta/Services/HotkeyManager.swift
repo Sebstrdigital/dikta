@@ -209,7 +209,17 @@ final class HotkeyManager {
             }
         }
 
-        // Check PTT hotkey (modifier-only, trigger on press AND release)
+        // Additional modifiers must not end an active PTT hold. Release only
+        // when a required modifier goes up, including for key-based PTT when
+        // its modifier is released before the regular key.
+        let pttModifiersHeld = pttHotkeyConfig.modifiers.allSatisfy {
+            flags.contains($0.cgEventFlag)
+        }
+        if isPttHotkeyActive && !pttModifiersHeld {
+            releasePushToTalk()
+        }
+
+        // Exact modifier matching is still required to start a new hold.
         if pttHotkeyConfig.key == nil {
             let pttMatches = pttHotkeyConfig.matchesModifiers(flags)
             if pttMatches && !isPttHotkeyActive {
@@ -217,12 +227,15 @@ final class HotkeyManager {
                 DispatchQueue.main.async { [weak self] in
                     self?.delegate?.hotkeyPressed(mode: .pushToTalk)
                 }
-            } else if !pttMatches && isPttHotkeyActive {
-                isPttHotkeyActive = false
-                DispatchQueue.main.async { [weak self] in
-                    self?.delegate?.hotkeyReleased(mode: .pushToTalk)
-                }
             }
+        }
+    }
+
+    private func releasePushToTalk() {
+        guard isPttHotkeyActive else { return }
+        isPttHotkeyActive = false
+        DispatchQueue.main.async { [weak self] in
+            self?.delegate?.hotkeyReleased(mode: .pushToTalk)
         }
     }
 
@@ -257,17 +270,13 @@ final class HotkeyManager {
 
         // Check PTT hotkey (key-based, trigger on press AND release)
         if let pttKey = pttHotkeyConfig.key,
-           pressedKey.lowercased() == pttKey.lowercased(),
-           pttHotkeyConfig.matchesModifiers(flags) {
-            if type == .keyDown && !isPttHotkeyActive {
+           pressedKey.lowercased() == pttKey.lowercased() {
+            if type == .keyUp {
+                releasePushToTalk()
+            } else if pttHotkeyConfig.matchesModifiers(flags) && !isPttHotkeyActive {
                 isPttHotkeyActive = true
                 DispatchQueue.main.async { [weak self] in
                     self?.delegate?.hotkeyPressed(mode: .pushToTalk)
-                }
-            } else if type == .keyUp && isPttHotkeyActive {
-                isPttHotkeyActive = false
-                DispatchQueue.main.async { [weak self] in
-                    self?.delegate?.hotkeyReleased(mode: .pushToTalk)
                 }
             }
         }

@@ -1,4 +1,5 @@
 import XCTest
+import CoreGraphics
 @testable import Dikta
 
 final class TextLanguageInferenceTests: XCTestCase {
@@ -63,4 +64,90 @@ final class HotkeyModeAvailabilityTests: XCTestCase {
         XCTAssertFalse(HotkeyMode.userConfigurableCases.contains(.languageToggle))
         XCTAssertFalse(HotkeyMode.userConfigurableCases.map(\.rawValue).contains("format_selection"))
     }
+}
+
+/// All events are passed directly to an inert manager: no global tap or posts.
+@MainActor
+final class PushToTalkHotkeyTests: XCTestCase {
+    private func flushEvents() async {
+        // A queue barrier, rather than a sleep, drains delegate dispatches.
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+    }
+
+    private func flags(_ flags: CGEventFlags, manager: HotkeyManager) throws {
+        let event = try XCTUnwrap(CGEvent(source: nil))
+        event.flags = flags
+        manager.handleEvent(type: .flagsChanged, event: event)
+    }
+
+    func test_fnHoldWithExtraModifierOnlyReleasesWhenFnGoesUp() async throws {
+        let manager = HotkeyManager()
+        let capture = PushToTalkHotkeyCapture()
+        manager.delegate = capture
+        manager.updateConfig(toggle: .defaultToggle, pushToTalk: HotkeyConfig(modifiers: [.fn], key: nil))
+        try flags(.maskSecondaryFn, manager: manager)
+        try flags(.maskSecondaryFn, manager: manager)
+        try flags([.maskSecondaryFn, .maskShift], manager: manager)
+        try flags(.maskSecondaryFn, manager: manager)
+        await flushEvents()
+        XCTAssertEqual(capture.pressed, [.pushToTalk])
+        XCTAssertTrue(capture.released.isEmpty)
+        try flags([], manager: manager)
+        try flags([], manager: manager)
+        await flushEvents()
+        XCTAssertEqual(capture.released, [.pushToTalk])
+        try flags(.maskSecondaryFn, manager: manager)
+        try flags([], manager: manager)
+        await flushEvents()
+        XCTAssertEqual(capture.pressed.count, 2)
+        XCTAssertEqual(capture.released.count, 2)
+    }
+
+    func test_keyBasedPttReleasesWhenModifierGoesUpFirst() async throws {
+        let manager = HotkeyManager()
+        let capture = PushToTalkHotkeyCapture()
+        manager.delegate = capture
+        manager.updateConfig(toggle: .defaultToggle, pushToTalk: HotkeyConfig(modifiers: [.fn], key: "m"))
+        let down = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 46, keyDown: true))
+        down.flags = .maskSecondaryFn
+        manager.handleEvent(type: .keyDown, event: down)
+        manager.handleEvent(type: .keyDown, event: down) // Repeats must not restart.
+        try flags([], manager: manager)
+        await flushEvents()
+        XCTAssertEqual(capture.pressed, [.pushToTalk])
+        XCTAssertEqual(capture.released, [.pushToTalk])
+        let up = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 46, keyDown: false))
+        up.flags = []
+        manager.handleEvent(type: .keyUp, event: up)
+        await flushEvents()
+        XCTAssertEqual(capture.released.count, 1)
+    }
+
+    func test_keyUpEndsPttEvenWhenItsFlagsNoLongerMatch() async throws {
+        let manager = HotkeyManager()
+        let capture = PushToTalkHotkeyCapture()
+        manager.delegate = capture
+        manager.updateConfig(toggle: .defaultToggle, pushToTalk: HotkeyConfig(modifiers: [.fn], key: "m"))
+        let down = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 46, keyDown: true))
+        down.flags = .maskSecondaryFn
+        manager.handleEvent(type: .keyDown, event: down)
+        let up = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 46, keyDown: false))
+        up.flags = []
+        manager.handleEvent(type: .keyUp, event: up)
+        await flushEvents()
+        XCTAssertEqual(capture.pressed, [.pushToTalk])
+        XCTAssertEqual(capture.released, [.pushToTalk])
+    }
+}
+
+private final class PushToTalkHotkeyCapture: HotkeyManagerDelegate {
+    var pressed: [HotkeyMode] = []
+    var released: [HotkeyMode] = []
+    func hotkeyPressed(mode: HotkeyMode) { pressed.append(mode) }
+    func hotkeyReleased(mode: HotkeyMode) { released.append(mode) }
+    func hotkeyRecorded(modifiers: [ModifierKey], key: String?) {}
+    func ttsHotkeyPressed(trigger: ReadAloudTrace) {}
+    func hotkeyManagerDidFailToStart(_ error: String) {}
 }
