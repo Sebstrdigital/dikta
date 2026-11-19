@@ -1,0 +1,12 @@
+{
+  "unavailable": "Dikta is not running",
+  "startApp": "Start Dikta",
+  "history": "RECENT TRANSCRIPTS",
+  "empty": "No recent transcripts",
+  "hotkey": "Change hotkey (%1)",
+  "hotkeyUnknown": "Change hotkey",
+  "notificationsOn": "Notifications: on",
+  "notificationsOff": "Notifications: off",
+  "open": "About / Open Dikta",
+  "quit": "Quit Dikta"
+}

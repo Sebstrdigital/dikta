@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Dikta
+Comment=Start offline dictation in the background
+Exec=dikta --background
+Icon=audio-input-microphone
+Terminal=false
+X-GNOME-Autostart-enabled=true

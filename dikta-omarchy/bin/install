@@ -1,0 +1,51 @@
+#!/bin/sh
+set -eu
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+data_home=${XDG_DATA_HOME:-"$HOME/.local/share"}
+config_home=${XDG_CONFIG_HOME:-"$HOME/.config"}
+model="$data_home/dikta/models/parakeet-ultra-int8"
+venv="$data_home/dikta/venv"
+mkdir -p "$model" "$HOME/.local/bin" "$data_home/applications" "$config_home/autostart"
+for command in qmake6 make ffmpeg wl-copy wtype hyprctl curl sha256sum uv; do
+    command -v "$command" >/dev/null || { echo "Missing dependency: $command" >&2; exit 1; }
+done
+uv venv --allow-existing "$venv"
+uv pip install --python "$venv/bin/python" 'sherpa-onnx==1.13.7' 'numpy>=2,<3'
+base=https://github.com/plotdesk/parakeet-ultra-sherpa-onnx/releases/download/v1
+while read -r digest file; do
+    if ! printf '%s  %s\n' "$digest" "$model/$file" | sha256sum -c --status; then
+        echo "Downloading $file..." >&2
+        curl -fL --retry 3 "$base/$file" -o "$model/$file.part"
+        printf '%s  %s\n' "$digest" "$model/$file.part" | sha256sum -c -
+        mv "$model/$file.part" "$model/$file"
+    fi
+done <<'EOF'
+21e533084732d6c13892744f31e5d5305c74330b6f8c923a75ba3b3500325694 encoder.int8.onnx
+1fab98fe6c12aded87d2da66272cc9e148d0a0044ce3850a12fe56302ec4a922 decoder.int8.onnx
+8a71aaccfdba3d451775507a889afd2257d2e754463fd81095a8c8f290f924c2 joiner.int8.onnx
+d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d tokens.txt
+EOF
+"$root/bin/build"
+for name in dikta dikta-transcribe; do
+    target="$HOME/.local/bin/$name"
+    if [ -e "$target" ] && [ ! -L "$target" ]; then
+        echo "Refusing to overwrite $target" >&2
+        exit 1
+    fi
+done
+ln -sfn "$root/build/dikta" "$HOME/.local/bin/dikta"
+ln -sfn "$root/bin/dikta-transcribe" "$HOME/.local/bin/dikta-transcribe"
+cp "$root/pkgbuild/dikta.desktop" "$data_home/applications/dikta.desktop"
+cp "$root/pkgbuild/dikta-autostart.desktop" "$config_home/autostart/dikta.desktop"
+if command -v omarchy >/dev/null; then
+    plugin_dir="$config_home/omarchy/plugins"
+    plugin="$plugin_dir/dikta.panel"
+    mkdir -p "$plugin_dir"
+    if [ -e "$plugin" ] && [ "$(readlink -f "$plugin")" != "$root/omarchy-plugin" ]; then
+        echo "Refusing to overwrite existing plugin: $plugin" >&2
+        exit 1
+    fi
+    ln -sfn "$root/omarchy-plugin" "$plugin"
+    echo 'Enable the bar panel with: omarchy plugin enable dikta.panel --section right'
+fi
+echo 'Dikta installed for this user. Keep this source directory in place.'

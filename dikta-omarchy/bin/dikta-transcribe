@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+here=$(CDPATH= cd -- "$(dirname -- "$(readlink -f -- "$0")")" && pwd)
+data_home=${XDG_DATA_HOME:-"$HOME/.local/share"}
+exec "$data_home/dikta/venv/bin/python" "$here/transcribe.py" "$@"

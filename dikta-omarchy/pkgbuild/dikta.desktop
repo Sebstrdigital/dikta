@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Dikta
+Comment=Offline voice dictation
+Exec=dikta --show
+Icon=audio-input-microphone
+Terminal=false
+Categories=Utility;Audio;
+StartupWMClass=dikta

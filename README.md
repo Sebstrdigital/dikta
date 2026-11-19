@@ -1,8 +1,9 @@
 # Dikta
 
-A minimal, fully offline dictation app for macOS. Press a hotkey, speak, and your words are pasted instantly. No cloud services, no subscriptions.
+A fully offline dictation app. Press a hotkey, speak, and your words are pasted into the focused app. No cloud services or subscriptions.
 
-Requires macOS 15 or later on Apple Silicon.
+- **macOS:** Requires macOS 15 or later on Apple Silicon. The documentation below describes the macOS app.
+- **Omarchy / Hyprland:** See [dikta-omarchy](dikta-omarchy/README.md) for installation, usage, and its [feature checklist](dikta-omarchy/FEATURES.md). Its features differ from the macOS app.
 
 ## Install
 

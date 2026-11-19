@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="Main.qml">Main.qml</file>
+        <file alias="Hotkey.qml">Hotkey.qml</file>
+        <file>mic.svg</file>
+        <file>recording.svg</file>
+        <file>processing.svg</file>
+    </qresource>
+</RCC>

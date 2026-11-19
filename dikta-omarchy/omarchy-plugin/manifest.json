@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "dikta.panel",
+  "name": "Dikta",
+  "version": "1.0.0",
+  "author": "Dikta",
+  "description": "Dictation controls and recent transcripts",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "Panel.qml" },
+  "barWidget": {
+    "displayName": "Dikta",
+    "description": "Dictation controls and recent transcripts",
+    "category": "Utility",
+    "allowMultiple": false
+  }
+}
