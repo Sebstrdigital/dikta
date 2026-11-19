@@ -16,7 +16,15 @@ Focus the target application, start dictation with the shortcut, speak, and pres
 
 Sound cues use the system's default audio output. If they are inaudible, check the selected output and its volume in Omarchy's audio menu.
 
-Dictation uses the system default microphone. Parakeet Ultra automatically detects its supported European languages. The Linux model is an int8 conversion of the same Ultra weights used by the macOS app; it may produce different results. Long recordings are split near quiet portions for inference. On the first transcription the model must load, which may take a moment.
+Dictation uses the system default microphone. Parakeet Ultra automatically detects its supported European languages. The Linux model is an int8 conversion of the same Ultra weights used by the macOS app; it may produce different results. Long recordings are split near quiet portions for inference. Dikta starts a transcription worker and loads the model when the app starts, keeping it loaded until the app quits. A dictation stopped before the model is ready waits for it to load.
+
+## Timing diagnostics
+
+Each finished dictation appends one JSON object to `$XDG_STATE_HOME/dikta/timings.jsonl`, or `~/.local/state/dikta/timings.jsonl` when `XDG_STATE_HOME` is unset or not absolute. The file is created with owner-only permissions. Logging is best effort: an unavailable state directory or log does not interrupt dictation. Delete the file whenever you no longer need it; it is not automatically rotated.
+
+Records contain a UTC timestamp, an outcome (`pasted`, `copied_no_paste`, `no_speech`, or `failed`), and, for failures, a `failure_stage`. Available durations are milliseconds: `recording_ms` (ffmpeg process start to stop request), `stop_to_audio_ready_ms` (stop request to successful ffmpeg exit), `model_init_ms`, `decode_ms` (including chunk preparation), `copy_ms`, `paste_ms`, and `stop_to_finish_ms`. `stop_to_paste_ms` appears only when the paste command succeeds; it measures through that command's completion, not confirmation by the target application. Missing fields indicate stages that were not reached or could not report timing. A stop requested before ffmpeg starts has a recording duration of zero. A warm worker reports zero model initialization time for a dictation; if the model is still loading when dictation stops, the stop-to-finish and stop-to-paste durations include the wait.
+
+The log contains no transcript, audio, window identifier, or error text. It does reveal when dictations occurred, their durations, and their outcomes. Existing transcript history is separate and is not affected by this log.
 
 ## Model attribution
 

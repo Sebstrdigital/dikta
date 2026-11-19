@@ -3,6 +3,8 @@
 #include "audiofeedback.h"
 
 #include <QByteArray>
+#include <QElapsedTimer>
+#include <QJsonObject>
 #include <QObject>
 #include <QProcess>
 #include <QStringList>
@@ -46,7 +48,14 @@ private:
     void processStarted();
     void processFinished(int exitCode, QProcess::ExitStatus exitStatus);
     void processError(QProcess::ProcessError error);
-    void finish(const QString &status);
+    void finish(const QString &status, const QString &outcome = QStringLiteral("failed"),
+                const QString &failureStage = QString());
+    void startWorker();
+    void readWorkerOutput();
+    void workerFailed(const QString &message, const QString &stage);
+    void sendTranscription();
+    void completeTranscription(const QString &text);
+    void writeTiming(const QString &outcome, const QString &failureStage);
     void copyText(const QString &text, bool paste);
     bool saveHistory();
     QString processFailure(const QString &action);
@@ -55,6 +64,15 @@ private:
     QString dataDirectory() const;
 
     QProcess m_process;
+    QProcess m_worker;
+    QByteArray m_workerOutput;
+    QByteArray m_workerErrors;
+    QString m_workerFailure;
+    QString m_workerFailureStage;
+    QElapsedTimer m_workerWait;
+    enum class WorkerState { Starting, Ready, Failed };
+    WorkerState m_workerState = WorkerState::Starting;
+    bool m_workerRequestSent = false;
     AudioFeedback m_audioFeedback;
     std::unique_ptr<QTemporaryDir> m_temporaryDir;
     QStringList m_history;
@@ -63,6 +81,13 @@ private:
     QString m_targetWindow;
     QByteArray m_clipboardText;
     QString m_warning;
+    QElapsedTimer m_timingClock;
+    QJsonObject m_timing;
+    qint64 m_captureStartedAt = -1;
+    qint64 m_stoppedAt = -1;
+    qint64 m_copyStartedAt = -1;
+    qint64 m_pasteStartedAt = -1;
+    bool m_dictationTiming = false;
     Phase m_phase = Phase::Idle;
     quint64 m_generation = 0;
     bool m_recording = false;

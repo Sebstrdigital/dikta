@@ -145,7 +145,7 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.state && root.state.busy ? "󰔟" : "󰍬"
+    text: root.state && root.state.recording ? "○" : root.state && root.state.busy ? "󰔟" : "󰍬"
     active: !!root.state && (root.state.recording || root.state.busy)
     dimmed: !root.state
     onPressed: function(b) { if (b === Qt.LeftButton) root.toggle() }
